@@ -1,0 +1,1 @@
+"""MintFlow Platform application package."""

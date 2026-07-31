@@ -1,0 +1,26 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: Ruff lint
+        entry: uv run ruff check
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: ruff-format
+        name: Ruff format
+        entry: uv run ruff format --check
+        language: system
+        types_or: [python, pyi]
+        require_serial: true
+      - id: check-toml
+        name: Check TOML
+        entry: uv run python -c "import sys, tomllib; [tomllib.load(open(path, 'rb')) for path in sys.argv[1:]]"
+        language: system
+        files: \.toml$
