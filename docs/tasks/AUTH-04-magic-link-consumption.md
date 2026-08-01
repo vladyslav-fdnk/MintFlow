@@ -1,6 +1,6 @@
 # AUTH-04 — Magic Link Consumption
 
-Status: review
+Status: done
 
 ## Goal
 
