@@ -1,7 +1,15 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    LargeBinary,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -59,3 +67,22 @@ class EmailIdentityRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     user: Mapped[UserRecord] = relationship(back_populates="email_identity")
+
+
+class LoginChallengeRecord(Base):
+    __tablename__ = "login_challenges"
+    __table_args__ = (
+        CheckConstraint("expires_at > issued_at", name="ck_login_challenges_expiry"),
+        CheckConstraint(
+            "octet_length(token_hash) = 32", name="ck_login_challenges_token_hash_length"
+        ),
+        UniqueConstraint("token_hash", name="uq_login_challenges_token_hash"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    canonical_email: Mapped[str] = mapped_column(Text, nullable=False)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    return_target: Mapped[str] = mapped_column(Text, nullable=False)

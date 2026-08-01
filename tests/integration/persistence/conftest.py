@@ -41,7 +41,7 @@ def engine(migrated_database_url: str) -> Iterator[Engine]:
     database_engine = create_database_engine(migrated_database_url)
     yield database_engine
     with database_engine.begin() as connection:
-        connection.execute(text("TRUNCATE TABLE email_identities, users"))
+        connection.execute(text("TRUNCATE TABLE login_challenges, email_identities, users"))
     database_engine.dispose()
 
 
