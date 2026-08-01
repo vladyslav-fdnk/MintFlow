@@ -30,7 +30,7 @@ if [[ -n "$UNTRACKED" ]]; then
 fi
 
 TASK="$(
-python - <<'PY'
+uv run python - <<'PY'
 from pathlib import Path
 
 tasks_dir = Path("docs/tasks")
