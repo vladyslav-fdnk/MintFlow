@@ -114,3 +114,35 @@ class AuthenticationRateLimitBucketRecord(Base):
     window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
     count: Mapped[int] = mapped_column(Integer, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class WebSessionRecord(Base):
+    __tablename__ = "web_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            "octet_length(secret_hash) = 32", name="ck_web_sessions_secret_hash_length"
+        ),
+        CheckConstraint("expires_at > issued_at", name="ck_web_sessions_expiry"),
+        CheckConstraint(
+            "expires_at <= issued_at + INTERVAL '30 days'",
+            name="ck_web_sessions_max_lifetime",
+        ),
+        CheckConstraint(
+            "revoked_at IS NULL OR revoked_at >= issued_at",
+            name="ck_web_sessions_revoked_at_not_before_issued_at",
+        ),
+        UniqueConstraint("secret_hash", name="uq_web_sessions_secret_hash"),
+        Index("ix_web_sessions_expires_at", "expires_at"),
+        Index("ix_web_sessions_revoked_at", "revoked_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    secret_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -4,20 +4,27 @@ from threading import Barrier
 
 import pytest
 from sqlalchemy import Engine, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mintflow.application.authentication import (
     AuthenticatedUserIdentity,
+    AuthenticateWebSession,
     ConsumeMagicLink,
+    GeneratedToken,
     MagicLinkConsumptionResult,
     hash_token,
 )
 from mintflow.domain.user import User, UserStatus
-from mintflow.infrastructure.persistence import SqlAlchemyLoginChallengeConsumer
+from mintflow.infrastructure.persistence import (
+    SqlAlchemyLoginChallengeConsumer,
+    SqlAlchemyWebSessionRepository,
+)
 from mintflow.infrastructure.persistence.models import (
     EmailIdentityRecord,
     LoginChallengeRecord,
     UserRecord,
+    WebSessionRecord,
 )
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
@@ -66,6 +73,11 @@ def test_first_login_consumes_challenge_and_creates_identity(db_session: Session
     challenge = db_session.scalar(select(LoginChallengeRecord))
     assert challenge is not None
     assert challenge.consumed_at == NOW
+    session = db_session.scalar(select(WebSessionRecord))
+    assert session is not None
+    assert result.session_secret is not None
+    assert session.secret_hash == hash_token(result.session_secret)
+    assert session.expires_at == NOW + timedelta(days=30)
 
 
 def test_reused_challenge_returns_generic_invalid_result(db_session: Session) -> None:
@@ -78,6 +90,7 @@ def test_reused_challenge_returns_generic_invalid_result(db_session: Session) ->
     assert result.identity is None
     assert result.return_target is None
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 1
 
 
 def test_unknown_token_returns_generic_invalid_result(db_session: Session) -> None:
@@ -87,6 +100,7 @@ def test_unknown_token_returns_generic_invalid_result(db_session: Session) -> No
     assert result.identity is None
     assert result.return_target is None
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 0
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 0
 
 
 def test_exact_expiry_boundary_is_invalid_and_unconsumed(db_session: Session) -> None:
@@ -99,6 +113,7 @@ def test_exact_expiry_boundary_is_invalid_and_unconsumed(db_session: Session) ->
     assert challenge is not None
     assert challenge.consumed_at is None
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 0
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 0
 
 
 def test_returning_login_resolves_existing_user_without_modifying_identity(
@@ -155,6 +170,7 @@ def test_deactivated_user_is_not_authenticated(db_session: Session) -> None:
     challenge = db_session.scalar(select(LoginChallengeRecord))
     assert challenge is not None
     assert challenge.consumed_at == NOW
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 0
 
 
 def test_first_registration_failure_rolls_back_challenge_and_account(
@@ -176,6 +192,54 @@ def test_first_registration_failure_rolls_back_challenge_and_account(
     assert challenge.consumed_at is None
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 0
     assert db_session.scalar(select(func.count()).select_from(EmailIdentityRecord)) == 0
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 0
+
+
+def test_session_persistence_failure_rolls_back_challenge_consumption(
+    db_session: Session,
+) -> None:
+    user = UserRecord(status=UserStatus.ACTIVE.value, created_at=NOW, deactivated_at=None)
+    db_session.add(user)
+    db_session.flush()
+    db_session.add(
+        EmailIdentityRecord(
+            user_id=user.id,
+            canonical_email="person@example.com",
+            display_email="person@example.com",
+            verified_at=NOW,
+            created_at=NOW,
+        )
+    )
+    db_session.add(
+        WebSessionRecord(
+            user_id=user.id,
+            secret_hash=hash_token("duplicate-session-secret"),
+            issued_at=NOW,
+            expires_at=NOW + timedelta(days=30),
+        )
+    )
+    db_session.commit()
+    add_challenge(db_session, token="session-insert-failure")
+
+    with pytest.raises(IntegrityError):
+        ConsumeMagicLink(
+            challenge_consumer=SqlAlchemyLoginChallengeConsumer(db_session),
+            clock=lambda: NOW,
+            token_generator=lambda: GeneratedToken(
+                raw="duplicate-session-secret",
+                digest=hash_token("duplicate-session-secret"),
+            ),
+        ).execute(token="session-insert-failure")
+
+    db_session.rollback()
+    challenge = db_session.scalar(
+        select(LoginChallengeRecord).where(
+            LoginChallengeRecord.token_hash == hash_token("session-insert-failure")
+        )
+    )
+    assert challenge is not None
+    assert challenge.consumed_at is None
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 1
 
 
 def test_same_challenge_consumed_concurrently_has_exactly_one_success(
@@ -195,8 +259,10 @@ def test_same_challenge_consumed_concurrently_has_exactly_one_success(
         results = list(executor.map(lambda _: worker(), range(2)))
 
     assert sum(result.authenticated for result in results) == 1
+    assert sum(result.session_secret is not None for result in results) == 1
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 1
     assert db_session.scalar(select(func.count()).select_from(EmailIdentityRecord)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 1
 
 
 def test_two_challenges_for_unseen_email_create_one_user_and_identity(
@@ -220,3 +286,14 @@ def test_two_challenges_for_unseen_email_create_one_user_and_identity(
     assert results[0].identity == results[1].identity
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 1
     assert db_session.scalar(select(func.count()).select_from(EmailIdentityRecord)) == 1
+    assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 2
+    assert all(result.session_secret is not None for result in results)
+    for result in results:
+        assert result.session_secret is not None
+        assert result.identity is not None
+        authenticated_session = AuthenticateWebSession(
+            repository=SqlAlchemyWebSessionRepository(db_session),
+            clock=lambda: NOW,
+        ).execute(secret=result.session_secret)
+        assert authenticated_session is not None
+        assert authenticated_session.user_id == result.identity.user_id

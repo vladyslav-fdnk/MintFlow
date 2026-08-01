@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
@@ -15,6 +15,7 @@ from mintflow.application.authentication.rate_limit import (
     make_reservation,
 )
 from mintflow.application.authentication.tokens import GeneratedToken, generate_token, hash_token
+from mintflow.application.authentication.web_session import WebSession, new_web_session
 
 LOGIN_CHALLENGE_LIFETIME = timedelta(minutes=15)
 
@@ -71,6 +72,7 @@ class AuthenticatedUserIdentity:
 class MagicLinkConsumptionResult:
     identity: AuthenticatedUserIdentity | None
     return_target: str | None
+    session_secret: str | None = None
 
     @property
     def authenticated(self) -> bool:
@@ -85,7 +87,11 @@ INVALID_MAGIC_LINK_CONSUMPTION_RESULT = MagicLinkConsumptionResult(
 
 class LoginChallengeConsumer(Protocol):
     def consume(
-        self, *, token_hash: bytes, consumed_at: datetime
+        self,
+        *,
+        token_hash: bytes,
+        consumed_at: datetime,
+        session_factory: Callable[[UUID], WebSession],
     ) -> MagicLinkConsumptionResult: ...
 
 
@@ -103,18 +109,37 @@ class ConsumeMagicLink:
         *,
         challenge_consumer: LoginChallengeConsumer,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        token_generator: Callable[[], GeneratedToken] = generate_token,
     ) -> None:
         self._challenge_consumer = challenge_consumer
         self._clock = clock
+        self._token_generator = token_generator
 
     def execute(self, *, token: str) -> MagicLinkConsumptionResult:
         consumed_at = self._clock()
         if consumed_at.utcoffset() is None:
             raise ValueError("clock must return a timezone-aware datetime")
-        return self._challenge_consumer.consume(
+        raw_session_secret: str | None = None
+
+        def session_factory(user_id: UUID) -> WebSession:
+            nonlocal raw_session_secret
+            session, raw_session_secret = new_web_session(
+                user_id=user_id,
+                issued_at=consumed_at,
+                token_generator=self._token_generator,
+            )
+            return session
+
+        result = self._challenge_consumer.consume(
             token_hash=hash_token(token),
             consumed_at=consumed_at.astimezone(UTC),
+            session_factory=session_factory,
         )
+        if not result.authenticated:
+            return result
+        if raw_session_secret is None:
+            raise RuntimeError("authenticated consumption did not create a Web session")
+        return replace(result, session_secret=raw_session_secret)
 
 
 class RequestMagicLink:

@@ -43,7 +43,7 @@ def engine(migrated_database_url: str) -> Iterator[Engine]:
     with database_engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE TABLE authentication_rate_limit_buckets, "
+                "TRUNCATE TABLE authentication_rate_limit_buckets, web_sessions, "
                 "login_challenges, email_identities, users"
             )
         )

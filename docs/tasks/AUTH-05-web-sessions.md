@@ -1,6 +1,6 @@
 # AUTH-05 — Server-Side Web Sessions
 
-Status: ready
+Status: review
 
 ## Goal
 

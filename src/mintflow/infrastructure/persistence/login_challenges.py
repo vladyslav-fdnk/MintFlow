@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
@@ -9,11 +11,13 @@ from mintflow.application.authentication.login_challenge import (
     LoginChallenge,
     MagicLinkConsumptionResult,
 )
+from mintflow.application.authentication.web_session import WebSession
 from mintflow.domain.user import User, UserStatus
 from mintflow.infrastructure.persistence.models import (
     EmailIdentityRecord,
     LoginChallengeRecord,
     UserRecord,
+    WebSessionRecord,
 )
 
 
@@ -40,7 +44,13 @@ class SqlAlchemyLoginChallengeConsumer:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def consume(self, *, token_hash: bytes, consumed_at: datetime) -> MagicLinkConsumptionResult:
+    def consume(
+        self,
+        *,
+        token_hash: bytes,
+        consumed_at: datetime,
+        session_factory: Callable[[UUID], WebSession],
+    ) -> MagicLinkConsumptionResult:
         with self._session.begin():
             challenge = self._session.execute(
                 update(LoginChallengeRecord)
@@ -93,6 +103,17 @@ class SqlAlchemyLoginChallengeConsumer:
                 if user.status != UserStatus.ACTIVE.value:
                     return INVALID_MAGIC_LINK_CONSUMPTION_RESULT
 
+            web_session = session_factory(user.id)
+            self._session.add(
+                WebSessionRecord(
+                    id=web_session.id,
+                    user_id=web_session.user_id,
+                    secret_hash=web_session.secret_hash,
+                    issued_at=web_session.issued_at,
+                    expires_at=web_session.expires_at,
+                    revoked_at=web_session.revoked_at,
+                )
+            )
             return MagicLinkConsumptionResult(
                 identity=AuthenticatedUserIdentity(user_id=user.id),
                 return_target=challenge.return_target,
