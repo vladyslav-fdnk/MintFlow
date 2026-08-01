@@ -21,6 +21,7 @@ from mintflow.infrastructure.persistence import (
     SqlAlchemyWebSessionRepository,
 )
 from mintflow.infrastructure.persistence.models import (
+    AuthenticationAuditRecordModel,
     EmailIdentityRecord,
     LoginChallengeRecord,
     UserRecord,
@@ -91,6 +92,7 @@ def test_reused_challenge_returns_generic_invalid_result(db_session: Session) ->
     assert result.return_target is None
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 1
     assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 1
+    assert db_session.scalar(select(func.count()).select_from(AuthenticationAuditRecordModel)) == 2
 
 
 def test_unknown_token_returns_generic_invalid_result(db_session: Session) -> None:
@@ -263,6 +265,9 @@ def test_same_challenge_consumed_concurrently_has_exactly_one_success(
     assert db_session.scalar(select(func.count()).select_from(UserRecord)) == 1
     assert db_session.scalar(select(func.count()).select_from(EmailIdentityRecord)) == 1
     assert db_session.scalar(select(func.count()).select_from(WebSessionRecord)) == 1
+    audit_records = db_session.scalars(select(AuthenticationAuditRecordModel)).all()
+    assert len(audit_records) == 2
+    assert sum(record.event_type == "login_succeeded" for record in audit_records) == 1
 
 
 def test_two_challenges_for_unseen_email_create_one_user_and_identity(

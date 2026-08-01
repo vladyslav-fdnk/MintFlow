@@ -4,6 +4,12 @@ from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from uuid import UUID, uuid4
 
+from mintflow.application.authentication.audit import (
+    AuthenticationAuditAppender,
+    AuthenticationAuditEventType,
+    AuthenticationAuditOutcome,
+    AuthenticationAuditRecord,
+)
 from mintflow.application.authentication.email import InvalidEmailError, normalize_email
 from mintflow.application.authentication.magic_link import MagicLinkBuilder
 from mintflow.application.authentication.rate_limit import (
@@ -151,6 +157,7 @@ class RequestMagicLink:
         link_builder: MagicLinkBuilder,
         rate_limiter: AuthenticationRateLimiter,
         rate_limit_digester: RateLimitDigester,
+        audit_appender: AuthenticationAuditAppender,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         token_generator: Callable[[], GeneratedToken] = generate_token,
     ) -> None:
@@ -159,21 +166,23 @@ class RequestMagicLink:
         self._link_builder = link_builder
         self._rate_limiter = rate_limiter
         self._rate_limit_digester = rate_limit_digester
+        self._audit_appender = audit_appender
         self._clock = clock
         self._token_generator = token_generator
 
     def execute(
         self, *, submitted_email: str, normalized_network_source: str, return_target: str
     ) -> MagicLinkRequestResult:
-        try:
-            email = normalize_email(submitted_email)
-        except InvalidEmailError:
-            return GENERIC_MAGIC_LINK_REQUEST_RESULT
-        self._link_builder.validate_return_target(return_target)
         issued_at = self._clock()
         if issued_at.utcoffset() is None:
             raise ValueError("clock must return a timezone-aware datetime")
         issued_at = issued_at.astimezone(UTC)
+        try:
+            email = normalize_email(submitted_email)
+        except InvalidEmailError:
+            self._append_request_audit(occurred_at=issued_at, succeeded=False)
+            return GENERIC_MAGIC_LINK_REQUEST_RESULT
+        self._link_builder.validate_return_target(return_target)
         network_allowed = self._rate_limiter.reserve(
             make_reservation(
                 dimension=RateLimitDimension.NETWORK_REQUEST,
@@ -186,6 +195,7 @@ class RequestMagicLink:
             )
         )
         if not network_allowed:
+            self._append_request_audit(occurred_at=issued_at, succeeded=False)
             return GENERIC_MAGIC_LINK_REQUEST_RESULT
         email_allowed = self._rate_limiter.reserve(
             make_reservation(
@@ -199,6 +209,7 @@ class RequestMagicLink:
             )
         )
         if not email_allowed:
+            self._append_request_audit(occurred_at=issued_at, succeeded=False)
             return GENERIC_MAGIC_LINK_REQUEST_RESULT
         generated_token = self._token_generator()
         magic_link = self._link_builder.build(
@@ -221,4 +232,27 @@ class RequestMagicLink:
             )
         except EmailDeliveryError:
             pass
+        self._append_request_audit(
+            occurred_at=issued_at, succeeded=True, subject_record_id=challenge.id
+        )
         return GENERIC_MAGIC_LINK_REQUEST_RESULT
+
+    def _append_request_audit(
+        self,
+        *,
+        occurred_at: datetime,
+        succeeded: bool,
+        subject_record_id: UUID | None = None,
+    ) -> None:
+        self._audit_appender.append(
+            AuthenticationAuditRecord(
+                occurred_at=occurred_at,
+                event_type=AuthenticationAuditEventType.LOGIN_CHALLENGE_REQUESTED,
+                outcome=(
+                    AuthenticationAuditOutcome.SUCCEEDED
+                    if succeeded
+                    else AuthenticationAuditOutcome.FAILED
+                ),
+                subject_record_id=subject_record_id,
+            )
+        )

@@ -5,9 +5,17 @@ from uuid import UUID
 from sqlalchemy import CursorResult, select, update
 from sqlalchemy.orm import Session
 
+from mintflow.application.authentication.audit import (
+    AuthenticationAuditEventType,
+    AuthenticationAuditOutcome,
+)
 from mintflow.application.authentication.web_session import AuthenticatedWebSession
 from mintflow.domain.user import UserStatus
-from mintflow.infrastructure.persistence.models import UserRecord, WebSessionRecord
+from mintflow.infrastructure.persistence.models import (
+    AuthenticationAuditRecordModel,
+    UserRecord,
+    WebSessionRecord,
+)
 
 
 class SqlAlchemyWebSessionRepository:
@@ -31,6 +39,9 @@ class SqlAlchemyWebSessionRepository:
 
     def revoke(self, *, session_id: UUID, revoked_at: datetime) -> bool:
         with self._session.begin():
+            user_id = self._session.scalar(
+                select(WebSessionRecord.user_id).where(WebSessionRecord.id == session_id)
+            )
             result = cast(
                 CursorResult[Any],
                 self._session.execute(
@@ -41,6 +52,19 @@ class SqlAlchemyWebSessionRepository:
                     )
                     .values(revoked_at=revoked_at)
                 ),
+            )
+            self._session.add(
+                AuthenticationAuditRecordModel(
+                    occurred_at=revoked_at,
+                    event_type=AuthenticationAuditEventType.CURRENT_SESSION_REVOKED.value,
+                    outcome=(
+                        AuthenticationAuditOutcome.SUCCEEDED.value
+                        if result.rowcount == 1
+                        else AuthenticationAuditOutcome.FAILED.value
+                    ),
+                    user_id=user_id,
+                    subject_record_id=session_id,
+                )
             )
         return result.rowcount == 1
 
@@ -56,5 +80,13 @@ class SqlAlchemyWebSessionRepository:
                     )
                     .values(revoked_at=revoked_at)
                 ),
+            )
+            self._session.add(
+                AuthenticationAuditRecordModel(
+                    occurred_at=revoked_at,
+                    event_type=AuthenticationAuditEventType.ALL_SESSIONS_REVOKED.value,
+                    outcome=AuthenticationAuditOutcome.SUCCEEDED.value,
+                    user_id=user_id,
+                )
             )
         return result.rowcount

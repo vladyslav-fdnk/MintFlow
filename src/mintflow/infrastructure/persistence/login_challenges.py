@@ -5,6 +5,11 @@ from uuid import UUID
 from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
+from mintflow.application.authentication.audit import (
+    AuthenticationAuditEventType,
+    AuthenticationAuditOutcome,
+    AuthenticationAuditRecord,
+)
 from mintflow.application.authentication.login_challenge import (
     INVALID_MAGIC_LINK_CONSUMPTION_RESULT,
     AuthenticatedUserIdentity,
@@ -14,6 +19,7 @@ from mintflow.application.authentication.login_challenge import (
 from mintflow.application.authentication.web_session import WebSession
 from mintflow.domain.user import User, UserStatus
 from mintflow.infrastructure.persistence.models import (
+    AuthenticationAuditRecordModel,
     EmailIdentityRecord,
     LoginChallengeRecord,
     UserRecord,
@@ -66,6 +72,13 @@ class SqlAlchemyLoginChallengeConsumer:
                 )
             ).one_or_none()
             if challenge is None:
+                self._session.add(
+                    AuthenticationAuditRecordModel(
+                        occurred_at=consumed_at,
+                        event_type=AuthenticationAuditEventType.LOGIN_FAILED.value,
+                        outcome=AuthenticationAuditOutcome.FAILED.value,
+                    )
+                )
                 return INVALID_MAGIC_LINK_CONSUMPTION_RESULT
 
             self._session.execute(
@@ -101,6 +114,14 @@ class SqlAlchemyLoginChallengeConsumer:
             else:
                 _, user = identity_and_user
                 if user.status != UserStatus.ACTIVE.value:
+                    self._session.add(
+                        AuthenticationAuditRecordModel(
+                            occurred_at=consumed_at,
+                            event_type=AuthenticationAuditEventType.LOGIN_FAILED.value,
+                            outcome=AuthenticationAuditOutcome.FAILED.value,
+                            user_id=user.id,
+                        )
+                    )
                     return INVALID_MAGIC_LINK_CONSUMPTION_RESULT
 
             web_session = session_factory(user.id)
@@ -112,6 +133,23 @@ class SqlAlchemyLoginChallengeConsumer:
                     issued_at=web_session.issued_at,
                     expires_at=web_session.expires_at,
                     revoked_at=web_session.revoked_at,
+                )
+            )
+            audit_record = AuthenticationAuditRecord(
+                occurred_at=consumed_at,
+                event_type=AuthenticationAuditEventType.LOGIN_SUCCEEDED,
+                outcome=AuthenticationAuditOutcome.SUCCEEDED,
+                user_id=user.id,
+                subject_record_id=web_session.id,
+            )
+            self._session.add(
+                AuthenticationAuditRecordModel(
+                    id=audit_record.id,
+                    occurred_at=audit_record.occurred_at,
+                    event_type=audit_record.event_type.value,
+                    outcome=audit_record.outcome.value,
+                    user_id=audit_record.user_id,
+                    subject_record_id=audit_record.subject_record_id,
                 )
             )
             return MagicLinkConsumptionResult(

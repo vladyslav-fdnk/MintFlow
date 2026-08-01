@@ -146,3 +146,28 @@ class WebSessionRecord(Base):
     issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class AuthenticationAuditRecordModel(Base):
+    __tablename__ = "authentication_audit_records"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('login_challenge_requested', 'login_succeeded', 'login_failed', "
+            "'current_session_revoked', 'all_sessions_revoked')",
+            name="ck_auth_audit_records_event_type",
+        ),
+        CheckConstraint(
+            "outcome IN ('succeeded', 'failed')",
+            name="ck_auth_audit_records_outcome",
+        ),
+        Index("ix_auth_audit_records_occurred_at", "occurred_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    user_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+    )
+    subject_record_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))

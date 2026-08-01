@@ -1,6 +1,6 @@
 # AUTH-06 — Authentication Audit Persistence
 
-Status: ready
+Status: review
 
 ## Goal
 

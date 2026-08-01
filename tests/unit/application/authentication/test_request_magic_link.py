@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from mintflow.application.authentication.audit import AuthenticationAuditRecord
 from mintflow.application.authentication.login_challenge import (
     GENERIC_MAGIC_LINK_REQUEST_RESULT,
     EmailDeliveryError,
@@ -25,6 +26,14 @@ from mintflow.application.authentication.tokens import GeneratedToken, hash_toke
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 RAW_TOKEN = "test-only-raw-token"
 NETWORK_SOURCE = "192.0.2.1"
+
+
+class RecordingAuditAppender:
+    def __init__(self) -> None:
+        self.records: list[AuthenticationAuditRecord] = []
+
+    def append(self, record: AuthenticationAuditRecord) -> None:
+        self.records.append(record)
 
 
 class InMemoryChallengeStore:
@@ -78,11 +87,16 @@ class ThresholdRateLimiter(InMemoryRateLimiter):
 
 
 def build_use_case() -> tuple[
-    RequestMagicLink, InMemoryChallengeStore, InMemoryEmailSender, InMemoryRateLimiter
+    RequestMagicLink,
+    InMemoryChallengeStore,
+    InMemoryEmailSender,
+    InMemoryRateLimiter,
+    RecordingAuditAppender,
 ]:
     store = InMemoryChallengeStore()
     sender = InMemoryEmailSender()
     limiter = InMemoryRateLimiter()
+    audit = RecordingAuditAppender()
     use_case = RequestMagicLink(
         challenge_store=store,
         email_sender=sender,
@@ -92,14 +106,15 @@ def build_use_case() -> tuple[
         ),
         rate_limiter=limiter,
         rate_limit_digester=RateLimitDigester(b"test-rate-limit-key"),
+        audit_appender=audit,
         clock=lambda: NOW,
         token_generator=lambda: GeneratedToken(raw=RAW_TOKEN, digest=hash_token(RAW_TOKEN)),
     )
-    return use_case, store, sender, limiter
+    return use_case, store, sender, limiter, audit
 
 
 def test_persists_challenge_and_sends_typed_magic_link() -> None:
-    use_case, store, sender, limiter = build_use_case()
+    use_case, store, sender, limiter, audit = build_use_case()
 
     result = use_case.execute(
         submitted_email="Person@EXAMPLE.COM",
@@ -117,6 +132,9 @@ def test_persists_challenge_and_sends_typed_magic_link() -> None:
     assert challenge.return_target == "dashboard"
     assert challenge.token_hash == hash_token(RAW_TOKEN)
     assert RAW_TOKEN.encode() not in challenge.token_hash
+    assert len(audit.records) == 1
+    assert audit.records[0].outcome.value == "succeeded"
+    assert audit.records[0].subject_record_id == challenge.id
     assert [item.dimension for item in limiter.reservations] == [
         RateLimitDimension.NETWORK_REQUEST,
         RateLimitDimension.EMAIL_DELIVERY,
@@ -138,7 +156,7 @@ def test_persists_challenge_and_sends_typed_magic_link() -> None:
 
 
 def test_issuance_does_not_require_or_query_a_user() -> None:
-    use_case, store, sender, _ = build_use_case()
+    use_case, store, sender, _, _ = build_use_case()
 
     use_case.execute(
         submitted_email="new@example.com",
@@ -151,7 +169,7 @@ def test_issuance_does_not_require_or_query_a_user() -> None:
 
 
 def test_invalid_email_returns_generic_result_without_persisting_or_sending() -> None:
-    use_case, store, sender, limiter = build_use_case()
+    use_case, store, sender, limiter, audit = build_use_case()
 
     result = use_case.execute(
         submitted_email="not-an-email",
@@ -163,6 +181,10 @@ def test_invalid_email_returns_generic_result_without_persisting_or_sending() ->
     assert store.challenges == []
     assert sender.messages == []
     assert limiter.reservations == []
+    assert len(audit.records) == 1
+    assert audit.records[0].outcome.value == "failed"
+    assert audit.records[0].user_id is None
+    assert audit.records[0].subject_record_id is None
 
 
 def test_delivery_failure_returns_generic_result_after_challenge_is_persisted() -> None:
@@ -177,6 +199,7 @@ def test_delivery_failure_returns_generic_result_after_challenge_is_persisted() 
         ),
         rate_limiter=limiter,
         rate_limit_digester=RateLimitDigester(b"test-rate-limit-key"),
+        audit_appender=RecordingAuditAppender(),
         clock=lambda: NOW,
         token_generator=lambda: GeneratedToken(raw=RAW_TOKEN, digest=hash_token(RAW_TOKEN)),
     )
@@ -196,7 +219,7 @@ def test_delivery_failure_returns_generic_result_after_challenge_is_persisted() 
 
 
 def test_rejects_unapproved_return_target_before_rate_limiting_persisting_or_sending() -> None:
-    use_case, store, sender, limiter = build_use_case()
+    use_case, store, sender, limiter, _ = build_use_case()
 
     with pytest.raises(InvalidReturnTargetError):
         use_case.execute(
@@ -217,7 +240,7 @@ def test_rejects_unapproved_return_target_before_rate_limiting_persisting_or_sen
 def test_rate_limit_rejection_returns_generic_result_without_issuing(
     rejected_dimension: RateLimitDimension,
 ) -> None:
-    use_case, store, sender, limiter = build_use_case()
+    use_case, store, sender, limiter, _ = build_use_case()
     limiter.rejected_dimensions.add(rejected_dimension)
 
     result = use_case.execute(
@@ -255,6 +278,7 @@ def test_issuance_enforces_exact_dimension_threshold(
         ),
         rate_limiter=limiter,
         rate_limit_digester=RateLimitDigester(b"test-rate-limit-key"),
+        audit_appender=RecordingAuditAppender(),
         clock=lambda: NOW,
         token_generator=lambda: GeneratedToken(raw=RAW_TOKEN, digest=hash_token(RAW_TOKEN)),
     )

@@ -1,3 +1,12 @@
+from mintflow.application.authentication.audit import (
+    AUTHENTICATION_AUDIT_RETENTION,
+    AuthenticationAuditAppender,
+    AuthenticationAuditEventType,
+    AuthenticationAuditOutcome,
+    AuthenticationAuditRecord,
+    authentication_audit_cutoff,
+    is_authentication_audit_record_eligible,
+)
 from mintflow.application.authentication.email import NormalizedEmail, normalize_email
 from mintflow.application.authentication.login_challenge import (
     GENERIC_MAGIC_LINK_REQUEST_RESULT,
@@ -24,6 +33,11 @@ from mintflow.application.authentication.web_session import (
 )
 
 __all__ = [
+    "AUTHENTICATION_AUDIT_RETENTION",
+    "AuthenticationAuditAppender",
+    "AuthenticationAuditEventType",
+    "AuthenticationAuditOutcome",
+    "AuthenticationAuditRecord",
     "GENERIC_MAGIC_LINK_REQUEST_RESULT",
     "INVALID_MAGIC_LINK_CONSUMPTION_RESULT",
     "AuthenticatedUserIdentity",
@@ -43,8 +57,10 @@ __all__ = [
     "RevokeWebSession",
     "WEB_SESSION_LIFETIME",
     "WebSession",
+    "authentication_audit_cutoff",
     "generate_token",
     "hash_token",
+    "is_authentication_audit_record_eligible",
     "normalize_email",
     "new_web_session",
 ]
