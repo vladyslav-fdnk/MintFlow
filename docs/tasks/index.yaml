@@ -20,3 +20,77 @@ tasks:
     status: done
     depends_on:
       - AUTH-04
+
+  - id: AUTH-06
+    title: Authentication audit persistence
+    file: docs/tasks/AUTH-06-authentication-audit-persistence.md
+    status: ready
+    depends_on:
+      - AUTH-05
+
+  - id: AUTH-07
+    title: Local Mailpit email adapter
+    file: docs/tasks/AUTH-07-local-mailpit-email-adapter.md
+    status: blocked
+    depends_on:
+      - AUTH-05
+
+  - id: AUTH-08
+    title: HTTP authentication composition boundary
+    file: docs/tasks/AUTH-08-http-authentication-composition-boundary.md
+    status: blocked
+    depends_on:
+      - AUTH-06
+      - AUTH-07
+
+  - id: AUTH-09
+    title: Magic Link request endpoint
+    file: docs/tasks/AUTH-09-magic-link-request-endpoint.md
+    status: blocked
+    depends_on:
+      - AUTH-08
+
+  - id: AUTH-10
+    title: Non-mutating Magic Link confirmation page
+    file: docs/tasks/AUTH-10-non-mutating-magic-link-confirmation-page.md
+    status: blocked
+    depends_on:
+      - AUTH-08
+
+  - id: AUTH-11
+    title: Magic Link POST consumption and secure cookie
+    file: docs/tasks/AUTH-11-magic-link-post-consumption-secure-cookie.md
+    status: blocked
+    depends_on:
+      - AUTH-06
+      - AUTH-08
+      - AUTH-10
+
+  - id: AUTH-12
+    title: Authenticated Web-session dependency
+    file: docs/tasks/AUTH-12-authenticated-web-session-dependency.md
+    status: blocked
+    depends_on:
+      - AUTH-11
+
+  - id: AUTH-13
+    title: Session-bound CSRF protection
+    file: docs/tasks/AUTH-13-session-bound-csrf-protection.md
+    status: blocked
+    depends_on:
+      - AUTH-12
+
+  - id: AUTH-14
+    title: Logout endpoint
+    file: docs/tasks/AUTH-14-logout-endpoint.md
+    status: blocked
+    depends_on:
+      - AUTH-12
+      - AUTH-13
+
+  - id: AUTH-15
+    title: Authentication retention cleanup command
+    file: docs/tasks/AUTH-15-authentication-retention-cleanup-command.md
+    status: blocked
+    depends_on:
+      - AUTH-06
