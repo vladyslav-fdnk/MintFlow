@@ -17,6 +17,6 @@ tasks:
   - id: AUTH-05
     title: Web sessions
     file: docs/tasks/AUTH-05-web-sessions.md
-    status: ready
+    status: done
     depends_on:
       - AUTH-04
