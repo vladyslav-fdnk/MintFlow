@@ -1,4 +1,11 @@
 services:
+  mailpit:
+    image: axllent/mailpit:v1.27
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -26,9 +33,15 @@ services:
       MINTFLOW_ENABLE_API_DOCS: ${MINTFLOW_ENABLE_API_DOCS:-true}
       MINTFLOW_DATABASE_URL: ${MINTFLOW_DOCKER_DATABASE_URL:?Copy .env.example to .env}
       MINTFLOW_AUTHENTICATION_RATE_LIMIT_KEY: ${MINTFLOW_AUTHENTICATION_RATE_LIMIT_KEY:?Copy .env.example to .env}
+      MINTFLOW_EMAIL_BACKEND: mailpit
+      MINTFLOW_MAILPIT_SMTP_HOST: mailpit
+      MINTFLOW_MAILPIT_SMTP_PORT: 1025
+      MINTFLOW_MAILPIT_FROM_EMAIL: ${MINTFLOW_MAILPIT_FROM_EMAIL:-no-reply@mintflow.dev}
     ports:
       - "8000:8000"
     depends_on:
+      mailpit:
+        condition: service_started
       postgres:
         condition: service_healthy
     healthcheck:

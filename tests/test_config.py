@@ -48,3 +48,34 @@ def test_authentication_rate_limit_key_cannot_be_omitted(
             database_url=SecretStr("postgresql://localhost/database"),
             _env_file=None,
         )
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_mailpit_is_rejected_outside_local_or_test_environments(environment: str) -> None:
+    with pytest.raises(ValidationError, match="Mailpit email delivery is allowed only"):
+        Settings(
+            environment=environment,  # type: ignore[arg-type]
+            database_url=SecretStr("postgresql://localhost/database"),
+            authentication_rate_limit_key=SecretStr("rate-secret"),
+            email_backend="mailpit",
+            mailpit_smtp_host="mailpit",
+            mailpit_from_email="no-reply@mintflow.dev",
+        )
+
+
+def test_mailpit_requires_explicit_backend_and_connection_values() -> None:
+    settings = Settings(
+        environment="production",
+        database_url=SecretStr("postgresql://localhost/database"),
+        authentication_rate_limit_key=SecretStr("rate-secret"),
+    )
+
+    assert settings.email_backend is None
+
+    with pytest.raises(ValidationError, match="requires an SMTP host and sender address"):
+        Settings(
+            environment="development",
+            database_url=SecretStr("postgresql://localhost/database"),
+            authentication_rate_limit_key=SecretStr("rate-secret"),
+            email_backend="mailpit",
+        )
