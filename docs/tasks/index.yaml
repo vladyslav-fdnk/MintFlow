@@ -4,13 +4,13 @@ tasks:
   - id: AUTH-03
     title: PostgreSQL authentication rate limiting
     file: docs/tasks/AUTH-03-rate-limiting.md
-    status: ready
+    status: done
     depends_on: []
 
   - id: AUTH-04
     title: Magic Link consumption
     file: docs/tasks/AUTH-04-magic-link-consumption.md
-    status: blocked
+    status: ready
     depends_on:
       - AUTH-03
 
