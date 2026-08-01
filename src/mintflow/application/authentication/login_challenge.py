@@ -14,7 +14,7 @@ from mintflow.application.authentication.rate_limit import (
     RateLimitDimension,
     make_reservation,
 )
-from mintflow.application.authentication.tokens import GeneratedToken, generate_token
+from mintflow.application.authentication.tokens import GeneratedToken, generate_token, hash_token
 
 LOGIN_CHALLENGE_LIFETIME = timedelta(minutes=15)
 
@@ -62,12 +62,59 @@ class LoginChallengeStore(Protocol):
     def add(self, challenge: LoginChallenge) -> None: ...
 
 
+@dataclass(frozen=True, slots=True)
+class AuthenticatedUserIdentity:
+    user_id: UUID
+
+
+@dataclass(frozen=True, slots=True)
+class MagicLinkConsumptionResult:
+    identity: AuthenticatedUserIdentity | None
+    return_target: str | None
+
+    @property
+    def authenticated(self) -> bool:
+        return self.identity is not None
+
+
+INVALID_MAGIC_LINK_CONSUMPTION_RESULT = MagicLinkConsumptionResult(
+    identity=None,
+    return_target=None,
+)
+
+
+class LoginChallengeConsumer(Protocol):
+    def consume(
+        self, *, token_hash: bytes, consumed_at: datetime
+    ) -> MagicLinkConsumptionResult: ...
+
+
 class EmailSender(Protocol):
     def send_magic_link(self, message: MagicLinkMessage) -> None: ...
 
 
 class EmailDeliveryError(RuntimeError):
     """An expected delivery-provider failure safe to map to a generic result."""
+
+
+class ConsumeMagicLink:
+    def __init__(
+        self,
+        *,
+        challenge_consumer: LoginChallengeConsumer,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
+        self._challenge_consumer = challenge_consumer
+        self._clock = clock
+
+    def execute(self, *, token: str) -> MagicLinkConsumptionResult:
+        consumed_at = self._clock()
+        if consumed_at.utcoffset() is None:
+            raise ValueError("clock must return a timezone-aware datetime")
+        return self._challenge_consumer.consume(
+            token_hash=hash_token(token),
+            consumed_at=consumed_at.astimezone(UTC),
+        )
 
 
 class RequestMagicLink:
