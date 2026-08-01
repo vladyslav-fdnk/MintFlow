@@ -18,14 +18,18 @@ def test_migration_downgrades_and_reupgrades_cleanly(migrated_database_url: str)
         assert "users" not in inspect(engine).get_table_names()
         assert "email_identities" not in inspect(engine).get_table_names()
         assert "login_challenges" not in inspect(engine).get_table_names()
+        assert "authentication_rate_limit_buckets" not in inspect(engine).get_table_names()
     finally:
         engine.dispose()
 
     command.upgrade(config, "head")
     engine = create_engine(sqlalchemy_database_url(migrated_database_url))
     try:
-        assert {"users", "email_identities", "login_challenges"}.issubset(
-            inspect(engine).get_table_names()
-        )
+        assert {
+            "users",
+            "email_identities",
+            "login_challenges",
+            "authentication_rate_limit_buckets",
+        }.issubset(inspect(engine).get_table_names())
     finally:
         engine.dispose()

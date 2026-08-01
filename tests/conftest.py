@@ -12,6 +12,7 @@ def settings() -> Settings:
         environment="test",
         log_level="CRITICAL",
         database_url=SecretStr("postgresql://test:test@localhost:5432/test"),
+        authentication_rate_limit_key=SecretStr("test-rate-limit-key"),
     )
 
 

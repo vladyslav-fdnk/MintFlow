@@ -32,8 +32,7 @@ class MagicLinkBuilder:
             raise InvalidMagicLinkConfigurationError("confirmation_path must be an absolute path")
 
     def build(self, *, token: str, return_target: str) -> str:
-        if return_target not in self.allowed_return_targets:
-            raise InvalidReturnTargetError("return_target is not approved")
+        self.validate_return_target(return_target)
         origin = urlsplit(self.web_origin)
         return urlunsplit(
             (
@@ -44,3 +43,7 @@ class MagicLinkBuilder:
                 "",
             )
         )
+
+    def validate_return_target(self, return_target: str) -> None:
+        if return_target not in self.allowed_return_targets:
+            raise InvalidReturnTargetError("return_target is not approved")

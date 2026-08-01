@@ -1,6 +1,6 @@
 # AUTH-03 — PostgreSQL Authentication Rate Limiting
 
-Status: ready
+Status: review
 
 ## Goal
 

@@ -6,6 +6,14 @@ from uuid import UUID, uuid4
 
 from mintflow.application.authentication.email import InvalidEmailError, normalize_email
 from mintflow.application.authentication.magic_link import MagicLinkBuilder
+from mintflow.application.authentication.rate_limit import (
+    EMAIL_DELIVERY_LIMIT,
+    NETWORK_REQUEST_LIMIT,
+    AuthenticationRateLimiter,
+    RateLimitDigester,
+    RateLimitDimension,
+    make_reservation,
+)
 from mintflow.application.authentication.tokens import GeneratedToken, generate_token
 
 LOGIN_CHALLENGE_LIFETIME = timedelta(minutes=15)
@@ -69,24 +77,57 @@ class RequestMagicLink:
         challenge_store: LoginChallengeStore,
         email_sender: EmailSender,
         link_builder: MagicLinkBuilder,
+        rate_limiter: AuthenticationRateLimiter,
+        rate_limit_digester: RateLimitDigester,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         token_generator: Callable[[], GeneratedToken] = generate_token,
     ) -> None:
         self._challenge_store = challenge_store
         self._email_sender = email_sender
         self._link_builder = link_builder
+        self._rate_limiter = rate_limiter
+        self._rate_limit_digester = rate_limit_digester
         self._clock = clock
         self._token_generator = token_generator
 
-    def execute(self, *, submitted_email: str, return_target: str) -> MagicLinkRequestResult:
+    def execute(
+        self, *, submitted_email: str, normalized_network_source: str, return_target: str
+    ) -> MagicLinkRequestResult:
         try:
             email = normalize_email(submitted_email)
         except InvalidEmailError:
             return GENERIC_MAGIC_LINK_REQUEST_RESULT
+        self._link_builder.validate_return_target(return_target)
         issued_at = self._clock()
         if issued_at.utcoffset() is None:
             raise ValueError("clock must return a timezone-aware datetime")
         issued_at = issued_at.astimezone(UTC)
+        network_allowed = self._rate_limiter.reserve(
+            make_reservation(
+                dimension=RateLimitDimension.NETWORK_REQUEST,
+                key_digest=self._rate_limit_digester.digest(
+                    dimension=RateLimitDimension.NETWORK_REQUEST,
+                    key=normalized_network_source,
+                ),
+                now=issued_at,
+                limit=NETWORK_REQUEST_LIMIT,
+            )
+        )
+        if not network_allowed:
+            return GENERIC_MAGIC_LINK_REQUEST_RESULT
+        email_allowed = self._rate_limiter.reserve(
+            make_reservation(
+                dimension=RateLimitDimension.EMAIL_DELIVERY,
+                key_digest=self._rate_limit_digester.digest(
+                    dimension=RateLimitDimension.EMAIL_DELIVERY,
+                    key=email.canonical_email,
+                ),
+                now=issued_at,
+                limit=EMAIL_DELIVERY_LIMIT,
+            )
+        )
+        if not email_allowed:
+            return GENERIC_MAGIC_LINK_REQUEST_RESULT
         generated_token = self._token_generator()
         magic_link = self._link_builder.build(
             token=generated_token.raw,

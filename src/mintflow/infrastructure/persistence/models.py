@@ -5,6 +5,8 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
+    Integer,
     LargeBinary,
     String,
     Text,
@@ -86,3 +88,29 @@ class LoginChallengeRecord(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     return_target: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AuthenticationRateLimitBucketRecord(Base):
+    __tablename__ = "authentication_rate_limit_buckets"
+    __table_args__ = (
+        CheckConstraint(
+            "dimension IN ('email_delivery', 'network_request')",
+            name="ck_auth_rate_limit_buckets_dimension",
+        ),
+        CheckConstraint(
+            "octet_length(key_digest) = 32", name="ck_auth_rate_limit_key_digest_length"
+        ),
+        CheckConstraint("count > 0", name="ck_auth_rate_limit_buckets_count_positive"),
+        CheckConstraint(
+            "expires_at > window_started_at AND "
+            "expires_at <= window_started_at + INTERVAL '24 hours'",
+            name="ck_auth_rate_limit_buckets_expiry",
+        ),
+        Index("ix_auth_rate_limit_buckets_expires_at", "expires_at"),
+    )
+
+    dimension: Mapped[str] = mapped_column(String(32), primary_key=True)
+    key_digest: Mapped[bytes] = mapped_column(LargeBinary(32), primary_key=True)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), primary_key=True)
+    count: Mapped[int] = mapped_column(Integer, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

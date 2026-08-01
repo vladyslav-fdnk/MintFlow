@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     enable_api_docs: bool = False
     database_url: SecretStr
+    authentication_rate_limit_key: SecretStr
 
     model_config = SettingsConfigDict(
         env_file=".env",
