@@ -1,6 +1,6 @@
 # AUTH-07 — Local Mailpit Email Adapter
 
-Status: blocked
+Status: ready
 
 ## Goal
 

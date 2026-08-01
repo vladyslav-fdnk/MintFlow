@@ -24,14 +24,14 @@ tasks:
   - id: AUTH-06
     title: Authentication audit persistence
     file: docs/tasks/AUTH-06-authentication-audit-persistence.md
-    status: ready
+    status: done
     depends_on:
       - AUTH-05
 
   - id: AUTH-07
     title: Local Mailpit email adapter
     file: docs/tasks/AUTH-07-local-mailpit-email-adapter.md
-    status: blocked
+    status: ready
     depends_on:
       - AUTH-05
 
@@ -91,6 +91,6 @@ tasks:
   - id: AUTH-15
     title: Authentication retention cleanup command
     file: docs/tasks/AUTH-15-authentication-retention-cleanup-command.md
-    status: blocked
+    status: ready
     depends_on:
       - AUTH-06

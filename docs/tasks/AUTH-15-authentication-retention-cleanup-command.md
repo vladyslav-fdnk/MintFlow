@@ -1,6 +1,6 @@
 # AUTH-15 — Authentication Retention Cleanup Command
 
-Status: blocked
+Status: ready
 
 ## Goal
 
