@@ -1,0 +1,184 @@
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from ipaddress import IPv4Address, IPv6Address, ip_address
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session, sessionmaker
+
+from mintflow.application.authentication import (
+    AuthenticateWebSession,
+    ConsumeMagicLink,
+    MagicLinkBuilder,
+    RequestMagicLink,
+    RevokeAllWebSessions,
+    RevokeWebSession,
+    generate_token,
+)
+from mintflow.application.authentication.login_challenge import EmailSender
+from mintflow.application.authentication.rate_limit import RateLimitDigester
+from mintflow.config import Settings
+from mintflow.infrastructure.persistence import (
+    PostgreSQLAuthenticationRateLimiter,
+    SqlAlchemyAuthenticationAuditAppender,
+    SqlAlchemyLoginChallengeConsumer,
+    SqlAlchemyLoginChallengeStore,
+    SqlAlchemyWebSessionRepository,
+)
+
+AUTHENTICATION_SECURITY_HEADERS = {
+    "Cache-Control": "no-store",
+    "Referrer-Policy": "no-referrer",
+}
+GENERIC_AUTHENTICATION_ERROR_MESSAGE = "The authentication request could not be completed."
+UNKNOWN_NETWORK_SOURCE = "unknown"
+
+router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+class AuthenticationConfigurationError(RuntimeError):
+    """A secret-safe failure at the authentication composition boundary."""
+
+
+@dataclass(frozen=True, slots=True)
+class NormalizedNetworkSource:
+    value: str
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticationUseCases:
+    request_magic_link: RequestMagicLink
+    consume_magic_link: ConsumeMagicLink
+    authenticate_web_session: AuthenticateWebSession
+    revoke_web_session: RevokeWebSession
+    revoke_all_web_sessions: RevokeAllWebSessions
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticationRuntime:
+    session_factory: sessionmaker[Session]
+    email_sender: EmailSender | None
+    link_builder: MagicLinkBuilder
+    rate_limit_digester: RateLimitDigester
+    clock: Callable[[], datetime]
+
+
+def build_authentication_runtime(
+    *,
+    settings: Settings,
+    session_factory: sessionmaker[Session],
+    email_sender: EmailSender | None,
+    clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> AuthenticationRuntime:
+    """Validate and retain process-scoped collaborators without exposing secret values."""
+    try:
+        return AuthenticationRuntime(
+            session_factory=session_factory,
+            email_sender=email_sender,
+            link_builder=MagicLinkBuilder(
+                web_origin=settings.authentication_web_origin,
+                allowed_return_targets=settings.authentication_return_targets,
+            ),
+            rate_limit_digester=RateLimitDigester(
+                settings.authentication_rate_limit_key.get_secret_value().encode()
+            ),
+            clock=clock,
+        )
+    except (TypeError, ValueError):
+        raise AuthenticationConfigurationError(
+            "authentication runtime configuration is invalid"
+        ) from None
+
+
+async def get_database_session(request: Request) -> AsyncIterator[Session]:
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    session = runtime.session_factory()
+    try:
+        yield session
+    finally:
+        session.close()
+
+
+DatabaseSession = Annotated[Session, Depends(get_database_session)]
+
+
+async def get_authentication_use_cases(
+    request: Request,
+    session: DatabaseSession,
+) -> AuthenticationUseCases:
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    if runtime.email_sender is None:
+        raise AuthenticationConfigurationError(
+            "authentication runtime configuration is invalid"
+        ) from None
+    web_sessions = SqlAlchemyWebSessionRepository(session)
+    return AuthenticationUseCases(
+        request_magic_link=RequestMagicLink(
+            challenge_store=SqlAlchemyLoginChallengeStore(session),
+            email_sender=runtime.email_sender,
+            link_builder=runtime.link_builder,
+            rate_limiter=PostgreSQLAuthenticationRateLimiter(session),
+            rate_limit_digester=runtime.rate_limit_digester,
+            audit_appender=SqlAlchemyAuthenticationAuditAppender(session),
+            clock=runtime.clock,
+            token_generator=generate_token,
+        ),
+        consume_magic_link=ConsumeMagicLink(
+            challenge_consumer=SqlAlchemyLoginChallengeConsumer(session),
+            clock=runtime.clock,
+            token_generator=generate_token,
+        ),
+        authenticate_web_session=AuthenticateWebSession(
+            repository=web_sessions,
+            clock=runtime.clock,
+        ),
+        revoke_web_session=RevokeWebSession(repository=web_sessions, clock=runtime.clock),
+        revoke_all_web_sessions=RevokeAllWebSessions(
+            repository=web_sessions,
+            clock=runtime.clock,
+        ),
+    )
+
+
+AuthenticationUseCasesDependency = Annotated[
+    AuthenticationUseCases, Depends(get_authentication_use_cases)
+]
+
+
+async def get_normalized_network_source(request: Request) -> NormalizedNetworkSource:
+    """Normalize only the direct request peer; forwarding headers are intentionally ignored."""
+    return normalize_direct_peer(request)
+
+
+def normalize_direct_peer(request: Request) -> NormalizedNetworkSource:
+    peer = request.client
+    if peer is None:
+        return NormalizedNetworkSource(UNKNOWN_NETWORK_SOURCE)
+    try:
+        parsed = ip_address(peer.host)
+    except ValueError:
+        return NormalizedNetworkSource(UNKNOWN_NETWORK_SOURCE)
+    if isinstance(parsed, IPv6Address) and parsed.ipv4_mapped is not None:
+        parsed = parsed.ipv4_mapped
+    return NormalizedNetworkSource(_normalized_address(parsed))
+
+
+def _normalized_address(address: IPv4Address | IPv6Address) -> str:
+    return address.compressed
+
+
+NetworkSourceDependency = Annotated[NormalizedNetworkSource, Depends(get_normalized_network_source)]
+
+
+def authentication_security_headers() -> dict[str, str]:
+    return dict(AUTHENTICATION_SECURITY_HEADERS)
+
+
+def generic_authentication_error_response(*, status_code: int = 400) -> JSONResponse:
+    return JSONResponse(
+        {"message": GENERIC_AUTHENTICATION_ERROR_MESSAGE},
+        status_code=status_code,
+        headers=authentication_security_headers(),
+    )

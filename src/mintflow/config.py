@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import EmailStr, Field, SecretStr, model_validator
+from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     enable_api_docs: bool = False
     database_url: SecretStr
     authentication_rate_limit_key: SecretStr
+    authentication_web_origin: str = Field(min_length=1)
+    authentication_return_targets: frozenset[str]
     email_backend: Literal["mailpit"] | None = None
     mailpit_smtp_host: str | None = Field(default=None, min_length=1)
     mailpit_smtp_port: int = Field(default=1025, ge=1, le=65535)
@@ -37,6 +39,15 @@ class Settings(BaseSettings):
         if self.mailpit_smtp_host is None or self.mailpit_from_email is None:
             raise ValueError("Mailpit requires an SMTP host and sender address")
         return self
+
+    @field_validator("authentication_return_targets")
+    @classmethod
+    def validate_authentication_return_targets(cls, value: frozenset[str]) -> frozenset[str]:
+        if not value:
+            raise ValueError("at least one authentication return target is required")
+        if any(not target or len(target) > 64 for target in value):
+            raise ValueError("authentication return targets must contain 1 to 64 characters")
+        return value
 
 
 @lru_cache

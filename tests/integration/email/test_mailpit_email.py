@@ -44,6 +44,8 @@ def test_delivers_representative_magic_link_to_mailpit() -> None:
         environment="test",
         database_url=SecretStr("postgresql://test:test@localhost:5432/test"),
         authentication_rate_limit_key=SecretStr("test-rate-limit-key"),
+        authentication_web_origin="https://app.mintflow.test",
+        authentication_return_targets=frozenset({"dashboard"}),
         email_backend="mailpit",
         mailpit_smtp_host=smtp_host,
         mailpit_smtp_port=smtp_port,
