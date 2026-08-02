@@ -1,6 +1,6 @@
 # AUTH-15 — Authentication Retention Cleanup Command
 
-Status: review
+Status: done
 
 ## Goal
 

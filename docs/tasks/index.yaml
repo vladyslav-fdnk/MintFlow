@@ -92,6 +92,6 @@ tasks:
   - id: AUTH-15
     title: Authentication retention cleanup command
     file: docs/tasks/AUTH-15-authentication-retention-cleanup-command.md
-    status: ready
+    status: done
     depends_on:
       - AUTH-06
