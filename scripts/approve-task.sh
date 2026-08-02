@@ -74,14 +74,12 @@ if current_status != "review":
         f"current status is {current_status!r}."
     )
 
-lines[status_index] = "Status: done"
-selected.write_text("\n".join(lines) + "\n", encoding="utf-8")
-
 index_lines = index_path.read_text(encoding="utf-8").splitlines()
 
 current_task = None
 task_status_lines: dict[str, int] = {}
 task_dependencies: dict[str, list[str]] = {}
+task_human_approvals: dict[str, str] = {}
 
 for index, line in enumerate(index_lines):
     stripped = line.strip()
@@ -93,6 +91,17 @@ for index, line in enumerate(index_lines):
     elif current_task and stripped.startswith("status:"):
         task_status_lines[current_task] = index
 
+    elif current_task and stripped.startswith("human_approval:"):
+        approval = stripped.split(":", 1)[1].strip()
+
+        if approval not in {"pending", "approved"}:
+            raise SystemExit(
+                f"ERROR: {current_task} has invalid human_approval "
+                f"value {approval!r}; expected 'pending' or 'approved'."
+            )
+
+        task_human_approvals[current_task] = approval
+
     elif current_task and stripped.startswith("- AUTH-"):
         task_dependencies.setdefault(current_task, []).append(
             stripped.removeprefix("- ").strip()
@@ -100,6 +109,9 @@ for index, line in enumerate(index_lines):
 
 if task_id not in task_status_lines:
     raise SystemExit(f"ERROR: {task_id} not found in index.yaml.")
+
+lines[status_index] = "Status: done"
+selected.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 index_lines[task_status_lines[task_id]] = "    status: done"
 
@@ -113,6 +125,7 @@ completed = {
 }
 
 unblocked: list[str] = []
+human_blocked: list[str] = []
 
 for task, dependencies in task_dependencies.items():
     if task == task_id:
@@ -129,6 +142,10 @@ for task, dependencies in task_dependencies.items():
         continue
 
     if dependencies and all(dep in completed for dep in dependencies):
+        if task_human_approvals.get(task) == "pending":
+            human_blocked.append(task)
+            continue
+
         index_lines[status_line] = "    status: ready"
         unblocked.append(task)
 
@@ -175,4 +192,9 @@ if unblocked:
         print(f"  {task} -> ready")
 else:
     print("No dependent tasks unblocked.")
+
+if human_blocked:
+    print("Still blocked by unresolved human approval:")
+    for task in human_blocked:
+        print(f"  {task} -> blocked")
 PY
