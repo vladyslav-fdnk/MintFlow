@@ -1,6 +1,6 @@
 # AUTH-11 — Magic Link POST Consumption and Secure Cookie
 
-Status: blocked
+Status: ready
 
 ## Goal
 
@@ -30,13 +30,27 @@ The existing application operation atomically consumes a LoginChallenge and crea
 The HTTP adapter must consume only on POST, emit the raw session secret only after commit, and
 redirect only to an approved internal destination.
 
-### Human approval gate
+### Human-approved login-CSRF contract
 
-The pre-authentication/login-CSRF mechanism is unresolved. Session-bound CSRF cannot directly
-protect a browser that has not authenticated yet. Before this task can become `ready`, a human must
-approve the exact contract, for example whether the confirmation token plus strict Origin checking
-is sufficient or whether a separate short-lived pre-authentication browser state/cookie is
-required. Do not resolve this decision during autonomous execution.
+Human approval is recorded for the following contract:
+
+- The non-mutating confirmation GET renders a first-party form carrying the Magic Link token.
+- The POST consumption request must carry that Magic Link token from the first-party confirmation
+  form.
+- The POST must validate the `Origin` header strictly against the configured first-party
+  authentication Web origin.
+- Missing, malformed, opaque/`null`, mismatched, cross-origin, and otherwise unapproved `Origin`
+  values fail closed.
+- Forwarded headers do not influence `Origin` validation.
+- No pre-authentication cookie, nonce cookie, temporary browser session, or other separate browser
+  state is introduced.
+- The Magic Link token is never an authenticated WebSession credential. Successful authentication
+  creates a fresh opaque WebSession secret and issues only that fresh secret in the authenticated
+  cookie.
+
+Existing requirements for transaction ordering, secure cookie attributes, replay protection,
+generic failures, approved return targets, secret-safe logging, and atomic persistence remain
+unchanged.
 
 ## In scope
 
@@ -46,15 +60,15 @@ required. Do not resolve this decision during autonomous execution.
 - Emit the raw session secret in the production host-only cookie only after commit.
 - Use an approved production cookie name with the `__Host-` prefix and exact attributes:
   `HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`, no `Domain`, and explicit 30-day maximum age.
-- Replace or invalidate any pre-authentication browser state as required by the approved contract;
-  never promote or reuse it as the authenticated session.
+- Do not introduce separate pre-authentication browser state, and never promote or reuse any
+  existing browser credential as the authenticated session.
 - Redirect only to the normalized return target stored on the consumed challenge.
 - Render one non-sensitive failure result for invalid, expired, consumed, and unknown tokens.
 - Apply no-store/no-referrer behavior and secret-safe logging.
 
 ## Out of scope
 
-- Choosing the pre-authentication/login-CSRF mechanism.
+- Revisiting or expanding the approved pre-authentication/login-CSRF mechanism.
 - Session-authentication dependency.
 - Authenticated session-bound CSRF protection.
 - Logout.
@@ -125,8 +139,5 @@ Run:
 
 ## Completion conditions
 
-Do not mark this task ready and do not implement it until the human approval gate is recorded.
-
-After approval, change `Status: ready` to `Status: review` only when all criteria and checks pass.
-If the approval remains absent or ambiguous, leave status unchanged, make no workaround, and report
-the exact decision required.
+The human approval gate is recorded above. Change `Status: ready` to `Status: review` only after the
+implementation satisfies all criteria and checks.

@@ -60,8 +60,8 @@ tasks:
   - id: AUTH-11
     title: Magic Link POST consumption and secure cookie
     file: docs/tasks/AUTH-11-magic-link-post-consumption-secure-cookie.md
-    status: blocked
-    human_approval: pending
+    status: ready
+    human_approval: approved
     depends_on:
       - AUTH-06
       - AUTH-08
