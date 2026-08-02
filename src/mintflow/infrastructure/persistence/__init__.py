@@ -4,6 +4,9 @@ from mintflow.infrastructure.persistence.authentication_audit import (
 from mintflow.infrastructure.persistence.authentication_rate_limits import (
     PostgreSQLAuthenticationRateLimiter,
 )
+from mintflow.infrastructure.persistence.authentication_retention import (
+    PostgreSQLAuthenticationRetentionRepository,
+)
 from mintflow.infrastructure.persistence.database import (
     create_database_engine,
     create_session_factory,
@@ -17,6 +20,7 @@ from mintflow.infrastructure.persistence.web_sessions import SqlAlchemyWebSessio
 __all__ = [
     "SqlAlchemyAuthenticationAuditAppender",
     "PostgreSQLAuthenticationRateLimiter",
+    "PostgreSQLAuthenticationRetentionRepository",
     "SqlAlchemyLoginChallengeConsumer",
     "SqlAlchemyLoginChallengeStore",
     "SqlAlchemyWebSessionRepository",

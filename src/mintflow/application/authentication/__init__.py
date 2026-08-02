@@ -21,6 +21,15 @@ from mintflow.application.authentication.login_challenge import (
     RequestMagicLink,
 )
 from mintflow.application.authentication.magic_link import MagicLinkBuilder
+from mintflow.application.authentication.retention import (
+    AuthenticationRetentionCutoffs,
+    AuthenticationRetentionRepository,
+    AuthenticationRetentionResult,
+    CleanUpAuthenticationRetention,
+    authentication_retention_cutoffs,
+    is_at_or_before_retention_cutoff,
+    validate_authentication_retention_batch_size,
+)
 from mintflow.application.authentication.tokens import GeneratedToken, generate_token, hash_token
 from mintflow.application.authentication.web_session import (
     WEB_SESSION_LIFETIME,
@@ -38,12 +47,16 @@ __all__ = [
     "AuthenticationAuditEventType",
     "AuthenticationAuditOutcome",
     "AuthenticationAuditRecord",
+    "AuthenticationRetentionCutoffs",
+    "AuthenticationRetentionRepository",
+    "AuthenticationRetentionResult",
     "GENERIC_MAGIC_LINK_REQUEST_RESULT",
     "INVALID_MAGIC_LINK_CONSUMPTION_RESULT",
     "AuthenticatedUserIdentity",
     "AuthenticatedWebSession",
     "AuthenticateWebSession",
     "ConsumeMagicLink",
+    "CleanUpAuthenticationRetention",
     "EmailDeliveryError",
     "GeneratedToken",
     "LoginChallenge",
@@ -58,9 +71,12 @@ __all__ = [
     "WEB_SESSION_LIFETIME",
     "WebSession",
     "authentication_audit_cutoff",
+    "authentication_retention_cutoffs",
+    "is_at_or_before_retention_cutoff",
     "generate_token",
     "hash_token",
     "is_authentication_audit_record_eligible",
     "normalize_email",
     "new_web_session",
+    "validate_authentication_retention_batch_size",
 ]

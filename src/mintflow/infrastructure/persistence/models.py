@@ -79,6 +79,8 @@ class LoginChallengeRecord(Base):
             "octet_length(token_hash) = 32", name="ck_login_challenges_token_hash_length"
         ),
         UniqueConstraint("token_hash", name="uq_login_challenges_token_hash"),
+        Index("ix_login_challenges_consumed_at", "consumed_at"),
+        Index("ix_login_challenges_expires_at", "expires_at"),
     )
 
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
