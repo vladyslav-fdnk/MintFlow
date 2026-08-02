@@ -1,6 +1,6 @@
 # AUTH-08 — HTTP Authentication Composition Boundary
 
-Status: blocked
+Status: ready
 
 ## Goal
 

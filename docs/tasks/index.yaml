@@ -31,14 +31,14 @@ tasks:
   - id: AUTH-07
     title: Local Mailpit email adapter
     file: docs/tasks/AUTH-07-local-mailpit-email-adapter.md
-    status: ready
+    status: done
     depends_on:
       - AUTH-05
 
   - id: AUTH-08
     title: HTTP authentication composition boundary
     file: docs/tasks/AUTH-08-http-authentication-composition-boundary.md
-    status: blocked
+    status: ready
     depends_on:
       - AUTH-06
       - AUTH-07

@@ -1,6 +1,6 @@
 # AUTH-07 — Local Mailpit Email Adapter
 
-Status: review
+Status: done
 
 ## Goal
 
