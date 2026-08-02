@@ -46,7 +46,7 @@ tasks:
   - id: AUTH-09
     title: Magic Link request endpoint
     file: docs/tasks/AUTH-09-magic-link-request-endpoint.md
-    status: ready
+    status: done
     depends_on:
       - AUTH-08
 
