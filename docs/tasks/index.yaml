@@ -38,7 +38,7 @@ tasks:
   - id: AUTH-08
     title: HTTP authentication composition boundary
     file: docs/tasks/AUTH-08-http-authentication-composition-boundary.md
-    status: ready
+    status: done
     depends_on:
       - AUTH-06
       - AUTH-07
@@ -46,14 +46,14 @@ tasks:
   - id: AUTH-09
     title: Magic Link request endpoint
     file: docs/tasks/AUTH-09-magic-link-request-endpoint.md
-    status: blocked
+    status: ready
     depends_on:
       - AUTH-08
 
   - id: AUTH-10
     title: Non-mutating Magic Link confirmation page
     file: docs/tasks/AUTH-10-non-mutating-magic-link-confirmation-page.md
-    status: blocked
+    status: ready
     depends_on:
       - AUTH-08
 

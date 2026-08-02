@@ -1,6 +1,6 @@
 # AUTH-09 — Magic Link Request Endpoint
 
-Status: blocked
+Status: ready
 
 ## Goal
 
