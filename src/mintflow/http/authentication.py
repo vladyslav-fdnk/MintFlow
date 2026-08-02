@@ -1,11 +1,13 @@
+import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from html import escape
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -42,6 +44,8 @@ UNKNOWN_NETWORK_SOURCE = "unknown"
 MAX_MAGIC_LINK_REQUEST_BODY_BYTES = 1_024
 MAX_SUBMITTED_EMAIL_LENGTH = 320
 MAX_RETURN_TARGET_LENGTH = 64
+MAGIC_LINK_CONFIRMATION_PATH = "/auth/magic-link"
+MAGIC_LINK_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -209,6 +213,36 @@ def generic_magic_link_request_response() -> JSONResponse:
     )
 
 
+def magic_link_confirmation_response(*, token: str, return_target: str) -> HTMLResponse:
+    safe_token = escape(token, quote=True)
+    safe_return_target = escape(return_target, quote=True)
+    return HTMLResponse(
+        "<!doctype html><html lang=en><head><meta charset=utf-8>"
+        '<meta name=viewport content="width=device-width,initial-scale=1">'
+        "<title>Confirm sign in | MintFlow</title></head><body>"
+        "<main><h1>Confirm sign in</h1>"
+        "<p>Continue to sign in to MintFlow.</p>"
+        f'<form method="post" action="{MAGIC_LINK_CONFIRMATION_PATH}">'
+        f'<input type="hidden" name="token" value="{safe_token}">'
+        f'<input type="hidden" name="return_target" value="{safe_return_target}">'
+        '<button type="submit">Continue</button></form></main></body></html>',
+        headers=authentication_security_headers(),
+    )
+
+
+def generic_magic_link_confirmation_failure_response() -> HTMLResponse:
+    return HTMLResponse(
+        "<!doctype html><html lang=en><head><meta charset=utf-8>"
+        '<meta name=viewport content="width=device-width,initial-scale=1">'
+        "<title>Sign-in link unavailable | MintFlow</title></head><body>"
+        "<main><h1>Sign-in link unavailable</h1>"
+        "<p>This sign-in link cannot be used. Request a new link to continue.</p>"
+        "</main></body></html>",
+        status_code=400,
+        headers=authentication_security_headers(),
+    )
+
+
 async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | None:
     body = bytearray()
     async for chunk in request.stream():
@@ -219,6 +253,20 @@ async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | No
         return MagicLinkRequestDTO.model_validate_json(body)
     except ValidationError:
         return None
+
+
+@router.api_route("/magic-link", methods=["GET", "HEAD"], response_class=HTMLResponse)
+async def confirm_magic_link(request: Request) -> HTMLResponse:
+    token = request.query_params.get("token")
+    return_target = request.query_params.get("return_target")
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    if token is None or MAGIC_LINK_TOKEN_PATTERN.fullmatch(token) is None or return_target is None:
+        return generic_magic_link_confirmation_failure_response()
+    try:
+        runtime.link_builder.validate_return_target(return_target)
+    except InvalidReturnTargetError:
+        return generic_magic_link_confirmation_failure_response()
+    return magic_link_confirmation_response(token=token, return_target=return_target)
 
 
 @router.post("/magic-link/request", response_class=JSONResponse)
