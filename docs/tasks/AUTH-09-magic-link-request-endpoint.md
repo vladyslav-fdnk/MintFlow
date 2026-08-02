@@ -1,6 +1,6 @@
 # AUTH-09 — Magic Link Request Endpoint
 
-Status: ready
+Status: review
 
 ## Goal
 

@@ -1,4 +1,5 @@
 import logging
+from types import SimpleNamespace
 from typing import Annotated
 
 import pytest
@@ -8,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from mintflow.config import Settings
 from mintflow.http.authentication import (
     NormalizedNetworkSource,
+    get_authentication_use_cases,
     get_database_session,
     get_normalized_network_source,
 )
@@ -20,6 +22,23 @@ class TrackingSession:
 
     def close(self) -> None:
         self.closed = True
+
+
+class RecordingMagicLinkRequest:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    def execute(
+        self, *, submitted_email: str, normalized_network_source: str, return_target: str
+    ) -> object:
+        self.calls.append(
+            {
+                "submitted_email": submitted_email,
+                "normalized_network_source": normalized_network_source,
+                "return_target": return_target,
+            }
+        )
+        return object()
 
 
 @pytest.mark.anyio
@@ -119,3 +138,70 @@ async def test_unexpected_exception_response_and_logs_do_not_disclose_secrets(
     assert response.status_code == 500
     for sensitive_value in sensitive_values:
         assert sensitive_value not in captured
+
+
+@pytest.mark.anyio
+async def test_magic_link_request_maps_body_and_direct_peer(settings: Settings) -> None:
+    application = create_app(settings)
+    recorder = RecordingMagicLinkRequest()
+    application.dependency_overrides[get_authentication_use_cases] = lambda: SimpleNamespace(
+        request_magic_link=recorder
+    )
+
+    transport = ASGITransport(app=application, client=("192.0.2.10", 1234))
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/auth/magic-link/request",
+            json={"email": "person@example.com", "return_target": "dashboard"},
+            headers={
+                "Forwarded": "for=203.0.113.9",
+                "X-Forwarded-For": "198.51.100.7",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "If the address can receive email, a sign-in link will arrive shortly."
+    }
+    assert recorder.calls == [
+        {
+            "submitted_email": "person@example.com",
+            "normalized_network_source": "192.0.2.10",
+            "return_target": "dashboard",
+        }
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"not-json",
+        b"{}",
+        b'{"email":"person@example.com","return_target":"dashboard","extra":true}',
+        b'{"email":"' + (b"a" * 321) + b'","return_target":"dashboard"}',
+        b"x" * 1_025,
+    ],
+)
+async def test_malformed_and_oversized_requests_receive_generic_response(
+    settings: Settings, content: bytes
+) -> None:
+    application = create_app(settings)
+    recorder = RecordingMagicLinkRequest()
+    application.dependency_overrides[get_authentication_use_cases] = lambda: SimpleNamespace(
+        request_magic_link=recorder
+    )
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/auth/magic-link/request",
+            content=content,
+            headers={"Content-Type": "application/json"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "message": "If the address can receive email, a sign-in link will arrive shortly."
+    }
+    assert recorder.calls == []

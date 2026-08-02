@@ -218,19 +218,34 @@ def test_delivery_failure_returns_generic_result_after_challenge_is_persisted() 
     assert len(limiter.reservations) == 8
 
 
-def test_rejects_unapproved_return_target_before_rate_limiting_persisting_or_sending() -> None:
-    use_case, store, sender, limiter, _ = build_use_case()
+@pytest.mark.parametrize(
+    "return_target",
+    [
+        "https://attacker.example",
+        "//attacker.example",
+        "%2F%2Fattacker.example",
+        "/dashboard",
+        "dashboard?next=https://attacker.example",
+        "dashboard%00",
+    ],
+)
+def test_rejects_unapproved_return_target_before_rate_limiting_persisting_or_sending(
+    return_target: str,
+) -> None:
+    use_case, store, sender, limiter, audit = build_use_case()
 
     with pytest.raises(InvalidReturnTargetError):
         use_case.execute(
             submitted_email="person@example.com",
             normalized_network_source=NETWORK_SOURCE,
-            return_target="https://attacker.example",
+            return_target=return_target,
         )
 
     assert store.challenges == []
     assert sender.messages == []
     assert limiter.reservations == []
+    assert len(audit.records) == 1
+    assert audit.records[0].outcome.value == "failed"
 
 
 @pytest.mark.parametrize(

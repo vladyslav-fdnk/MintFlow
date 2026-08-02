@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
 from mintflow.application.authentication import (
@@ -17,7 +18,11 @@ from mintflow.application.authentication import (
     RevokeWebSession,
     generate_token,
 )
-from mintflow.application.authentication.login_challenge import EmailSender
+from mintflow.application.authentication.login_challenge import (
+    GENERIC_MAGIC_LINK_REQUEST_RESULT,
+    EmailSender,
+)
+from mintflow.application.authentication.magic_link import InvalidReturnTargetError
 from mintflow.application.authentication.rate_limit import RateLimitDigester
 from mintflow.config import Settings
 from mintflow.infrastructure.persistence import (
@@ -34,6 +39,9 @@ AUTHENTICATION_SECURITY_HEADERS = {
 }
 GENERIC_AUTHENTICATION_ERROR_MESSAGE = "The authentication request could not be completed."
 UNKNOWN_NETWORK_SOURCE = "unknown"
+MAX_MAGIC_LINK_REQUEST_BODY_BYTES = 1_024
+MAX_SUBMITTED_EMAIL_LENGTH = 320
+MAX_RETURN_TARGET_LENGTH = 64
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -45,6 +53,15 @@ class AuthenticationConfigurationError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class NormalizedNetworkSource:
     value: str
+
+
+class MagicLinkRequestDTO(BaseModel):
+    """The bounded public representation of a Magic Link request."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str = Field(min_length=1, max_length=MAX_SUBMITTED_EMAIL_LENGTH)
+    return_target: str = Field(min_length=1, max_length=MAX_RETURN_TARGET_LENGTH)
 
 
 @dataclass(frozen=True, slots=True)
@@ -182,3 +199,43 @@ def generic_authentication_error_response(*, status_code: int = 400) -> JSONResp
         status_code=status_code,
         headers=authentication_security_headers(),
     )
+
+
+def generic_magic_link_request_response() -> JSONResponse:
+    return JSONResponse(
+        {"message": GENERIC_MAGIC_LINK_REQUEST_RESULT.message},
+        status_code=200,
+        headers=authentication_security_headers(),
+    )
+
+
+async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | None:
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_MAGIC_LINK_REQUEST_BODY_BYTES:
+            return None
+        body.extend(chunk)
+    try:
+        return MagicLinkRequestDTO.model_validate_json(body)
+    except ValidationError:
+        return None
+
+
+@router.post("/magic-link/request", response_class=JSONResponse)
+async def request_magic_link(
+    request: Request,
+    use_cases: AuthenticationUseCasesDependency,
+    network_source: NetworkSourceDependency,
+) -> JSONResponse:
+    submitted_request = await parse_magic_link_request(request)
+    if submitted_request is None:
+        return generic_magic_link_request_response()
+    try:
+        use_cases.request_magic_link.execute(
+            submitted_email=submitted_request.email,
+            normalized_network_source=network_source.value,
+            return_target=submitted_request.return_target,
+        )
+    except InvalidReturnTargetError:
+        pass
+    return generic_magic_link_request_response()

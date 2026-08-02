@@ -5,13 +5,17 @@ from sqlalchemy import create_engine
 from mintflow.application.authentication.login_challenge import MagicLinkMessage
 from mintflow.config import Settings
 from mintflow.http.authentication import (
+    MAX_MAGIC_LINK_REQUEST_BODY_BYTES,
     AuthenticationConfigurationError,
     AuthenticationUseCases,
+    MagicLinkRequestDTO,
     authentication_security_headers,
     build_authentication_runtime,
     generic_authentication_error_response,
+    generic_magic_link_request_response,
     get_authentication_use_cases,
     normalize_direct_peer,
+    parse_magic_link_request,
 )
 from mintflow.infrastructure.persistence import create_session_factory
 
@@ -138,5 +142,58 @@ def test_security_headers_and_generic_error_are_stable() -> None:
         "Referrer-Policy": "no-referrer",
     }
     assert response.status_code == 400
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+
+
+@pytest.mark.anyio
+async def test_maps_bounded_magic_link_request_body() -> None:
+    request = _request(client=("192.0.2.10", 1234))
+    request.scope["method"] = "POST"
+
+    async def receive() -> dict[str, object]:
+        return {
+            "type": "http.request",
+            "body": b'{"email":"person@example.com","return_target":"dashboard"}',
+            "more_body": False,
+        }
+
+    request = Request(request.scope, receive)
+
+    assert await parse_magic_link_request(request) == MagicLinkRequestDTO(
+        email="person@example.com", return_target="dashboard"
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"not-json",
+        b"{}",
+        b'{"email":"person@example.com","return_target":"dashboard","extra":true}',
+        b'{"email":"' + (b"a" * 321) + b'","return_target":"dashboard"}',
+        b'{"email":"person@example.com","return_target":"' + (b"a" * 65) + b'"}',
+        b"x" * (MAX_MAGIC_LINK_REQUEST_BODY_BYTES + 1),
+    ],
+)
+async def test_rejects_malformed_or_unbounded_magic_link_request_body(body: bytes) -> None:
+    request = _request(client=("192.0.2.10", 1234))
+
+    async def receive() -> dict[str, object]:
+        return {"type": "http.request", "body": body, "more_body": False}
+
+    request = Request(request.scope, receive)
+
+    assert await parse_magic_link_request(request) is None
+
+
+def test_generic_magic_link_request_result_is_stable() -> None:
+    response = generic_magic_link_request_response()
+
+    assert response.status_code == 200
+    assert response.body == (
+        b'{"message":"If the address can receive email, a sign-in link will arrive shortly."}'
+    )
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["referrer-policy"] == "no-referrer"

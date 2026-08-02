@@ -11,7 +11,10 @@ from mintflow.application.authentication.audit import (
     AuthenticationAuditRecord,
 )
 from mintflow.application.authentication.email import InvalidEmailError, normalize_email
-from mintflow.application.authentication.magic_link import MagicLinkBuilder
+from mintflow.application.authentication.magic_link import (
+    InvalidReturnTargetError,
+    MagicLinkBuilder,
+)
 from mintflow.application.authentication.rate_limit import (
     EMAIL_DELIVERY_LIMIT,
     NETWORK_REQUEST_LIMIT,
@@ -182,7 +185,11 @@ class RequestMagicLink:
         except InvalidEmailError:
             self._append_request_audit(occurred_at=issued_at, succeeded=False)
             return GENERIC_MAGIC_LINK_REQUEST_RESULT
-        self._link_builder.validate_return_target(return_target)
+        try:
+            self._link_builder.validate_return_target(return_target)
+        except InvalidReturnTargetError:
+            self._append_request_audit(occurred_at=issued_at, succeeded=False)
+            raise
         network_allowed = self._rate_limiter.reserve(
             make_reservation(
                 dimension=RateLimitDimension.NETWORK_REQUEST,
