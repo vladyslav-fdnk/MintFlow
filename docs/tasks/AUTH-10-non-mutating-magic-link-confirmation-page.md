@@ -1,6 +1,6 @@
 # AUTH-10 — Non-Mutating Magic Link Confirmation Page
 
-Status: review
+Status: done
 
 ## Goal
 

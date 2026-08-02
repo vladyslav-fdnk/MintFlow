@@ -53,7 +53,7 @@ tasks:
   - id: AUTH-10
     title: Non-mutating Magic Link confirmation page
     file: docs/tasks/AUTH-10-non-mutating-magic-link-confirmation-page.md
-    status: review
+    status: done
     depends_on:
       - AUTH-08
 
