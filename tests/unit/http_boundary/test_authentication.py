@@ -2,20 +2,29 @@ import pytest
 from fastapi import Request
 from sqlalchemy import create_engine
 
+from mintflow.application.authentication import ConsumeMagicLink
 from mintflow.application.authentication.login_challenge import MagicLinkMessage
+from mintflow.application.authentication.magic_link import MagicLinkBuilder
 from mintflow.config import Settings
 from mintflow.http.authentication import (
+    AUTHENTICATED_SESSION_COOKIE_NAME,
+    AUTHENTICATED_SESSION_MAX_AGE_SECONDS,
     MAX_MAGIC_LINK_REQUEST_BODY_BYTES,
     AuthenticationConfigurationError,
     AuthenticationUseCases,
+    MagicLinkConfirmationDTO,
     MagicLinkRequestDTO,
     authentication_security_headers,
     build_authentication_runtime,
     generic_authentication_error_response,
     generic_magic_link_request_response,
     get_authentication_use_cases,
+    get_consume_magic_link,
+    has_approved_login_origin,
     normalize_direct_peer,
+    parse_magic_link_confirmation,
     parse_magic_link_request,
+    successful_magic_link_response,
 )
 from mintflow.infrastructure.persistence import create_session_factory
 
@@ -115,7 +124,9 @@ def test_configuration_failure_does_not_disclose_secrets(settings: Settings) -> 
 
 
 @pytest.mark.anyio
-async def test_use_case_resolution_fails_closed_without_email_adapter(settings: Settings) -> None:
+async def test_issuance_use_case_resolution_fails_closed_without_email_adapter(
+    settings: Settings,
+) -> None:
     engine = create_engine("sqlite://")
     runtime = build_authentication_runtime(
         settings=settings,
@@ -132,6 +143,27 @@ async def test_use_case_resolution_fails_closed_without_email_adapter(settings: 
     finally:
         session.close()
         engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_consumption_use_case_resolves_without_email_adapter(settings: Settings) -> None:
+    engine = create_engine("sqlite://")
+    runtime = build_authentication_runtime(
+        settings=settings,
+        session_factory=create_session_factory(engine),
+        email_sender=None,
+    )
+    request = _request(client=("192.0.2.10", 1234))
+    request.scope["app"] = type("App", (), {"state": type("State", (), {})()})()
+    request.app.state.authentication_runtime = runtime
+    session = runtime.session_factory()
+    try:
+        consumption = await get_consume_magic_link(request, session)
+    finally:
+        session.close()
+        engine.dispose()
+
+    assert isinstance(consumption, ConsumeMagicLink)
 
 
 def test_security_headers_and_generic_error_are_stable() -> None:
@@ -195,5 +227,82 @@ def test_generic_magic_link_request_result_is_stable() -> None:
     assert response.body == (
         b'{"message":"If the address can receive email, a sign-in link will arrive shortly."}'
     )
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        None,
+        "null",
+        "https://other.test",
+        "https://app.mintflow.test/",
+        "HTTPS://app.mintflow.test",
+        "not-an-origin",
+    ],
+)
+def test_login_origin_validation_fails_closed(origin: str | None) -> None:
+    headers = [] if origin is None else [(b"origin", origin.encode())]
+    request = _request(client=("192.0.2.10", 1234), headers=headers)
+
+    assert not has_approved_login_origin(
+        request=request, approved_origin="https://app.mintflow.test"
+    )
+
+
+def test_login_origin_accepts_only_configured_first_party_origin() -> None:
+    request = _request(
+        client=("192.0.2.10", 1234),
+        headers=[
+            (b"origin", b"https://app.mintflow.test"),
+            (b"forwarded", b"host=attacker.test"),
+            (b"x-forwarded-host", b"attacker.test"),
+        ],
+    )
+
+    assert has_approved_login_origin(request=request, approved_origin="https://app.mintflow.test")
+
+
+@pytest.mark.anyio
+async def test_parses_bounded_first_party_magic_link_form() -> None:
+    request = _request(
+        client=("192.0.2.10", 1234),
+        headers=[(b"content-type", b"application/x-www-form-urlencoded")],
+    )
+    request.scope["method"] = "POST"
+
+    async def receive() -> dict[str, object]:
+        return {
+            "type": "http.request",
+            "body": b"token=" + (b"A" * 43) + b"&return_target=https%3A%2F%2Fattacker.test",
+            "more_body": False,
+        }
+
+    request = Request(request.scope, receive)
+
+    assert await parse_magic_link_confirmation(request) == MagicLinkConfirmationDTO(token="A" * 43)
+
+
+def test_success_response_builds_exact_host_only_cookie_and_internal_redirect() -> None:
+    response = successful_magic_link_response(
+        session_secret="fresh-session-secret",
+        return_target="dashboard",
+        link_builder=MagicLinkBuilder(
+            web_origin="https://app.mintflow.test",
+            allowed_return_targets=frozenset({"dashboard"}),
+        ),
+    )
+
+    cookie = response.headers["set-cookie"]
+    assert response.status_code == 303
+    assert response.headers["location"] == "/dashboard"
+    assert cookie.startswith(f"{AUTHENTICATED_SESSION_COOKIE_NAME}=fresh-session-secret;")
+    assert f"Max-Age={AUTHENTICATED_SESSION_MAX_AGE_SECONDS}" in cookie
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Path=/" in cookie
+    assert "Domain=" not in cookie
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["referrer-policy"] == "no-referrer"

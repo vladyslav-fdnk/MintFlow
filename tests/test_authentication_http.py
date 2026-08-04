@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Annotated
 
@@ -6,10 +7,12 @@ import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
+from mintflow.application.authentication import ConsumeMagicLink
 from mintflow.config import Settings
 from mintflow.http.authentication import (
     NormalizedNetworkSource,
     get_authentication_use_cases,
+    get_consume_magic_link,
     get_database_session,
     get_normalized_network_source,
 )
@@ -78,6 +81,40 @@ async def test_request_session_is_closed_after_success_and_exception(
         response = await client.get(path)
 
     assert response.status_code == status_code
+    assert len(sessions) == 1
+    assert sessions[0].closed
+
+
+@pytest.mark.anyio
+async def test_consumption_dependency_preserves_request_session_cleanup_without_email_sender() -> (
+    None
+):
+    application = FastAPI()
+    sessions: list[TrackingSession] = []
+
+    def session_factory() -> TrackingSession:
+        session = TrackingSession()
+        sessions.append(session)
+        return session
+
+    application.state.authentication_runtime = SimpleNamespace(
+        session_factory=session_factory,
+        email_sender=None,
+        clock=lambda: datetime(2026, 8, 4, tzinfo=UTC),
+    )
+
+    @application.get("/test/consume-dependency")
+    async def resolve_consumption(
+        consume: Annotated[ConsumeMagicLink, Depends(get_consume_magic_link)],
+    ) -> dict[str, str]:
+        assert isinstance(consume, ConsumeMagicLink)
+        return {"status": "ok"}
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/test/consume-dependency")
+
+    assert response.status_code == 200
     assert len(sessions) == 1
     assert sessions[0].closed
 

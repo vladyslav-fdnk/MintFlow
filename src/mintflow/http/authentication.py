@@ -5,9 +5,10 @@ from datetime import UTC, datetime
 from html import escape
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Annotated
+from urllib.parse import parse_qs, quote
 
 from fastapi import APIRouter, Depends, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -42,10 +43,13 @@ AUTHENTICATION_SECURITY_HEADERS = {
 GENERIC_AUTHENTICATION_ERROR_MESSAGE = "The authentication request could not be completed."
 UNKNOWN_NETWORK_SOURCE = "unknown"
 MAX_MAGIC_LINK_REQUEST_BODY_BYTES = 1_024
+MAX_MAGIC_LINK_CONFIRMATION_BODY_BYTES = 1_024
 MAX_SUBMITTED_EMAIL_LENGTH = 320
 MAX_RETURN_TARGET_LENGTH = 64
 MAGIC_LINK_CONFIRMATION_PATH = "/auth/magic-link"
 MAGIC_LINK_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
+AUTHENTICATED_SESSION_COOKIE_NAME = "__Host-mintflow_session"
+AUTHENTICATED_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -66,6 +70,11 @@ class MagicLinkRequestDTO(BaseModel):
 
     email: str = Field(min_length=1, max_length=MAX_SUBMITTED_EMAIL_LENGTH)
     return_target: str = Field(min_length=1, max_length=MAX_RETURN_TARGET_LENGTH)
+
+
+@dataclass(frozen=True, slots=True)
+class MagicLinkConfirmationDTO:
+    token: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -168,6 +177,21 @@ AuthenticationUseCasesDependency = Annotated[
 ]
 
 
+async def get_consume_magic_link(
+    request: Request,
+    session: DatabaseSession,
+) -> ConsumeMagicLink:
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    return ConsumeMagicLink(
+        challenge_consumer=SqlAlchemyLoginChallengeConsumer(session),
+        clock=runtime.clock,
+        token_generator=generate_token,
+    )
+
+
+ConsumeMagicLinkDependency = Annotated[ConsumeMagicLink, Depends(get_consume_magic_link)]
+
+
 async def get_normalized_network_source(request: Request) -> NormalizedNetworkSource:
     """Normalize only the direct request peer; forwarding headers are intentionally ignored."""
     return normalize_direct_peer(request)
@@ -243,6 +267,34 @@ def generic_magic_link_confirmation_failure_response() -> HTMLResponse:
     )
 
 
+def has_approved_login_origin(*, request: Request, approved_origin: str) -> bool:
+    """Require one byte-for-byte first-party Origin; forwarding headers are irrelevant."""
+    origins = request.headers.getlist("origin")
+    return len(origins) == 1 and origins[0] == approved_origin.rstrip("/")
+
+
+def successful_magic_link_response(
+    *, session_secret: str, return_target: str, link_builder: MagicLinkBuilder
+) -> RedirectResponse:
+    """Map a committed application result to a clean internal redirect and secure cookie."""
+    link_builder.validate_return_target(return_target)
+    response = RedirectResponse(
+        url=f"/{quote(return_target, safe='-._~')}",
+        status_code=303,
+        headers=authentication_security_headers(),
+    )
+    response.set_cookie(
+        key=AUTHENTICATED_SESSION_COOKIE_NAME,
+        value=session_secret,
+        max_age=AUTHENTICATED_SESSION_MAX_AGE_SECONDS,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
 async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | None:
     body = bytearray()
     async for chunk in request.stream():
@@ -253,6 +305,32 @@ async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | No
         return MagicLinkRequestDTO.model_validate_json(body)
     except ValidationError:
         return None
+
+
+async def parse_magic_link_confirmation(request: Request) -> MagicLinkConfirmationDTO | None:
+    if request.headers.get("content-type", "").split(";", 1)[0].strip().lower() != (
+        "application/x-www-form-urlencoded"
+    ):
+        return None
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_MAGIC_LINK_CONFIRMATION_BODY_BYTES:
+            return None
+        body.extend(chunk)
+    try:
+        fields = parse_qs(body.decode("ascii"), keep_blank_values=True, strict_parsing=True)
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if not set(fields).issubset({"token", "return_target"}):
+        return None
+    tokens = fields.get("token", [])
+    return_targets = fields.get("return_target", [])
+    if len(tokens) != 1 or len(return_targets) > 1:
+        return None
+    token = tokens[0]
+    if MAGIC_LINK_TOKEN_PATTERN.fullmatch(token) is None:
+        return None
+    return MagicLinkConfirmationDTO(token=token)
 
 
 @router.api_route("/magic-link", methods=["GET", "HEAD"], response_class=HTMLResponse)
@@ -267,6 +345,33 @@ async def confirm_magic_link(request: Request) -> HTMLResponse:
     except InvalidReturnTargetError:
         return generic_magic_link_confirmation_failure_response()
     return magic_link_confirmation_response(token=token, return_target=return_target)
+
+
+@router.post("/magic-link", response_class=HTMLResponse)
+async def consume_magic_link(
+    request: Request,
+    consume: ConsumeMagicLinkDependency,
+) -> Response:
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    if not has_approved_login_origin(
+        request=request,
+        approved_origin=runtime.link_builder.web_origin,
+    ):
+        return generic_magic_link_confirmation_failure_response()
+    submitted_confirmation = await parse_magic_link_confirmation(request)
+    if submitted_confirmation is None:
+        return generic_magic_link_confirmation_failure_response()
+    result = consume.execute(token=submitted_confirmation.token)
+    if not result.authenticated or result.session_secret is None or result.return_target is None:
+        return generic_magic_link_confirmation_failure_response()
+    try:
+        return successful_magic_link_response(
+            session_secret=result.session_secret,
+            return_target=result.return_target,
+            link_builder=runtime.link_builder,
+        )
+    except InvalidReturnTargetError:
+        return generic_magic_link_confirmation_failure_response()
 
 
 @router.post("/magic-link/request", response_class=JSONResponse)

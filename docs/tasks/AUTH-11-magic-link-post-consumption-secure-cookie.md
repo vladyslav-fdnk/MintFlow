@@ -1,6 +1,6 @@
 # AUTH-11 — Magic Link POST Consumption and Secure Cookie
 
-Status: ready
+Status: review
 
 ## Goal
 
