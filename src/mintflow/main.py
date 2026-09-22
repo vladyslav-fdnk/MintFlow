@@ -14,6 +14,10 @@ from mintflow.http.authentication import (
 from mintflow.http.authentication import (
     router as authentication_router,
 )
+from mintflow.http.capture import build_capture_runtime
+from mintflow.http.capture import (
+    router as capture_router,
+)
 from mintflow.infrastructure.email import create_local_email_sender
 from mintflow.infrastructure.persistence import create_database_engine, create_session_factory
 from mintflow.logging import configure_logging
@@ -39,6 +43,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 session_factory=create_session_factory(database_engine),
                 email_sender=authentication_email_sender,
             )
+            capture_runtime = build_capture_runtime()
             composition_cleanup.pop_all()
     except (SQLAlchemyError, TypeError, ValueError):
         raise AuthenticationConfigurationError(
@@ -64,8 +69,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.state.authentication_email_sender = authentication_email_sender
     application.state.authentication_runtime = authentication_runtime
+    application.state.capture_runtime = capture_runtime
     application.state.database_engine = database_engine
     application.include_router(authentication_router)
+    application.include_router(capture_router)
 
     @application.get("/health/live", tags=["health"])
     async def liveness() -> JSONResponse:
