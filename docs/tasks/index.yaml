@@ -125,7 +125,7 @@ tasks:
   - id: CAPTURE-04
     title: CaptureDraft persistence
     file: docs/tasks/CAPTURE-04-capture-draft-persistence.md
-    status: ready
+    status: review
     depends_on:
       - CAPTURE-03
 

@@ -1,6 +1,6 @@
 # CAPTURE-04 — CaptureDraft Persistence
 
-Status: ready
+Status: review
 
 ## Goal
 
@@ -51,7 +51,7 @@ method.
 ## Out of scope
 
 - The `Expense` table or any foreign key to it beyond a nullable id column reserved for later use.
-- The confirmation transaction itself (CAPTURE-07).
+- The confirmation transaction itself (CAPTURE-08).
 - Any HTTP endpoint.
 - Draft expiration cleanup jobs.
 

@@ -22,6 +22,7 @@ def test_migration_downgrades_and_reupgrades_cleanly(migrated_database_url: str)
         assert "web_sessions" not in inspect(engine).get_table_names()
         assert "authentication_audit_records" not in inspect(engine).get_table_names()
         assert "categories" not in inspect(engine).get_table_names()
+        assert "capture_drafts" not in inspect(engine).get_table_names()
     finally:
         engine.dispose()
 
@@ -36,6 +37,7 @@ def test_migration_downgrades_and_reupgrades_cleanly(migrated_database_url: str)
             "web_sessions",
             "authentication_audit_records",
             "categories",
+            "capture_drafts",
         }.issubset(inspect(engine).get_table_names())
     finally:
         engine.dispose()
