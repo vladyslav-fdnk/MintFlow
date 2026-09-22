@@ -9,6 +9,7 @@ from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
     CurrencyCode,
+    Expense,
     MerchantName,
     Money,
     TransactionDate,
@@ -16,9 +17,11 @@ from mintflow.domain.capture import (
 from mintflow.http.capture import (
     MAX_CAPTURE_REQUEST_BODY_BYTES,
     EditCaptureDraftRequest,
+    _expense_not_found,
     _malformed,
     _not_found,
     _rejected,
+    _to_expense_response,
     _to_response,
     parse_edit_capture_draft_request,
 )
@@ -146,9 +149,61 @@ def test_to_response_handles_an_empty_draft() -> None:
 
 
 def test_error_factories_are_generic_and_carry_security_headers() -> None:
-    for factory, status_code in ((_not_found, 404), (_rejected, 409), (_malformed, 422)):
+    for factory, status_code in (
+        (_not_found, 404),
+        (_rejected, 409),
+        (_malformed, 422),
+        (_expense_not_found, 404),
+    ):
         error = factory()
         assert error.status_code == status_code
         assert error.headers is not None
         assert error.headers["Cache-Control"] == "no-store"
         assert error.headers["Referrer-Policy"] == "no-referrer"
+
+
+def test_expense_not_found_and_draft_not_found_are_distinct_messages() -> None:
+    assert _not_found().detail != _expense_not_found().detail
+
+
+def test_to_expense_response_maps_every_field() -> None:
+    expense = Expense.create(
+        owner_id=OWNER,
+        money=Money(minor_units=2500, currency=CurrencyCode("EUR")),
+        transaction_date=TransactionDate(date(2026, 8, 6)),
+        category_key="groceries",
+        capture_draft_id=uuid4(),
+        merchant=MerchantName("Coffee Shop"),
+        note="Team lunch",
+        source=CaptureSource.WEB_MANUAL,
+        now=NOW,
+    )
+
+    response = _to_expense_response(expense)
+
+    assert response.id == expense.id
+    assert response.amount_minor_units == 2500
+    assert response.currency == "EUR"
+    assert response.transaction_date == date(2026, 8, 6)
+    assert response.merchant == "Coffee Shop"
+    assert response.category_key == "groceries"
+    assert response.note == "Team lunch"
+    assert response.source == "web_manual"
+    assert response.capture_draft_id == expense.capture_draft_id
+
+
+def test_to_expense_response_handles_no_merchant() -> None:
+    expense = Expense.create(
+        owner_id=OWNER,
+        money=Money(minor_units=1000, currency=CurrencyCode("USD")),
+        transaction_date=TransactionDate(date(2026, 8, 6)),
+        category_key="uncategorized",
+        capture_draft_id=uuid4(),
+        source=CaptureSource.WEB_MANUAL,
+        now=NOW,
+    )
+
+    response = _to_expense_response(expense)
+
+    assert response.merchant is None
+    assert response.note is None

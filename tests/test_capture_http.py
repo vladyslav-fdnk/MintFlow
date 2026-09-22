@@ -1,4 +1,5 @@
-from datetime import UTC, datetime
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -6,14 +7,17 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from mintflow.application.authentication import AuthenticatedWebSession
+from mintflow.application.capture import ConfirmCaptureDraft
 from mintflow.config import Settings
 from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
     CurrencyCode,
+    Expense,
     Money,
     TransactionDate,
 )
+from mintflow.domain.user import User
 from mintflow.http.authentication import (
     AUTHENTICATED_SESSION_COOKIE_NAME,
     CSRF_HEADER_NAME,
@@ -24,6 +28,8 @@ from mintflow.http.capture import (
     CaptureRuntime,
     get_capture_draft_repository,
     get_capture_runtime,
+    get_confirm_capture_draft,
+    get_expense_repository,
 )
 from mintflow.main import create_app
 
@@ -55,9 +61,47 @@ class FakeCaptureDraftRepository:
             return None
         return draft
 
-    def update(self, draft: CaptureDraft) -> None:
+    def get_for_update(self, *, draft_id: UUID, owner_id: UUID) -> CaptureDraft | None:
+        return self.get(draft_id=draft_id, owner_id=owner_id)
+
+    def update(self, draft: CaptureDraft, *, commit: bool = True) -> None:
         self.store[draft.id] = draft
         self.update_calls.append(draft)
+
+
+class FakeExpenseRepository:
+    def __init__(self) -> None:
+        self.store: dict[UUID, Expense] = {}
+        self.create_calls: list[Expense] = []
+
+    def create(self, expense: Expense, *, commit: bool = True) -> None:
+        self.store[expense.id] = expense
+        self.create_calls.append(expense)
+
+    def get(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
+        expense = self.store.get(expense_id)
+        if expense is None or expense.owner_id != owner_id or not expense.is_active:
+            return None
+        return expense
+
+
+class FakeUserRepository:
+    def __init__(self, user: User) -> None:
+        self.user = user
+
+    def get(self, user_id: UUID) -> User | None:
+        return self.user if user_id == self.user.id else None
+
+
+class RecordingConfirmCaptureDraft:
+    """A recording stand-in, per AUTH-13's CSRF-skip-the-use-case pattern."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[UUID, UUID]] = []
+
+    def execute(self, *, draft_id: UUID, caller_id: UUID) -> Expense:
+        self.calls.append((draft_id, caller_id))
+        raise AssertionError("the use case must not be invoked")
 
 
 def _app(
@@ -75,6 +119,29 @@ def _app(
         clock=lambda: NOW
     )
     return application, repository, owner_id
+
+
+def _app_with_confirm(
+    settings: Settings, *, user_id: UUID | None = None
+) -> tuple[FastAPI, FakeCaptureDraftRepository, FakeExpenseRepository, UUID]:
+    """Wire a real ConfirmCaptureDraft over fake repositories.
+
+    Unlike _app(), this exercises the actual confirmation use case (success,
+    idempotency, and rejection behavior), not just the HTTP boundary.
+    """
+    application, draft_repository, owner_id = _app(settings, user_id=user_id)
+
+    user = replace(User.create(now=NOW), id=owner_id)
+    expense_repository = FakeExpenseRepository()
+    user_repository = FakeUserRepository(user)
+    application.dependency_overrides[get_expense_repository] = lambda: expense_repository
+    application.dependency_overrides[get_confirm_capture_draft] = lambda: ConfirmCaptureDraft(
+        draft_repository=draft_repository,
+        expense_repository=expense_repository,
+        user_repository=user_repository,
+        clock=lambda: NOW,
+    )
+    return application, draft_repository, expense_repository, owner_id
 
 
 def _csrf_headers(application: FastAPI, settings: Settings) -> dict[str, str]:
@@ -346,3 +413,179 @@ async def test_malformed_edit_bodies_return_422(
 
     assert response.status_code == 422
     assert repository.update_calls == []
+
+
+def _confirmable_draft(owner_id: UUID) -> CaptureDraft:
+    draft = CaptureDraft.start(owner_id=owner_id, source=CaptureSource.WEB_MANUAL, now=NOW)
+    draft = draft.set_amount(
+        caller_id=owner_id,
+        amount=Money(minor_units=1500, currency=CurrencyCode("USD")),
+        now=NOW,
+    )
+    draft = draft.set_transaction_date(
+        caller_id=owner_id, transaction_date=TransactionDate(NOW.date()), now=NOW
+    )
+    return draft.mark_ready_for_review(caller_id=owner_id, now=NOW)
+
+
+@pytest.mark.anyio
+async def test_confirm_returns_the_expense_with_the_documented_response_shape(
+    settings: Settings,
+) -> None:
+    application, draft_repository, _expense_repository, owner_id = _app_with_confirm(settings)
+    draft = _confirmable_draft(owner_id)
+    draft_repository.store[draft.id] = draft
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.post(
+            f"/capture/drafts/{draft.id}/confirm", cookies=_cookies(), headers=csrf_headers
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["amount_minor_units"] == 1500
+    assert body["currency"] == "USD"
+    assert body["capture_draft_id"] == str(draft.id)
+    assert body["category_key"] == "uncategorized"
+    assert draft_repository.store[draft.id].state.value == "confirmed"
+
+
+@pytest.mark.anyio
+async def test_duplicate_confirm_returns_the_same_expense(settings: Settings) -> None:
+    application, draft_repository, expense_repository, owner_id = _app_with_confirm(settings)
+    draft = _confirmable_draft(owner_id)
+    draft_repository.store[draft.id] = draft
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        first = await client.post(
+            f"/capture/drafts/{draft.id}/confirm", cookies=_cookies(), headers=csrf_headers
+        )
+        second = await client.post(
+            f"/capture/drafts/{draft.id}/confirm", cookies=_cookies(), headers=csrf_headers
+        )
+
+    assert first.status_code == second.status_code == 200
+    assert first.json()["id"] == second.json()["id"]
+    assert len(expense_repository.store) == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("build", ["not_confirmable", "cancelled", "expired", "future_dated"])
+async def test_confirm_rejects_drafts_that_cannot_be_confirmed(
+    settings: Settings, build: str
+) -> None:
+    application, draft_repository, expense_repository, owner_id = _app_with_confirm(settings)
+    if build == "not_confirmable":
+        draft = CaptureDraft.start(owner_id=owner_id, source=CaptureSource.WEB_MANUAL, now=NOW)
+    elif build == "cancelled":
+        draft = _confirmable_draft(owner_id).cancel(caller_id=owner_id, now=NOW)
+    elif build == "expired":
+        draft = _confirmable_draft(owner_id).expire(now=NOW)
+    else:
+        draft = CaptureDraft.start(owner_id=owner_id, source=CaptureSource.WEB_MANUAL, now=NOW)
+        draft = draft.set_amount(
+            caller_id=owner_id,
+            amount=Money(minor_units=1000, currency=CurrencyCode("USD")),
+            now=NOW,
+        )
+        draft = draft.set_transaction_date(
+            caller_id=owner_id,
+            transaction_date=TransactionDate(NOW.date() + timedelta(days=5)),
+            now=NOW,
+        )
+        draft = draft.mark_ready_for_review(caller_id=owner_id, now=NOW)
+    draft_repository.store[draft.id] = draft
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.post(
+            f"/capture/drafts/{draft.id}/confirm", cookies=_cookies(), headers=csrf_headers
+        )
+
+    assert response.status_code == 409
+    assert expense_repository.store == {}
+
+
+@pytest.mark.anyio
+async def test_confirm_csrf_failure_leaves_state_unchanged_and_never_invokes_use_case(
+    settings: Settings,
+) -> None:
+    application, draft_repository, _expense_repository, owner_id = _app_with_confirm(settings)
+    draft = _confirmable_draft(owner_id)
+    draft_repository.store[draft.id] = draft
+    recorder = RecordingConfirmCaptureDraft()
+    application.dependency_overrides[get_confirm_capture_draft] = lambda: recorder
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.post(f"/capture/drafts/{draft.id}/confirm", cookies=_cookies())
+
+    assert response.status_code == 403
+    assert recorder.calls == []
+    assert draft_repository.store[draft.id].state.value == "ready_for_review"
+
+
+@pytest.mark.anyio
+async def test_confirm_and_view_expense_require_authentication(settings: Settings) -> None:
+    application, _draft_repository, _expense_repository, owner_id = _app_with_confirm(settings)
+    application.dependency_overrides[get_authenticate_web_session] = lambda: (
+        StubSessionAuthentication(None)
+    )
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        confirm_response = await client.post(f"/capture/drafts/{uuid4()}/confirm")
+        view_response = await client.get(f"/capture/expenses/{uuid4()}")
+
+    assert confirm_response.status_code == view_response.status_code == 401
+
+
+@pytest.mark.anyio
+async def test_cross_owner_confirm_and_view_match_not_found(settings: Settings) -> None:
+    application, draft_repository, expense_repository, owner_id = _app_with_confirm(settings)
+    other_owner_draft = _confirmable_draft(uuid4())
+    draft_repository.store[other_owner_draft.id] = other_owner_draft
+    other_owner_expense = Expense.create(
+        owner_id=uuid4(),
+        money=Money(minor_units=1000, currency=CurrencyCode("USD")),
+        transaction_date=TransactionDate(NOW.date()),
+        category_key="uncategorized",
+        capture_draft_id=uuid4(),
+        source=CaptureSource.WEB_MANUAL,
+        now=NOW,
+    )
+    expense_repository.store[other_owner_expense.id] = other_owner_expense
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        confirm_response = await client.post(
+            f"/capture/drafts/{other_owner_draft.id}/confirm",
+            cookies=_cookies(),
+            headers=csrf_headers,
+        )
+        view_response = await client.get(
+            f"/capture/expenses/{other_owner_expense.id}", cookies=_cookies()
+        )
+        unknown_view_response = await client.get(f"/capture/expenses/{uuid4()}", cookies=_cookies())
+
+    assert confirm_response.status_code == 404
+    assert view_response.status_code == unknown_view_response.status_code == 404
+    assert view_response.json() == unknown_view_response.json()

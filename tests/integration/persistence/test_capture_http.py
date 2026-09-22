@@ -1,14 +1,15 @@
 import asyncio
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
-from threading import Barrier
+from threading import Barrier, Event
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import hash_token
@@ -22,6 +23,7 @@ from mintflow.http.authentication import (
 from mintflow.http.capture import CaptureRuntime
 from mintflow.infrastructure.persistence.models import (
     CaptureDraftRecord,
+    ExpenseRecord,
     UserRecord,
     WebSessionRecord,
 )
@@ -237,5 +239,146 @@ async def test_concurrent_patch_requests_leave_a_consistent_final_revision(
     # torn/corrupted mix of the two concurrent writes.
     assert record.revision == 1
     assert record.note in ("first", "second")
+
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_full_manual_capture_to_confirmation_loop_end_to_end(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user = _add_user(db_session)
+    secret = "F" * 43
+    _add_session(db_session, user_id=user.id, secret=secret)
+    application = _application(migrated_database_url)
+
+    start = await _request(application, "POST", "/capture/drafts", secret=secret)
+    draft_id = start.json()["id"]
+
+    edited = await _request(
+        application,
+        "PATCH",
+        f"/capture/drafts/{draft_id}",
+        secret=secret,
+        json={
+            "amount_minor_units": 4200,
+            "currency": "USD",
+            "transaction_date": NOW.date().isoformat(),
+            "merchant": "Coffee Shop",
+            "category_key": "groceries",
+            "note": "Team lunch",
+        },
+    )
+    assert edited.status_code == 200
+
+    ready = await _request(application, "POST", f"/capture/drafts/{draft_id}/ready", secret=secret)
+    assert ready.status_code == 200
+
+    confirm = await _request(
+        application, "POST", f"/capture/drafts/{draft_id}/confirm", secret=secret
+    )
+    assert confirm.status_code == 200
+    expense_id = confirm.json()["id"]
+    assert confirm.json()["amount_minor_units"] == 4200
+    assert confirm.json()["currency"] == "USD"
+    assert confirm.json()["merchant"] == "Coffee Shop"
+    assert confirm.json()["category_key"] == "groceries"
+    assert confirm.json()["note"] == "Team lunch"
+
+    view = await _request(application, "GET", f"/capture/expenses/{expense_id}", secret=secret)
+    assert view.status_code == 200
+    assert view.json() == confirm.json()
+
+    db_session.expire_all()
+    draft_record = db_session.get(CaptureDraftRecord, UUID(draft_id))
+    assert draft_record is not None
+    assert draft_record.state == "confirmed"
+    assert draft_record.expense_id == UUID(expense_id)
+
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_concurrent_double_confirm_through_real_http_routes_creates_one_expense(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user = _add_user(db_session)
+    secret = "G" * 43
+    _add_session(db_session, user_id=user.id, secret=secret)
+    application = _application(migrated_database_url)
+
+    start = await _request(application, "POST", "/capture/drafts", secret=secret)
+    draft_id = start.json()["id"]
+    await _request(
+        application,
+        "PATCH",
+        f"/capture/drafts/{draft_id}",
+        secret=secret,
+        json={"amount_minor_units": 1000, "currency": "USD"},
+    )
+    await _request(
+        application,
+        "PATCH",
+        f"/capture/drafts/{draft_id}",
+        secret=secret,
+        json={"transaction_date": NOW.date().isoformat()},
+    )
+    await _request(application, "POST", f"/capture/drafts/{draft_id}/ready", secret=secret)
+
+    # The confirmation use case locks the draft row (CAPTURE-08) and calls
+    # the clock only after acquiring that lock. A second request submitted
+    # while the first is still holding it must genuinely block inside the
+    # database on the row lock -- it never even reaches the clock. So the
+    # synchronization point is: let request A pause (holding the lock)
+    # right after its clock call, confirm request B is actually blocked
+    # (not merely slow), then release A and let B proceed to the
+    # already-confirmed idempotent-return path.
+    started = Event()
+    release = Event()
+
+    def blocking_clock() -> datetime:
+        started.set()
+        assert release.wait(timeout=5)
+        return NOW
+
+    def worker(*, clock: Callable[[], datetime]) -> Response:
+        application.state.capture_runtime = CaptureRuntime(clock=clock)
+        return asyncio.run(
+            _request(application, "POST", f"/capture/drafts/{draft_id}/confirm", secret=secret)
+        )
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_a = executor.submit(worker, clock=blocking_clock)
+        assert started.wait(timeout=5)
+        future_b = executor.submit(worker, clock=lambda: NOW)
+        with pytest.raises(TimeoutError):
+            future_b.result(timeout=0.3)
+        release.set()
+        response_a = future_a.result(timeout=5)
+        response_b = future_b.result(timeout=5)
+
+    results = [response_a, response_b]
+    assert all(response.status_code == 200 for response in results), [
+        (response.status_code, response.text) for response in results
+    ]
+    expense_ids = {response.json()["id"] for response in results}
+    assert len(expense_ids) == 1
+
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(ExpenseRecord).where(ExpenseRecord.capture_draft_id == UUID(draft_id))
+        )
+        is not None
+    )
+
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ExpenseRecord)
+            .where(ExpenseRecord.capture_draft_id == UUID(draft_id))
+        )
+        == 1
+    )
 
     application.state.database_engine.dispose()

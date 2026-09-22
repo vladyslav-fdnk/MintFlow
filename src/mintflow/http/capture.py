@@ -8,10 +8,16 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from mintflow.application.capture import (
+    CaptureDraftAccessDenied,
+    CaptureDraftNotConfirmable,
+    ConfirmCaptureDraft,
+)
 from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
     CurrencyCode,
+    Expense,
     MerchantName,
     Money,
     TransactionDate,
@@ -26,6 +32,8 @@ from mintflow.http.authentication import (
 from mintflow.infrastructure.persistence import (
     SqlAlchemyCaptureDraftRepository,
     SqlAlchemyCategoryRepository,
+    SqlAlchemyExpenseRepository,
+    SqlAlchemyUserRepository,
 )
 
 MAX_CAPTURE_REQUEST_BODY_BYTES = 4_096
@@ -33,6 +41,7 @@ MAX_NOTE_LENGTH = 2_000
 GENERIC_DRAFT_NOT_FOUND_MESSAGE = "Draft not found."
 GENERIC_DRAFT_REJECTED_MESSAGE = "The request could not be applied."
 GENERIC_MALFORMED_BODY_MESSAGE = "The request body is invalid."
+GENERIC_EXPENSE_NOT_FOUND_MESSAGE = "Expense not found."
 
 router = APIRouter(prefix="/capture", tags=["capture"])
 
@@ -76,6 +85,39 @@ CategoryRepositoryDependency = Annotated[
 ]
 
 
+async def get_expense_repository(session: DatabaseSession) -> SqlAlchemyExpenseRepository:
+    return SqlAlchemyExpenseRepository(session)
+
+
+ExpenseRepositoryDependency = Annotated[
+    SqlAlchemyExpenseRepository, Depends(get_expense_repository)
+]
+
+
+async def get_user_repository(session: DatabaseSession) -> SqlAlchemyUserRepository:
+    return SqlAlchemyUserRepository(session)
+
+
+UserRepositoryDependency = Annotated[SqlAlchemyUserRepository, Depends(get_user_repository)]
+
+
+async def get_confirm_capture_draft(
+    draft_repository: CaptureDraftRepositoryDependency,
+    expense_repository: ExpenseRepositoryDependency,
+    user_repository: UserRepositoryDependency,
+    runtime: CaptureRuntimeDependency,
+) -> ConfirmCaptureDraft:
+    return ConfirmCaptureDraft(
+        draft_repository=draft_repository,
+        expense_repository=expense_repository,
+        user_repository=user_repository,
+        clock=runtime.clock,
+    )
+
+
+ConfirmCaptureDraftDependency = Annotated[ConfirmCaptureDraft, Depends(get_confirm_capture_draft)]
+
+
 class EditCaptureDraftRequest(BaseModel):
     """All fields optional: a client sends only what changed."""
 
@@ -98,6 +140,20 @@ class EditCaptureDraftRequest(BaseModel):
 class CategoryResponse(BaseModel):
     key: str
     name: str
+
+
+class ExpenseResponse(BaseModel):
+    id: UUID
+    amount_minor_units: int
+    currency: str
+    transaction_date: date
+    merchant: str | None
+    category_key: str
+    note: str | None
+    source: str
+    capture_draft_id: UUID
+    created_at: datetime
+    modified_at: datetime
 
 
 class CaptureDraftResponse(BaseModel):
@@ -160,10 +216,41 @@ def _draft_response(draft: CaptureDraft, *, status_code: int = 200) -> JSONRespo
     )
 
 
+def _to_expense_response(expense: Expense) -> ExpenseResponse:
+    return ExpenseResponse(
+        id=expense.id,
+        amount_minor_units=expense.money.minor_units,
+        currency=expense.money.currency.value,
+        transaction_date=expense.transaction_date.value,
+        merchant=expense.merchant.value if expense.merchant is not None else None,
+        category_key=expense.category_key,
+        note=expense.note,
+        source=expense.source.value,
+        capture_draft_id=expense.capture_draft_id,
+        created_at=expense.created_at,
+        modified_at=expense.modified_at,
+    )
+
+
+def _expense_response(expense: Expense) -> JSONResponse:
+    return JSONResponse(
+        _to_expense_response(expense).model_dump(mode="json"),
+        headers=authentication_security_headers(),
+    )
+
+
 def _not_found() -> HTTPException:
     return HTTPException(
         status_code=404,
         detail=GENERIC_DRAFT_NOT_FOUND_MESSAGE,
+        headers=authentication_security_headers(),
+    )
+
+
+def _expense_not_found() -> HTTPException:
+    return HTTPException(
+        status_code=404,
+        detail=GENERIC_EXPENSE_NOT_FOUND_MESSAGE,
         headers=authentication_security_headers(),
     )
 
@@ -336,3 +423,39 @@ async def list_categories(
         ],
         headers=authentication_security_headers(),
     )
+
+
+@router.post("/drafts/{draft_id}/confirm")
+async def confirm_draft(
+    draft_id: UUID,
+    principal: CsrfProtectedPrincipalDependency,
+    confirm_use_case: ConfirmCaptureDraftDependency,
+) -> JSONResponse:
+    """Convert one CaptureDraft into exactly one Expense.
+
+    The sprint's most safety-critical HTTP surface: the only route that can
+    create financial history. A duplicate/repeated confirmation of the same
+    draft returns 200 with the same Expense (CAPTURE-08's idempotent
+    behavior), not an error.
+    """
+    try:
+        expense = confirm_use_case.execute(draft_id=draft_id, caller_id=principal.user_id)
+    except CaptureDraftAccessDenied:
+        raise _not_found() from None
+    except CaptureDraftNotConfirmable:
+        raise _rejected() from None
+    return _expense_response(expense)
+
+
+@router.get("/expenses/{expense_id}")
+async def view_expense(
+    expense_id: UUID,
+    principal: AuthenticatedPrincipalDependency,
+    expense_repository: ExpenseRepositoryDependency,
+) -> JSONResponse:
+    expense = expense_repository.get(expense_id=expense_id, owner_id=principal.user_id)
+    if expense is None or not expense.is_active:
+        # A soft-deleted Expense is excluded on principle (invariant 26),
+        # even though no deletion path exists yet this sprint.
+        raise _expense_not_found()
+    return _expense_response(expense)
