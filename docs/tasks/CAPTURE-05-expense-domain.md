@@ -1,6 +1,6 @@
 # CAPTURE-05 — Expense Domain Model
 
-Status: review
+Status: done
 
 ## Goal
 
