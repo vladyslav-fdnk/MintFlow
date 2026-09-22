@@ -125,14 +125,14 @@ tasks:
   - id: CAPTURE-04
     title: CaptureDraft persistence
     file: docs/tasks/CAPTURE-04-capture-draft-persistence.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-03
 
   - id: CAPTURE-05
     title: Expense domain model
     file: docs/tasks/CAPTURE-05-expense-domain.md
-    status: blocked
+    status: ready
     depends_on:
       - CAPTURE-04
 
