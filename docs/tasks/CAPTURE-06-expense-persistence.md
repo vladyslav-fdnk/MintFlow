@@ -1,6 +1,6 @@
 # CAPTURE-06 — Expense Persistence
 
-Status: review
+Status: done
 
 ## Goal
 

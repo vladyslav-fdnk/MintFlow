@@ -139,7 +139,7 @@ tasks:
   - id: CAPTURE-06
     title: Expense persistence
     file: docs/tasks/CAPTURE-06-expense-persistence.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-05
 
