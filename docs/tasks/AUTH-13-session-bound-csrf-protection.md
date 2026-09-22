@@ -1,6 +1,6 @@
 # AUTH-13 — Session-Bound CSRF Protection
 
-Status: blocked
+Status: review
 
 ## Goal
 
@@ -26,10 +26,18 @@ request. `SameSite=Lax` is defense in depth and is not sufficient on its own.
 
 ### Human approval gate
 
-The browser CSRF integration contract is unresolved. Before this task can become `ready`, a human
-must approve how the Web Client obtains the session-bound CSRF token and returns it on unsafe
-requests, including the transport/header or form-field contract and rotation/invalidation behavior.
-Do not select that contract during autonomous execution.
+**Approved 2026-09-22:** double-submit cookie plus a custom header. The server derives the CSRF
+token as `HMAC-SHA256(authentication_csrf_signing_key, session_secret)` and exposes it to the
+browser only through a non-`HttpOnly`, `Secure`, `SameSite=Lax`, `__Host-`-prefixed cookie
+(`__Host-mintflow_csrf`) set alongside the session cookie at login. The Web Client reads that
+cookie with JavaScript and echoes it back on every unsafe request as the `X-CSRF-Token` header.
+The server never persists the token: it is stateless, so it rotates automatically whenever the
+session secret rotates (new login) and is automatically invalid whenever the session it was
+derived from is (the session-authentication check that must run before CSRF validation already
+rejects revoked, expired, and deactivated-user sessions).
+
+(Superseded by the approval recorded above: before that approval, the contract was unresolved and
+this task could not become `ready` or be implemented autonomously.)
 
 ## In scope
 

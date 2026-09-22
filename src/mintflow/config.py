@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     enable_api_docs: bool = False
     database_url: SecretStr
     authentication_rate_limit_key: SecretStr
+    authentication_csrf_signing_key: SecretStr
     authentication_web_origin: str = Field(min_length=1)
     authentication_return_targets: frozenset[str]
     email_backend: Literal["mailpit"] | None = None

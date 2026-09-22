@@ -13,6 +13,7 @@ def settings() -> Settings:
         log_level="CRITICAL",
         database_url=SecretStr("postgresql://test:test@localhost:5432/test"),
         authentication_rate_limit_key=SecretStr("test-rate-limit-key"),
+        authentication_csrf_signing_key=SecretStr("test-csrf-signing-key"),
         authentication_web_origin="https://app.mintflow.test",
         authentication_return_targets=frozenset({"dashboard"}),
         email_backend="mailpit",

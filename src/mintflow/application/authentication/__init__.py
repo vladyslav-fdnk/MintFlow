@@ -7,6 +7,7 @@ from mintflow.application.authentication.audit import (
     authentication_audit_cutoff,
     is_authentication_audit_record_eligible,
 )
+from mintflow.application.authentication.csrf import CsrfTokenDigester
 from mintflow.application.authentication.email import NormalizedEmail, normalize_email
 from mintflow.application.authentication.login_challenge import (
     GENERIC_MAGIC_LINK_REQUEST_RESULT,
@@ -57,6 +58,7 @@ __all__ = [
     "AuthenticateWebSession",
     "ConsumeMagicLink",
     "CleanUpAuthenticationRetention",
+    "CsrfTokenDigester",
     "EmailDeliveryError",
     "GeneratedToken",
     "LoginChallenge",

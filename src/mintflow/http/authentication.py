@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from mintflow.application.authentication import (
     AuthenticateWebSession,
     ConsumeMagicLink,
+    CsrfTokenDigester,
     MagicLinkBuilder,
     RequestMagicLink,
     RevokeAllWebSessions,
@@ -52,6 +53,9 @@ MAGIC_LINK_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 AUTHENTICATED_SESSION_COOKIE_NAME = "__Host-mintflow_session"
 AUTHENTICATED_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
 GENERIC_UNAUTHENTICATED_MESSAGE = "Authentication required."
+CSRF_COOKIE_NAME = "__Host-mintflow_csrf"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+GENERIC_CSRF_REJECTED_MESSAGE = "The request could not be verified."
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -100,6 +104,7 @@ class AuthenticationRuntime:
     email_sender: EmailSender | None
     link_builder: MagicLinkBuilder
     rate_limit_digester: RateLimitDigester
+    csrf_digester: CsrfTokenDigester
     clock: Callable[[], datetime]
 
 
@@ -121,6 +126,9 @@ def build_authentication_runtime(
             ),
             rate_limit_digester=RateLimitDigester(
                 settings.authentication_rate_limit_key.get_secret_value().encode()
+            ),
+            csrf_digester=CsrfTokenDigester(
+                settings.authentication_csrf_signing_key.get_secret_value().encode()
             ),
             clock=clock,
         )
@@ -237,6 +245,45 @@ AuthenticatedPrincipalDependency = Annotated[
 ]
 
 
+async def get_csrf_protected_principal(
+    request: Request,
+    principal: AuthenticatedPrincipalDependency,
+) -> AuthenticatedPrincipal:
+    """Require an authenticated session plus a matching session-bound CSRF token.
+
+    Resolving ``principal`` first means a missing, revoked, expired, or
+    deactivated-user session already fails with the generic unauthenticated
+    response before any CSRF check runs.
+    """
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    if not has_approved_login_origin(
+        request=request, approved_origin=runtime.link_builder.web_origin
+    ):
+        raise _csrf_rejected()
+    session_secret = request.cookies.get(AUTHENTICATED_SESSION_COOKIE_NAME)
+    candidate = request.headers.get(CSRF_HEADER_NAME)
+    if (
+        session_secret is None
+        or candidate is None
+        or not runtime.csrf_digester.matches(session_secret=session_secret, candidate=candidate)
+    ):
+        raise _csrf_rejected()
+    return principal
+
+
+CsrfProtectedPrincipalDependency = Annotated[
+    AuthenticatedPrincipal, Depends(get_csrf_protected_principal)
+]
+
+
+def _csrf_rejected() -> HTTPException:
+    return HTTPException(
+        status_code=403,
+        detail=GENERIC_CSRF_REJECTED_MESSAGE,
+        headers=authentication_security_headers(),
+    )
+
+
 def _unauthenticated() -> HTTPException:
     return HTTPException(
         status_code=401,
@@ -327,9 +374,13 @@ def has_approved_login_origin(*, request: Request, approved_origin: str) -> bool
 
 
 def successful_magic_link_response(
-    *, session_secret: str, return_target: str, link_builder: MagicLinkBuilder
+    *,
+    session_secret: str,
+    return_target: str,
+    link_builder: MagicLinkBuilder,
+    csrf_digester: CsrfTokenDigester,
 ) -> RedirectResponse:
-    """Map a committed application result to a clean internal redirect and secure cookie."""
+    """Map a committed application result to a clean internal redirect and secure cookies."""
     link_builder.validate_return_target(return_target)
     response = RedirectResponse(
         url=f"/{quote(return_target, safe='-._~')}",
@@ -343,6 +394,15 @@ def successful_magic_link_response(
         path="/",
         secure=True,
         httponly=True,
+        samesite="lax",
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_digester.derive(session_secret=session_secret),
+        max_age=AUTHENTICATED_SESSION_MAX_AGE_SECONDS,
+        path="/",
+        secure=True,
+        httponly=False,
         samesite="lax",
     )
     return response
@@ -422,6 +482,7 @@ async def consume_magic_link(
             session_secret=result.session_secret,
             return_target=result.return_target,
             link_builder=runtime.link_builder,
+            csrf_digester=runtime.csrf_digester,
         )
     except InvalidReturnTargetError:
         return generic_magic_link_confirmation_failure_response()

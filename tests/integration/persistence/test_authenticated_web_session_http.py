@@ -38,6 +38,7 @@ def _settings(database_url: str) -> Settings:
         log_level="CRITICAL",
         database_url=SecretStr(database_url),
         authentication_rate_limit_key=SecretStr("integration-rate-limit-key"),
+        authentication_csrf_signing_key=SecretStr("integration-csrf-signing-key"),
         authentication_web_origin=ORIGIN,
         authentication_return_targets=frozenset({"dashboard"}),
         email_backend=None,
@@ -52,6 +53,7 @@ def _application(database_url: str) -> FastAPI:
         email_sender=runtime.email_sender,
         link_builder=runtime.link_builder,
         rate_limit_digester=runtime.rate_limit_digester,
+        csrf_digester=runtime.csrf_digester,
         clock=lambda: NOW,
     )
 

@@ -77,7 +77,8 @@ tasks:
   - id: AUTH-13
     title: Session-bound CSRF protection
     file: docs/tasks/AUTH-13-session-bound-csrf-protection.md
-    status: blocked
+    status: review
+    human_approval: approved
     depends_on:
       - AUTH-12
 
