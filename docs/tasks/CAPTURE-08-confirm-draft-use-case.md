@@ -1,6 +1,6 @@
 # CAPTURE-08 — Confirm CaptureDraft Use Case
 
-Status: blocked
+Status: ready
 
 ## Goal
 
