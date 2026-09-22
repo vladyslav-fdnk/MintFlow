@@ -32,6 +32,7 @@ from mintflow.http.authentication import (
     get_consume_magic_link,
     get_csrf_protected_principal,
     has_approved_login_origin,
+    logout_response,
     normalize_direct_peer,
     parse_magic_link_confirmation,
     parse_magic_link_request,
@@ -509,3 +510,20 @@ async def test_csrf_dependency_rejects_every_invalid_combination_uniformly(
         "Referrer-Policy": "no-referrer",
     }
     engine.dispose()
+
+
+def test_logout_response_expires_exact_session_cookie_and_is_generic() -> None:
+    response = logout_response()
+
+    cookie = response.headers["set-cookie"]
+    assert response.status_code == 200
+    assert response.body == b'{"message":"Signed out."}'
+    assert cookie.startswith(f"{AUTHENTICATED_SESSION_COOKIE_NAME}=")
+    assert "Max-Age=0" in cookie or "01 Jan 1970" in cookie
+    assert "HttpOnly" in cookie
+    assert "Secure" in cookie
+    assert "SameSite=lax" in cookie
+    assert "Path=/" in cookie
+    assert "Domain=" not in cookie
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"

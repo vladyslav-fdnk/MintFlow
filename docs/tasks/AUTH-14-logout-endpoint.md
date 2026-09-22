@@ -1,6 +1,16 @@
 # AUTH-14 — Logout Endpoint
 
-Status: blocked
+Status: review
+
+**Note:** implemented using `CsrfVerifiedSessionSecretDependency` (Origin + session-bound CSRF
+token check without requiring the presented session to still authenticate) rather than the full
+`CsrfProtectedPrincipalDependency`. The literal in-scope text said "Require the AUTH-12
+authenticated principal," but the acceptance criteria require clearing the cookie and behaving
+identically for an already revoked/expired/deactivated-user session without disclosing that
+distinction — the full AUTH-12 dependency would instead fail closed with 401 before the handler
+ran, leaving the cookie untouched. Resolving the exact session to revoke uses a new
+`WebSessionRepository.find_session_id` lookup by secret hash alone, with no `revoked_at`/
+`expires_at`/User-status filter (unlike `authenticate`), used only by logout.
 
 ## Goal
 

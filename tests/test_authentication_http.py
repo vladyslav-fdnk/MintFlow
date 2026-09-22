@@ -21,6 +21,7 @@ from mintflow.http.authentication import (
     get_authentication_use_cases,
     get_consume_magic_link,
     get_database_session,
+    get_logout_web_session,
     get_normalized_network_source,
 )
 from mintflow.main import create_app
@@ -480,3 +481,163 @@ async def test_malformed_and_oversized_requests_receive_generic_response(
         "message": "If the address can receive email, a sign-in link will arrive shortly."
     }
     assert recorder.calls == []
+
+
+class RecordingLogoutWebSession:
+    def __init__(self) -> None:
+        self.secrets: list[str] = []
+
+    def execute(self, *, secret: str) -> None:
+        self.secrets.append(secret)
+
+
+@pytest.mark.anyio
+async def test_logout_revokes_the_presented_session_and_expires_the_cookie(
+    settings: Settings,
+) -> None:
+    application = create_app(settings)
+    logout_use_case = RecordingLogoutWebSession()
+    application.dependency_overrides[get_logout_web_session] = lambda: logout_use_case
+    session_secret = "A" * 43
+    runtime: AuthenticationRuntime = application.state.authentication_runtime
+    token = runtime.csrf_digester.derive(session_secret=session_secret)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.post(
+            "/auth/logout",
+            cookies={AUTHENTICATED_SESSION_COOKIE_NAME: session_secret},
+            headers={
+                CSRF_HEADER_NAME: token,
+                "Origin": settings.authentication_web_origin,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"message": "Signed out."}
+    assert logout_use_case.secrets == [session_secret]
+    set_cookie = response.headers["set-cookie"]
+    assert set_cookie.startswith(f"{AUTHENTICATED_SESSION_COOKIE_NAME}=")
+    assert "HttpOnly" in set_cookie
+    assert "Secure" in set_cookie
+    assert "SameSite=lax" in set_cookie
+    assert "Path=/" in set_cookie
+    assert "Domain=" not in set_cookie
+
+
+@pytest.mark.anyio
+async def test_logout_is_idempotent_across_repeated_calls(settings: Settings) -> None:
+    application = create_app(settings)
+    logout_use_case = RecordingLogoutWebSession()
+    application.dependency_overrides[get_logout_web_session] = lambda: logout_use_case
+    session_secret = "A" * 43
+    runtime: AuthenticationRuntime = application.state.authentication_runtime
+    token = runtime.csrf_digester.derive(session_secret=session_secret)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        first = await client.post(
+            "/auth/logout",
+            cookies={AUTHENTICATED_SESSION_COOKIE_NAME: session_secret},
+            headers={CSRF_HEADER_NAME: token, "Origin": settings.authentication_web_origin},
+        )
+        second = await client.post(
+            "/auth/logout",
+            cookies={AUTHENTICATED_SESSION_COOKIE_NAME: session_secret},
+            headers={CSRF_HEADER_NAME: token, "Origin": settings.authentication_web_origin},
+        )
+
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json() == {"message": "Signed out."}
+    assert logout_use_case.secrets == [session_secret, session_secret]
+
+
+@pytest.mark.anyio
+async def test_get_cannot_log_out(settings: Settings) -> None:
+    application = create_app(settings)
+    logout_use_case = RecordingLogoutWebSession()
+    application.dependency_overrides[get_logout_web_session] = lambda: logout_use_case
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.get("/auth/logout")
+
+    assert response.status_code == 405
+    assert logout_use_case.secrets == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("csrf_header", "origin", "case"),
+    [
+        (None, "configured", "missing token"),
+        ("wrong-token", "configured", "invalid token"),
+        ("valid", None, "missing origin"),
+        ("valid", "https://attacker.test", "unapproved origin"),
+    ],
+)
+async def test_logout_rejects_invalid_csrf_or_origin_without_revoking(
+    settings: Settings, csrf_header: str | None, origin: str | None, case: str
+) -> None:
+    application = create_app(settings)
+    logout_use_case = RecordingLogoutWebSession()
+    application.dependency_overrides[get_logout_web_session] = lambda: logout_use_case
+    session_secret = "A" * 43
+    runtime: AuthenticationRuntime = application.state.authentication_runtime
+    if csrf_header == "valid":
+        csrf_header = runtime.csrf_digester.derive(session_secret=session_secret)
+    resolved_origin = settings.authentication_web_origin if origin == "configured" else origin
+    headers = {} if csrf_header is None else {CSRF_HEADER_NAME: csrf_header}
+    if resolved_origin is not None:
+        headers["Origin"] = resolved_origin
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.post(
+            "/auth/logout",
+            cookies={AUTHENTICATED_SESSION_COOKIE_NAME: session_secret},
+            headers=headers,
+        )
+
+    assert response.status_code == 403, case
+    assert response.json() == {"detail": "The request could not be verified."}
+    assert logout_use_case.secrets == [], case
+
+
+@pytest.mark.anyio
+async def test_logout_secret_and_token_are_absent_from_logs_and_responses(
+    settings: Settings,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    application = create_app(settings)
+    logout_use_case = RecordingLogoutWebSession()
+    application.dependency_overrides[get_logout_web_session] = lambda: logout_use_case
+    session_secret = "A" * 43
+    wrong_token = "wrong-csrf-token-value"
+
+    transport = ASGITransport(app=application)
+    with caplog.at_level(logging.ERROR):
+        async with AsyncClient(
+            transport=transport, base_url=settings.authentication_web_origin
+        ) as client:
+            response = await client.post(
+                "/auth/logout",
+                cookies={AUTHENTICATED_SESSION_COOKIE_NAME: session_secret},
+                headers={
+                    CSRF_HEADER_NAME: wrong_token,
+                    "Origin": settings.authentication_web_origin,
+                },
+            )
+
+    assert response.status_code == 403
+    captured = response.text + caplog.text
+    assert wrong_token not in captured
+    assert session_secret not in captured

@@ -70,14 +70,15 @@ tasks:
   - id: AUTH-12
     title: Authenticated Web-session dependency
     file: docs/tasks/AUTH-12-authenticated-web-session-dependency.md
-    status: review
+    status: done
+    human_approval: approved
     depends_on:
       - AUTH-11
 
   - id: AUTH-13
     title: Session-bound CSRF protection
     file: docs/tasks/AUTH-13-session-bound-csrf-protection.md
-    status: review
+    status: done
     human_approval: approved
     depends_on:
       - AUTH-12
@@ -85,7 +86,7 @@ tasks:
   - id: AUTH-14
     title: Logout endpoint
     file: docs/tasks/AUTH-14-logout-endpoint.md
-    status: blocked
+    status: review
     depends_on:
       - AUTH-12
       - AUTH-13

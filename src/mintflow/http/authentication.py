@@ -17,6 +17,7 @@ from mintflow.application.authentication import (
     AuthenticateWebSession,
     ConsumeMagicLink,
     CsrfTokenDigester,
+    LogoutWebSession,
     MagicLinkBuilder,
     RequestMagicLink,
     RevokeAllWebSessions,
@@ -56,6 +57,7 @@ GENERIC_UNAUTHENTICATED_MESSAGE = "Authentication required."
 CSRF_COOKIE_NAME = "__Host-mintflow_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 GENERIC_CSRF_REJECTED_MESSAGE = "The request could not be verified."
+GENERIC_LOGOUT_RESULT_MESSAGE = "Signed out."
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -224,6 +226,20 @@ AuthenticateWebSessionDependency = Annotated[
 ]
 
 
+async def get_logout_web_session(
+    request: Request,
+    session: DatabaseSession,
+) -> LogoutWebSession:
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    return LogoutWebSession(
+        repository=SqlAlchemyWebSessionRepository(session),
+        clock=runtime.clock,
+    )
+
+
+LogoutWebSessionDependency = Annotated[LogoutWebSession, Depends(get_logout_web_session)]
+
+
 async def get_authenticated_principal(
     request: Request,
     authenticate: AuthenticateWebSessionDependency,
@@ -245,15 +261,14 @@ AuthenticatedPrincipalDependency = Annotated[
 ]
 
 
-async def get_csrf_protected_principal(
-    request: Request,
-    principal: AuthenticatedPrincipalDependency,
-) -> AuthenticatedPrincipal:
-    """Require an authenticated session plus a matching session-bound CSRF token.
+async def _verified_csrf_session_secret(request: Request) -> str:
+    """Validate Origin and a session-bound CSRF token, and return the raw session secret.
 
-    Resolving ``principal`` first means a missing, revoked, expired, or
-    deactivated-user session already fails with the generic unauthenticated
-    response before any CSRF check runs.
+    This intentionally does not require the session to currently authenticate:
+    the CSRF token is a stateless derivation of the raw secret, so it still
+    matches a secret whose server-side session has since been revoked or has
+    expired. Callers that need full authentication additionally depend on
+    ``AuthenticatedPrincipalDependency``.
     """
     runtime: AuthenticationRuntime = request.app.state.authentication_runtime
     if not has_approved_login_origin(
@@ -268,12 +283,39 @@ async def get_csrf_protected_principal(
         or not runtime.csrf_digester.matches(session_secret=session_secret, candidate=candidate)
     ):
         raise _csrf_rejected()
+    return session_secret
+
+
+async def get_csrf_protected_principal(
+    request: Request,
+    principal: AuthenticatedPrincipalDependency,
+) -> AuthenticatedPrincipal:
+    """Require an authenticated session plus a matching session-bound CSRF token.
+
+    Resolving ``principal`` first means a missing, revoked, expired, or
+    deactivated-user session already fails with the generic unauthenticated
+    response before any CSRF check runs.
+    """
+    await _verified_csrf_session_secret(request)
     return principal
 
 
 CsrfProtectedPrincipalDependency = Annotated[
     AuthenticatedPrincipal, Depends(get_csrf_protected_principal)
 ]
+
+
+async def get_csrf_verified_session_secret(request: Request) -> str:
+    """CSRF/Origin protection without requiring the session to still authenticate.
+
+    Used only by logout, which must still validate CSRF and clear the
+    browser cookie for a session that is already revoked or expired,
+    without disclosing that distinction.
+    """
+    return await _verified_csrf_session_secret(request)
+
+
+CsrfVerifiedSessionSecretDependency = Annotated[str, Depends(get_csrf_verified_session_secret)]
 
 
 def _csrf_rejected() -> HTTPException:
@@ -408,6 +450,28 @@ def successful_magic_link_response(
     return response
 
 
+def logout_response() -> JSONResponse:
+    """Map any logout outcome to the same generic result and expire the session cookie.
+
+    The outcome is uniform regardless of whether a session was found and
+    revoked, was already revoked or expired, or never existed, so the
+    response never discloses which case occurred.
+    """
+    response = JSONResponse(
+        {"message": GENERIC_LOGOUT_RESULT_MESSAGE},
+        status_code=200,
+        headers=authentication_security_headers(),
+    )
+    response.delete_cookie(
+        key=AUTHENTICATED_SESSION_COOKIE_NAME,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
+
+
 async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | None:
     body = bytearray()
     async for chunk in request.stream():
@@ -506,3 +570,12 @@ async def request_magic_link(
     except InvalidReturnTargetError:
         pass
     return generic_magic_link_request_response()
+
+
+@router.post("/logout", response_class=JSONResponse)
+async def logout(
+    session_secret: CsrfVerifiedSessionSecretDependency,
+    logout_use_case: LogoutWebSessionDependency,
+) -> JSONResponse:
+    logout_use_case.execute(secret=session_secret)
+    return logout_response()

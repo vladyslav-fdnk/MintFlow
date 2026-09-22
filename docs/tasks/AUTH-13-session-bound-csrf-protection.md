@@ -1,6 +1,6 @@
 # AUTH-13 — Session-Bound CSRF Protection
 
-Status: review
+Status: done
 
 ## Goal
 

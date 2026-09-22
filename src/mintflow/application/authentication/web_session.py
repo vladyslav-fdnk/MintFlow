@@ -43,6 +43,8 @@ class WebSessionRepository(Protocol):
         self, *, secret_hash: bytes, now: datetime
     ) -> AuthenticatedWebSession | None: ...
 
+    def find_session_id(self, *, secret_hash: bytes) -> UUID | None: ...
+
     def revoke(self, *, session_id: UUID, revoked_at: datetime) -> bool: ...
 
     def revoke_all(self, *, user_id: UUID, revoked_at: datetime) -> int: ...
@@ -111,6 +113,32 @@ class RevokeAllWebSessions:
 
     def execute(self, *, user_id: UUID) -> int:
         return self._repository.revoke_all(user_id=user_id, revoked_at=_utc_now(self._clock))
+
+
+class LogoutWebSession:
+    """Revoke the exact session identified by a presented raw secret, if any.
+
+    Unlike ``AuthenticateWebSession``, resolution does not filter by
+    ``revoked_at``, ``expires_at``, or User status: logout must still find
+    and idempotently revoke a session that is already revoked or expired, so
+    the browser cookie can always be cleared without disclosing why. A
+    secret matching no session is a silent no-op.
+    """
+
+    def __init__(
+        self,
+        *,
+        repository: WebSessionRepository,
+        clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    ) -> None:
+        self._repository = repository
+        self._clock = clock
+
+    def execute(self, *, secret: str) -> None:
+        session_id = self._repository.find_session_id(secret_hash=hash_token(secret))
+        if session_id is None:
+            return
+        self._repository.revoke(session_id=session_id, revoked_at=_utc_now(self._clock))
 
 
 def _utc_now(clock: Callable[[], datetime]) -> datetime:

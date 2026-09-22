@@ -38,6 +38,18 @@ class SqlAlchemyWebSessionRepository:
             return None
         return AuthenticatedWebSession(session_id=row.id, user_id=row.user_id)
 
+    def find_session_id(self, *, secret_hash: bytes) -> UUID | None:
+        """Resolve the exact session by hash regardless of validity, for logout only.
+
+        Explicitly closes its own transaction so a caller can immediately
+        follow this read with ``revoke``, which begins its own transaction
+        on the same session.
+        """
+        with self._session.begin():
+            return self._session.scalar(
+                select(WebSessionRecord.id).where(WebSessionRecord.secret_hash == secret_hash)
+            )
+
     def revoke(self, *, session_id: UUID, revoked_at: datetime) -> bool:
         with self._session.begin():
             user_id = self._session.scalar(

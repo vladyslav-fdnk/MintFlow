@@ -1,6 +1,6 @@
 # AUTH-12 — Authenticated Web-Session Dependency
 
-Status: review
+Status: done
 
 ## Goal
 
