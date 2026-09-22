@@ -118,14 +118,14 @@ tasks:
   - id: CAPTURE-03
     title: CaptureDraft domain model (manual capture only)
     file: docs/tasks/CAPTURE-03-capture-draft-domain.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-02
 
   - id: CAPTURE-04
     title: CaptureDraft persistence
     file: docs/tasks/CAPTURE-04-capture-draft-persistence.md
-    status: blocked
+    status: ready
     depends_on:
       - CAPTURE-03
 

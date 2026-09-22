@@ -1,6 +1,6 @@
 # CAPTURE-03 — CaptureDraft Domain Model (Manual Capture Only)
 
-Status: review
+Status: done
 
 ## Goal
 
