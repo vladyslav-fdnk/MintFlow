@@ -1,6 +1,6 @@
 # CAPTURE-09 — HTTP Composition Boundary and Manual Draft Endpoints
 
-Status: blocked
+Status: ready
 
 ## Goal
 

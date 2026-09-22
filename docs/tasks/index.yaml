@@ -153,7 +153,7 @@ tasks:
   - id: CAPTURE-08
     title: Confirm CaptureDraft use case
     file: docs/tasks/CAPTURE-08-confirm-draft-use-case.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-06
       - CAPTURE-07
@@ -161,7 +161,7 @@ tasks:
   - id: CAPTURE-09
     title: HTTP composition boundary and manual draft endpoints
     file: docs/tasks/CAPTURE-09-http-composition-and-draft-endpoints.md
-    status: blocked
+    status: ready
     depends_on:
       - CAPTURE-08
 
