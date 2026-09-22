@@ -1,6 +1,7 @@
 import logging
 
 PROJECT_LOGGER_NAME = "mintflow"
+UVICORN_ACCESS_LOGGER_NAME = "uvicorn.access"
 
 
 def configure_logging(level: str) -> None:
@@ -12,3 +13,4 @@ def configure_logging(level: str) -> None:
         force=True,
     )
     logging.getLogger(PROJECT_LOGGER_NAME).setLevel(level)
+    logging.getLogger(UVICORN_ACCESS_LOGGER_NAME).disabled = True
