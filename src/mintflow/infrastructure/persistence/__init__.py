@@ -15,6 +15,7 @@ from mintflow.infrastructure.persistence.database import (
     create_database_engine,
     create_session_factory,
 )
+from mintflow.infrastructure.persistence.expenses import SqlAlchemyExpenseRepository
 from mintflow.infrastructure.persistence.login_challenges import (
     SqlAlchemyLoginChallengeConsumer,
     SqlAlchemyLoginChallengeStore,
@@ -27,6 +28,7 @@ __all__ = [
     "PostgreSQLAuthenticationRetentionRepository",
     "SqlAlchemyCaptureDraftRepository",
     "SqlAlchemyCategoryRepository",
+    "SqlAlchemyExpenseRepository",
     "SqlAlchemyLoginChallengeConsumer",
     "SqlAlchemyLoginChallengeStore",
     "SqlAlchemyWebSessionRepository",
