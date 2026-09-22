@@ -1,6 +1,6 @@
 # CAPTURE-03 — CaptureDraft Domain Model (Manual Capture Only)
 
-Status: blocked
+Status: ready
 
 ## Goal
 
