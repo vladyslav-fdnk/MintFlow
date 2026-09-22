@@ -1,9 +1,11 @@
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -184,3 +186,87 @@ class CategoryRecord(Base):
     key: Mapped[str] = mapped_column(String(32), nullable=False)
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class CaptureDraftRecord(Base):
+    __tablename__ = "capture_drafts"
+    __table_args__ = (
+        CheckConstraint("revision >= 0", name="ck_capture_drafts_revision_non_negative"),
+        CheckConstraint(
+            "source IN ('telegram_manual', 'telegram_receipt', 'web_manual')",
+            name="ck_capture_drafts_source",
+        ),
+        CheckConstraint(
+            "state IN ('collecting', 'awaiting_recognition', 'ready_for_review', "
+            "'confirmed', 'cancelled', 'expired')",
+            name="ck_capture_drafts_state",
+        ),
+        CheckConstraint(
+            "(state = 'confirmed') = (expense_id IS NOT NULL)",
+            name="ck_capture_drafts_confirmed_requires_expense_id",
+        ),
+        CheckConstraint(
+            "(state = 'confirmed') = (confirmed_at IS NOT NULL)",
+            name="ck_capture_drafts_confirmed_requires_confirmed_at",
+        ),
+        CheckConstraint(
+            "(amount_minor_units IS NULL) = (amount_currency IS NULL) AND "
+            "(amount_minor_units IS NULL) = (amount_source IS NULL)",
+            name="ck_capture_drafts_amount_fields_together",
+        ),
+        CheckConstraint(
+            "(transaction_date IS NULL) = (transaction_date_source IS NULL)",
+            name="ck_capture_drafts_transaction_date_fields_together",
+        ),
+        CheckConstraint(
+            "(merchant_name IS NULL) = (merchant_source IS NULL)",
+            name="ck_capture_drafts_merchant_fields_together",
+        ),
+        CheckConstraint(
+            "(category_key IS NULL) = (category_key_source IS NULL)",
+            name="ck_capture_drafts_category_key_fields_together",
+        ),
+        CheckConstraint(
+            "amount_source IS NULL OR amount_source IN ('recognition', 'user', 'default')",
+            name="ck_capture_drafts_amount_source",
+        ),
+        CheckConstraint(
+            "transaction_date_source IS NULL OR "
+            "transaction_date_source IN ('recognition', 'user', 'default')",
+            name="ck_capture_drafts_transaction_date_source",
+        ),
+        CheckConstraint(
+            "merchant_source IS NULL OR merchant_source IN ('recognition', 'user', 'default')",
+            name="ck_capture_drafts_merchant_source",
+        ),
+        CheckConstraint(
+            "category_key_source IS NULL OR "
+            "category_key_source IN ('recognition', 'user', 'default')",
+            name="ck_capture_drafts_category_key_source",
+        ),
+        Index("ix_capture_drafts_owner_id", "owner_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    amount_minor_units: Mapped[int | None] = mapped_column(BigInteger)
+    amount_currency: Mapped[str | None] = mapped_column(String(3))
+    amount_source: Mapped[str | None] = mapped_column(String(16))
+    transaction_date: Mapped[date | None] = mapped_column(Date)
+    transaction_date_source: Mapped[str | None] = mapped_column(String(16))
+    merchant_name: Mapped[str | None] = mapped_column(String(140))
+    merchant_source: Mapped[str | None] = mapped_column(String(16))
+    category_key: Mapped[str | None] = mapped_column(String(32))
+    category_key_source: Mapped[str | None] = mapped_column(String(16))
+    note: Mapped[str | None] = mapped_column(Text)
+    expense_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
