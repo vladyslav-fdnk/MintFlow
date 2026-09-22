@@ -19,4 +19,4 @@ RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 
-CMD ["uv", "run", "--frozen", "--no-dev", "uvicorn", "--factory", "mintflow.main:create_app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--frozen", "--no-dev", "uvicorn", "--factory", "mintflow.main:create_app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]

@@ -96,6 +96,11 @@ PostgreSQL is exposed on host port `55432` by default to avoid conflicting with 
 
 After `make docker-up`, liveness is available at `http://localhost:8000/health/live` and readiness at `http://localhost:8000/health/ready`. Readiness returns success only when PostgreSQL accepts a query. API documentation is available at `http://localhost:8000/docs` in the example development configuration. Set `MINTFLOW_ENABLE_API_DOCS=false` in production; documentation is disabled by default when the option is absent.
 
+Local authentication email is captured by Mailpit and is never sent to real recipients. Open
+`http://localhost:8025`, select the message for the submitted address, and follow the sign-in link in
+its text body. The Mailpit backend must be selected explicitly and is rejected in staging and
+production configuration.
+
 Use `make docker-down` to stop the environment. The PostgreSQL Docker volume is retained intentionally.
 
 ## Available commands

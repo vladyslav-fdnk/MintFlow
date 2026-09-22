@@ -1,0 +1,173 @@
+# The user-foundation sprint (AUTH-03..AUTH-15) is complete/in final review.
+# capture-foundation is the active sprint: the manual-capture-to-confirmation
+# core loop (CaptureDraft -> Expense). Receipt capture, recognition, expense
+# editing/deletion, listing, and analytics are deferred to a follow-on sprint.
+sprint: capture-foundation
+
+tasks:
+  - id: AUTH-03
+    title: PostgreSQL authentication rate limiting
+    file: docs/tasks/AUTH-03-rate-limiting.md
+    status: done
+    depends_on: []
+
+  - id: AUTH-04
+    title: Magic Link consumption
+    file: docs/tasks/AUTH-04-magic-link-consumption.md
+    status: done
+    depends_on:
+      - AUTH-03
+
+  - id: AUTH-05
+    title: Web sessions
+    file: docs/tasks/AUTH-05-web-sessions.md
+    status: done
+    depends_on:
+      - AUTH-04
+
+  - id: AUTH-06
+    title: Authentication audit persistence
+    file: docs/tasks/AUTH-06-authentication-audit-persistence.md
+    status: done
+    depends_on:
+      - AUTH-05
+
+  - id: AUTH-07
+    title: Local Mailpit email adapter
+    file: docs/tasks/AUTH-07-local-mailpit-email-adapter.md
+    status: done
+    depends_on:
+      - AUTH-05
+
+  - id: AUTH-08
+    title: HTTP authentication composition boundary
+    file: docs/tasks/AUTH-08-http-authentication-composition-boundary.md
+    status: done
+    depends_on:
+      - AUTH-06
+      - AUTH-07
+
+  - id: AUTH-09
+    title: Magic Link request endpoint
+    file: docs/tasks/AUTH-09-magic-link-request-endpoint.md
+    status: done
+    depends_on:
+      - AUTH-08
+
+  - id: AUTH-10
+    title: Non-mutating Magic Link confirmation page
+    file: docs/tasks/AUTH-10-non-mutating-magic-link-confirmation-page.md
+    status: done
+    depends_on:
+      - AUTH-08
+
+  - id: AUTH-11
+    title: Magic Link POST consumption and secure cookie
+    file: docs/tasks/AUTH-11-magic-link-post-consumption-secure-cookie.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - AUTH-06
+      - AUTH-08
+      - AUTH-10
+
+  - id: AUTH-12
+    title: Authenticated Web-session dependency
+    file: docs/tasks/AUTH-12-authenticated-web-session-dependency.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - AUTH-11
+
+  - id: AUTH-13
+    title: Session-bound CSRF protection
+    file: docs/tasks/AUTH-13-session-bound-csrf-protection.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - AUTH-12
+
+  - id: AUTH-14
+    title: Logout endpoint
+    file: docs/tasks/AUTH-14-logout-endpoint.md
+    status: review
+    depends_on:
+      - AUTH-12
+      - AUTH-13
+
+  - id: AUTH-15
+    title: Authentication retention cleanup command
+    file: docs/tasks/AUTH-15-authentication-retention-cleanup-command.md
+    status: done
+    depends_on:
+      - AUTH-06
+
+  - id: CAPTURE-01
+    title: Capture domain value objects and enums
+    file: docs/tasks/CAPTURE-01-domain-value-objects.md
+    status: ready
+    depends_on: []
+
+  - id: CAPTURE-02
+    title: System Category domain and persistence
+    file: docs/tasks/CAPTURE-02-category-domain-and-persistence.md
+    status: blocked
+    depends_on:
+      - CAPTURE-01
+
+  - id: CAPTURE-03
+    title: CaptureDraft domain model (manual capture only)
+    file: docs/tasks/CAPTURE-03-capture-draft-domain.md
+    status: blocked
+    depends_on:
+      - CAPTURE-02
+
+  - id: CAPTURE-04
+    title: CaptureDraft persistence
+    file: docs/tasks/CAPTURE-04-capture-draft-persistence.md
+    status: blocked
+    depends_on:
+      - CAPTURE-03
+
+  - id: CAPTURE-05
+    title: Expense domain model
+    file: docs/tasks/CAPTURE-05-expense-domain.md
+    status: blocked
+    depends_on:
+      - CAPTURE-04
+
+  - id: CAPTURE-06
+    title: Expense persistence
+    file: docs/tasks/CAPTURE-06-expense-persistence.md
+    status: blocked
+    depends_on:
+      - CAPTURE-05
+
+  - id: CAPTURE-07
+    title: User capture preferences (timezone, default currency, UI language)
+    file: docs/tasks/CAPTURE-07-user-capture-preferences.md
+    status: blocked
+    depends_on:
+      - CAPTURE-01
+
+  - id: CAPTURE-08
+    title: Confirm CaptureDraft use case
+    file: docs/tasks/CAPTURE-08-confirm-draft-use-case.md
+    status: blocked
+    depends_on:
+      - CAPTURE-06
+      - CAPTURE-07
+
+  - id: CAPTURE-09
+    title: HTTP composition boundary and manual draft endpoints
+    file: docs/tasks/CAPTURE-09-http-composition-and-draft-endpoints.md
+    status: blocked
+    depends_on:
+      - CAPTURE-08
+
+  - id: CAPTURE-10
+    title: Confirm draft and view Expense endpoints
+    file: docs/tasks/CAPTURE-10-confirm-and-expense-endpoints.md
+    status: blocked
+    depends_on:
+      - CAPTURE-09
