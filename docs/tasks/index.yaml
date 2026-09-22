@@ -161,13 +161,13 @@ tasks:
   - id: CAPTURE-09
     title: HTTP composition boundary and manual draft endpoints
     file: docs/tasks/CAPTURE-09-http-composition-and-draft-endpoints.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-08
 
   - id: CAPTURE-10
     title: Confirm draft and view Expense endpoints
     file: docs/tasks/CAPTURE-10-confirm-and-expense-endpoints.md
-    status: blocked
+    status: ready
     depends_on:
       - CAPTURE-09
