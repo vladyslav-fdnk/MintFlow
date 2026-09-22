@@ -21,6 +21,7 @@ def test_migration_downgrades_and_reupgrades_cleanly(migrated_database_url: str)
         assert "authentication_rate_limit_buckets" not in inspect(engine).get_table_names()
         assert "web_sessions" not in inspect(engine).get_table_names()
         assert "authentication_audit_records" not in inspect(engine).get_table_names()
+        assert "categories" not in inspect(engine).get_table_names()
     finally:
         engine.dispose()
 
@@ -34,6 +35,7 @@ def test_migration_downgrades_and_reupgrades_cleanly(migrated_database_url: str)
             "authentication_rate_limit_buckets",
             "web_sessions",
             "authentication_audit_records",
+            "categories",
         }.issubset(inspect(engine).get_table_names())
     finally:
         engine.dispose()
