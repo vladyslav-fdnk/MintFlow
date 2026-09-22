@@ -1,6 +1,6 @@
 # CAPTURE-03 — CaptureDraft Domain Model (Manual Capture Only)
 
-Status: ready
+Status: review
 
 ## Goal
 
@@ -54,7 +54,7 @@ Finalized MVP defaults:
   (amount+currency, transaction date) is present and the draft is in a state from which
   confirmation is reachable (`ready_for_review`).
 - `confirm(expense_id=...)`: an in-memory transition recording the resulting `Expense.id` and moving
-  the draft to `confirmed`; this method does not create the `Expense` itself (that is CAPTURE-07's
+  the draft to `confirmed`; this method does not create the `Expense` itself (that is CAPTURE-08's
   job) — it only represents "this draft has been confirmed and produced this Expense" as a pure
   state transition, callable exactly once.
 - Enforce ownership at the type level where practical (every mutating method requires the caller to
@@ -74,7 +74,7 @@ Finalized MVP defaults:
 - Draft expiration scheduling/cleanup (the domain method `expire()` exists; deciding *when* to call
   it is a later application concern).
 - The future-date and zero/negative-amount confirmation rules (they depend on User timezone/clock
-  and are enforced by the confirmation use case in CAPTURE-07, not here).
+  and are enforced by the confirmation use case in CAPTURE-08, not here).
 - Authorization/ownership enforcement at the HTTP or repository boundary (later tasks).
 
 ## Acceptance criteria
@@ -87,7 +87,7 @@ Finalized MVP defaults:
   draft is `ready_for_review`.
 - `confirm()` fails if the draft is not confirmable, and cannot be called twice on the same draft
   instance (a second call on an already-`confirmed` draft fails rather than silently succeeding —
-  the *idempotent-return-existing-Expense* behavior is an application-layer concern in CAPTURE-07,
+  the *idempotent-return-existing-Expense* behavior is an application-layer concern in CAPTURE-08,
   not this raw domain transition).
 - `cancel()` and `expire()` fail on a draft that is already `confirmed`, `cancelled`, or `expired`.
 - No operation in this task ever produces `awaiting_recognition` state or `recognition` provenance.

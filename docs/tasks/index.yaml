@@ -118,7 +118,7 @@ tasks:
   - id: CAPTURE-03
     title: CaptureDraft domain model (manual capture only)
     file: docs/tasks/CAPTURE-03-capture-draft-domain.md
-    status: ready
+    status: review
     depends_on:
       - CAPTURE-02
 
