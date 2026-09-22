@@ -132,7 +132,7 @@ tasks:
   - id: CAPTURE-05
     title: Expense domain model
     file: docs/tasks/CAPTURE-05-expense-domain.md
-    status: ready
+    status: review
     depends_on:
       - CAPTURE-04
 

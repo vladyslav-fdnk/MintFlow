@@ -1,6 +1,6 @@
 # CAPTURE-05 — Expense Domain Model
 
-Status: ready
+Status: review
 
 ## Goal
 
@@ -26,7 +26,7 @@ Finalized MVP defaults that constrain this task directly:
 - Positive amounts only; no refunds this MVP (decision 1). An `Expense`'s `Money` must be strictly
   greater than zero — this is where that rule is enforced, not in `Money` itself.
 - Category is structurally required on `Expense` (decision 3); use `uncategorized` when nothing was
-  explicitly selected — resolving *which* category id to use is CAPTURE-07's job, but `Expense`
+  explicitly selected — resolving *which* category id to use is CAPTURE-08's job, but `Expense`
   itself must not accept construction without one.
 - Deletion is soft delete: excluded from ordinary history/analytics but recoverable (decision 6).
 - Currency (and amount, together as `Money`) may be corrected post-confirmation, but only as one
@@ -55,7 +55,7 @@ Finalized MVP defaults that constrain this task directly:
 ## Out of scope
 
 - Any persistence, migration, or repository.
-- Confirmation itself, i.e. constructing an `Expense` from a `CaptureDraft` (CAPTURE-07 owns that
+- Confirmation itself, i.e. constructing an `Expense` from a `CaptureDraft` (CAPTURE-08 owns that
   orchestration and calls `Expense.create` as one step within it).
 - Post-confirmation audit history/edit trail persistence (decision 7 selects a lightweight audit
   record as the eventual MVP behavior, but recording *where* those records live and wiring them
@@ -78,7 +78,7 @@ Finalized MVP defaults that constrain this task directly:
 - Every field that domain invariant 20 ties together (expense owner, draft owner, receipt owner)
   cannot be checked by `Expense` alone (it does not have access to the draft/receipt), so this task
   must not attempt to enforce invariant 20 here — note in the diff/tests that this cross-aggregate
-  check is CAPTURE-07's responsibility.
+  check is CAPTURE-08's responsibility.
 
 ## Required tests
 
