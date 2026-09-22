@@ -146,7 +146,7 @@ tasks:
   - id: CAPTURE-07
     title: User capture preferences (timezone, default currency, UI language)
     file: docs/tasks/CAPTURE-07-user-capture-preferences.md
-    status: ready
+    status: review
     depends_on:
       - CAPTURE-01
 

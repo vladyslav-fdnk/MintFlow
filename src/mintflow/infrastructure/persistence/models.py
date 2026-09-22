@@ -47,6 +47,10 @@ class UserRecord(Base):
     status: Mapped[str] = mapped_column(String(16), nullable=False, default=UserStatus.ACTIVE.value)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deactivated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    timezone: Mapped[str] = mapped_column(String(64), nullable=False, default="UTC")
+    default_currency: Mapped[str | None] = mapped_column(String(3))
+    ui_language: Mapped[str] = mapped_column(String(8), nullable=False, default="en")
+    locale: Mapped[str | None] = mapped_column(String(35))
 
     email_identity: Mapped["EmailIdentityRecord | None"] = relationship(
         back_populates="user", uselist=False
