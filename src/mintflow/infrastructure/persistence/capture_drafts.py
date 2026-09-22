@@ -162,10 +162,18 @@ class SqlAlchemyCaptureDraftRepository:
         )
         return _to_domain(record) if record is not None else None
 
-    def update(self, draft: CaptureDraft) -> None:
+    def update(self, draft: CaptureDraft, *, commit: bool = True) -> None:
+        """Persist a new draft snapshot.
+
+        ``commit=False`` lets a caller compose this with another write (for
+        example ``SqlAlchemyExpenseRepository.create``) inside one
+        transaction, such as the confirmation use case; the caller is then
+        responsible for the final commit.
+        """
         self._session.execute(
             update(CaptureDraftRecord)
             .where(CaptureDraftRecord.id == draft.id)
             .values(**_record_values(draft))
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()
