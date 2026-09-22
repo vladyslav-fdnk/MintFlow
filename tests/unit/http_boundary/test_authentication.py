@@ -1,8 +1,10 @@
+from uuid import uuid4
+
 import pytest
-from fastapi import Request
+from fastapi import HTTPException, Request
 from sqlalchemy import create_engine
 
-from mintflow.application.authentication import ConsumeMagicLink
+from mintflow.application.authentication import AuthenticatedWebSession, ConsumeMagicLink
 from mintflow.application.authentication.login_challenge import MagicLinkMessage
 from mintflow.application.authentication.magic_link import MagicLinkBuilder
 from mintflow.config import Settings
@@ -10,6 +12,7 @@ from mintflow.http.authentication import (
     AUTHENTICATED_SESSION_COOKIE_NAME,
     AUTHENTICATED_SESSION_MAX_AGE_SECONDS,
     MAX_MAGIC_LINK_REQUEST_BODY_BYTES,
+    AuthenticatedPrincipal,
     AuthenticationConfigurationError,
     AuthenticationUseCases,
     MagicLinkConfirmationDTO,
@@ -18,6 +21,7 @@ from mintflow.http.authentication import (
     build_authentication_runtime,
     generic_authentication_error_response,
     generic_magic_link_request_response,
+    get_authenticated_principal,
     get_authentication_use_cases,
     get_consume_magic_link,
     has_approved_login_origin,
@@ -32,6 +36,16 @@ from mintflow.infrastructure.persistence import create_session_factory
 class NoOpEmailSender:
     def send_magic_link(self, message: MagicLinkMessage) -> None:
         pass
+
+
+class RecordingSessionAuthentication:
+    def __init__(self, result: AuthenticatedWebSession | None) -> None:
+        self.result = result
+        self.secrets: list[str] = []
+
+    def execute(self, *, secret: str) -> AuthenticatedWebSession | None:
+        self.secrets.append(secret)
+        return self.result
 
 
 def _request(
@@ -50,6 +64,83 @@ def _request(
         "http_version": "1.1",
     }
     return Request(scope)
+
+
+@pytest.mark.anyio
+async def test_extracts_only_approved_cookie_and_maps_typed_principal() -> None:
+    authenticated = AuthenticatedWebSession(session_id=uuid4(), user_id=uuid4())
+    use_case = RecordingSessionAuthentication(authenticated)
+    secret = "A" * 43
+    request = _request(
+        client=("192.0.2.10", 1234),
+        headers=[
+            (
+                b"cookie",
+                f"session={'B' * 43}; {AUTHENTICATED_SESSION_COOKIE_NAME}={secret}".encode(),
+            )
+        ],
+    )
+
+    principal = await get_authenticated_principal(
+        request,
+        use_case,  # type: ignore[arg-type]
+    )
+
+    assert principal == AuthenticatedPrincipal(
+        user_id=authenticated.user_id,
+        web_session_id=authenticated.session_id,
+    )
+    assert use_case.secrets == [secret]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "cookie_header",
+    [
+        None,
+        f"{AUTHENTICATED_SESSION_COOKIE_NAME}=",
+        f"{AUTHENTICATED_SESSION_COOKIE_NAME}=too-short",
+        f"session={'A' * 43}",
+    ],
+)
+async def test_rejects_missing_empty_malformed_and_unapproved_cookies_generically(
+    cookie_header: str | None,
+) -> None:
+    use_case = RecordingSessionAuthentication(None)
+    headers = [] if cookie_header is None else [(b"cookie", cookie_header.encode())]
+
+    with pytest.raises(HTTPException) as captured:
+        await get_authenticated_principal(
+            _request(client=("192.0.2.10", 1234), headers=headers),
+            use_case,  # type: ignore[arg-type]
+        )
+
+    assert captured.value.status_code == 401
+    assert captured.value.detail == "Authentication required."
+    assert captured.value.headers == {
+        "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
+    }
+    assert use_case.secrets == []
+
+
+@pytest.mark.anyio
+async def test_unknown_session_uses_same_generic_rejection() -> None:
+    use_case = RecordingSessionAuthentication(None)
+    secret = "A" * 43
+
+    with pytest.raises(HTTPException) as captured:
+        await get_authenticated_principal(
+            _request(
+                client=("192.0.2.10", 1234),
+                headers=[(b"cookie", f"{AUTHENTICATED_SESSION_COOKIE_NAME}={secret}".encode())],
+            ),
+            use_case,  # type: ignore[arg-type]
+        )
+
+    assert captured.value.status_code == 401
+    assert captured.value.detail == "Authentication required."
+    assert use_case.secrets == [secret]
 
 
 @pytest.mark.parametrize(

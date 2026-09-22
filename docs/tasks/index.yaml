@@ -70,7 +70,7 @@ tasks:
   - id: AUTH-12
     title: Authenticated Web-session dependency
     file: docs/tasks/AUTH-12-authenticated-web-session-dependency.md
-    status: ready
+    status: review
     depends_on:
       - AUTH-11
 

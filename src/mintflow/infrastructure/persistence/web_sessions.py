@@ -32,6 +32,7 @@ class SqlAlchemyWebSessionRepository:
                 WebSessionRecord.expires_at > now,
                 UserRecord.status == UserStatus.ACTIVE.value,
             )
+            .with_for_update(read=True, of=(WebSessionRecord, UserRecord))
         ).one_or_none()
         if row is None:
             return None

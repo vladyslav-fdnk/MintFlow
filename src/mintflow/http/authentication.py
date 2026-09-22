@@ -6,8 +6,9 @@ from html import escape
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Annotated
 from urllib.parse import parse_qs, quote
+from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
@@ -50,6 +51,7 @@ MAGIC_LINK_CONFIRMATION_PATH = "/auth/magic-link"
 MAGIC_LINK_TOKEN_PATTERN = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 AUTHENTICATED_SESSION_COOKIE_NAME = "__Host-mintflow_session"
 AUTHENTICATED_SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+GENERIC_UNAUTHENTICATED_MESSAGE = "Authentication required."
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -61,6 +63,12 @@ class AuthenticationConfigurationError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class NormalizedNetworkSource:
     value: str
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticatedPrincipal:
+    user_id: UUID
+    web_session_id: UUID
 
 
 class MagicLinkRequestDTO(BaseModel):
@@ -190,6 +198,51 @@ async def get_consume_magic_link(
 
 
 ConsumeMagicLinkDependency = Annotated[ConsumeMagicLink, Depends(get_consume_magic_link)]
+
+
+async def get_authenticate_web_session(
+    request: Request,
+    session: DatabaseSession,
+) -> AuthenticateWebSession:
+    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
+    return AuthenticateWebSession(
+        repository=SqlAlchemyWebSessionRepository(session),
+        clock=runtime.clock,
+    )
+
+
+AuthenticateWebSessionDependency = Annotated[
+    AuthenticateWebSession, Depends(get_authenticate_web_session)
+]
+
+
+async def get_authenticated_principal(
+    request: Request,
+    authenticate: AuthenticateWebSessionDependency,
+) -> AuthenticatedPrincipal:
+    session_secret = request.cookies.get(AUTHENTICATED_SESSION_COOKIE_NAME)
+    if session_secret is None or MAGIC_LINK_TOKEN_PATTERN.fullmatch(session_secret) is None:
+        raise _unauthenticated()
+    authenticated = authenticate.execute(secret=session_secret)
+    if authenticated is None:
+        raise _unauthenticated()
+    return AuthenticatedPrincipal(
+        user_id=authenticated.user_id,
+        web_session_id=authenticated.session_id,
+    )
+
+
+AuthenticatedPrincipalDependency = Annotated[
+    AuthenticatedPrincipal, Depends(get_authenticated_principal)
+]
+
+
+def _unauthenticated() -> HTTPException:
+    return HTTPException(
+        status_code=401,
+        detail=GENERIC_UNAUTHENTICATED_MESSAGE,
+        headers=authentication_security_headers(),
+    )
 
 
 async def get_normalized_network_source(request: Request) -> NormalizedNetworkSource:

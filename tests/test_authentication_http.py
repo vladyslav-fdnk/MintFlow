@@ -2,15 +2,19 @@ import logging
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Annotated
+from uuid import uuid4
 
 import pytest
 from fastapi import Depends, FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from mintflow.application.authentication import ConsumeMagicLink
+from mintflow.application.authentication import AuthenticatedWebSession, ConsumeMagicLink
 from mintflow.config import Settings
 from mintflow.http.authentication import (
+    AUTHENTICATED_SESSION_COOKIE_NAME,
+    AuthenticatedPrincipalDependency,
     NormalizedNetworkSource,
+    get_authenticate_web_session,
     get_authentication_use_cases,
     get_consume_magic_link,
     get_database_session,
@@ -42,6 +46,79 @@ class RecordingMagicLinkRequest:
             }
         )
         return object()
+
+
+class StubSessionAuthentication:
+    def __init__(self, result: AuthenticatedWebSession | None) -> None:
+        self.result = result
+
+    def execute(self, *, secret: str) -> AuthenticatedWebSession | None:
+        return self.result
+
+
+def add_protected_test_route(application: FastAPI) -> None:
+    @application.get("/test/protected")
+    async def protected(principal: AuthenticatedPrincipalDependency) -> dict[str, str]:
+        return {
+            "user_id": str(principal.user_id),
+            "web_session_id": str(principal.web_session_id),
+        }
+
+
+@pytest.mark.anyio
+async def test_valid_cookie_resolves_typed_principal_for_protected_handler(
+    settings: Settings,
+) -> None:
+    application = create_app(settings)
+    authenticated = AuthenticatedWebSession(session_id=uuid4(), user_id=uuid4())
+    application.dependency_overrides[get_authenticate_web_session] = lambda: (
+        StubSessionAuthentication(authenticated)
+    )
+    add_protected_test_route(application)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="https://test") as client:
+        response = await client.get(
+            "/test/protected",
+            cookies={AUTHENTICATED_SESSION_COOKIE_NAME: "A" * 43},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "user_id": str(authenticated.user_id),
+        "web_session_id": str(authenticated.session_id),
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("cookie_value", "authenticated"),
+    [
+        (None, False),
+        ("", False),
+        ("malformed", False),
+        ("A" * 43, False),
+    ],
+)
+async def test_protected_handler_returns_uniform_unauthenticated_response(
+    settings: Settings, cookie_value: str | None, authenticated: bool
+) -> None:
+    application = create_app(settings)
+    application.dependency_overrides[get_authenticate_web_session] = lambda: (
+        StubSessionAuthentication(None)
+    )
+    add_protected_test_route(application)
+    cookies = {} if cookie_value is None else {AUTHENTICATED_SESSION_COOKIE_NAME: cookie_value}
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="https://test") as client:
+        response = await client.get("/test/protected", cookies=cookies)
+
+    assert not authenticated
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Authentication required."}
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
 
 
 @pytest.mark.anyio
