@@ -1,6 +1,6 @@
 # CAPTURE-10 — Confirm Draft and View Expense Endpoints
 
-Status: review
+Status: done
 
 ## Goal
 

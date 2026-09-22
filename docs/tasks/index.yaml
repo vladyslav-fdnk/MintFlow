@@ -168,6 +168,6 @@ tasks:
   - id: CAPTURE-10
     title: Confirm draft and view Expense endpoints
     file: docs/tasks/CAPTURE-10-confirm-and-expense-endpoints.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-09
