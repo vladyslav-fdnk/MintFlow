@@ -105,13 +105,13 @@ tasks:
   - id: CAPTURE-01
     title: Capture domain value objects and enums
     file: docs/tasks/CAPTURE-01-domain-value-objects.md
-    status: review
+    status: done
     depends_on: []
 
   - id: CAPTURE-02
     title: System Category domain and persistence
     file: docs/tasks/CAPTURE-02-category-domain-and-persistence.md
-    status: blocked
+    status: review
     depends_on:
       - CAPTURE-01
 
