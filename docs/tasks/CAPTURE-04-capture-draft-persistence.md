@@ -1,6 +1,6 @@
 # CAPTURE-04 — CaptureDraft Persistence
 
-Status: blocked
+Status: ready
 
 ## Goal
 
