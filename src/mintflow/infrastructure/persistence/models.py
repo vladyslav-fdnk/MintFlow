@@ -266,7 +266,50 @@ class CaptureDraftRecord(Base):
     category_key: Mapped[str | None] = mapped_column(String(32))
     category_key_source: Mapped[str | None] = mapped_column(String(16))
     note: Mapped[str | None] = mapped_column(Text)
-    expense_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    expense_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("expenses.id", ondelete="RESTRICT"),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ExpenseRecord(Base):
+    __tablename__ = "expenses"
+    __table_args__ = (
+        CheckConstraint("amount_minor_units > 0", name="ck_expenses_amount_positive"),
+        CheckConstraint(
+            "source IN ('telegram_manual', 'telegram_receipt', 'web_manual')",
+            name="ck_expenses_source",
+        ),
+        UniqueConstraint("capture_draft_id", name="uq_expenses_capture_draft_id"),
+        Index("ix_expenses_owner_id", "owner_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    owner_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    amount_minor_units: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    amount_currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    transaction_date: Mapped[date] = mapped_column(Date, nullable=False)
+    merchant_name: Mapped[str | None] = mapped_column(String(140))
+    category_key: Mapped[str] = mapped_column(
+        String(32),
+        ForeignKey("categories.key", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    note: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    capture_draft_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("capture_drafts.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    receipt_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
