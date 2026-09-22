@@ -105,7 +105,7 @@ tasks:
   - id: CAPTURE-01
     title: Capture domain value objects and enums
     file: docs/tasks/CAPTURE-01-domain-value-objects.md
-    status: ready
+    status: review
     depends_on: []
 
   - id: CAPTURE-02

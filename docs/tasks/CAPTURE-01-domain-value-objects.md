@@ -1,6 +1,6 @@
 # CAPTURE-01 — Capture Domain Value Objects and Enums
 
-Status: ready
+Status: review
 
 ## Goal
 
