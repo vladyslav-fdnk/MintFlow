@@ -71,9 +71,21 @@ class SqlAlchemyExpenseRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def create(self, expense: Expense) -> None:
+    def create(self, expense: Expense, *, commit: bool = True) -> None:
+        """Persist a new Expense.
+
+        Always flushes so the row is visible to the current transaction
+        (for example to satisfy a foreign key from another table updated
+        right after, within the same transaction) even when ``commit`` is
+        False. ``commit=False`` lets a caller -- the confirmation use case
+        -- compose this with ``SqlAlchemyCaptureDraftRepository.update``
+        inside one atomic transaction; the caller is then responsible for
+        the final commit.
+        """
         self._session.add(_to_record(expense))
-        self._session.commit()
+        self._session.flush()
+        if commit:
+            self._session.commit()
 
     def get(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         record = self._session.scalar(

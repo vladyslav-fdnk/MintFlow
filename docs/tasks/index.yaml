@@ -153,7 +153,7 @@ tasks:
   - id: CAPTURE-08
     title: Confirm CaptureDraft use case
     file: docs/tasks/CAPTURE-08-confirm-draft-use-case.md
-    status: ready
+    status: review
     depends_on:
       - CAPTURE-06
       - CAPTURE-07
