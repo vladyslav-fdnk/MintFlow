@@ -50,7 +50,7 @@ which creates at most one Expense.
 
 ## Out of scope
 
-- The confirmation transaction itself (CAPTURE-07 uses this repository as one collaborator inside
+- The confirmation transaction itself (CAPTURE-08 uses this repository as one collaborator inside
   one transaction that also touches `CaptureDraftRecord`).
 - Expense listing/filtering/analytics use cases.
 - Post-confirmation audit-history persistence (still deferred, as noted in CAPTURE-05).
