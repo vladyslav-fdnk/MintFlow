@@ -1,6 +1,6 @@
 # CAPTURE-06 — Expense Persistence
 
-Status: blocked
+Status: ready
 
 ## Goal
 
