@@ -1,6 +1,10 @@
 # CAPTURE-09 — HTTP Composition Boundary and Manual Draft Endpoints
 
-Status: ready
+Status: review
+
+**Completion note:** `GET /capture/categories` was added (authenticated only, no CSRF/ownership
+scoping since categories are system-wide) since CAPTURE-02's `SqlAlchemyCategoryRepository.list_active()`
+made it essentially free and it directly serves this task's own category-editing feature.
 
 ## Goal
 

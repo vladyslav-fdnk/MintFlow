@@ -161,7 +161,7 @@ tasks:
   - id: CAPTURE-09
     title: HTTP composition boundary and manual draft endpoints
     file: docs/tasks/CAPTURE-09-http-composition-and-draft-endpoints.md
-    status: ready
+    status: review
     depends_on:
       - CAPTURE-08
 
