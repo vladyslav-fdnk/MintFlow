@@ -146,14 +146,14 @@ tasks:
   - id: CAPTURE-07
     title: User capture preferences (timezone, default currency, UI language)
     file: docs/tasks/CAPTURE-07-user-capture-preferences.md
-    status: review
+    status: done
     depends_on:
       - CAPTURE-01
 
   - id: CAPTURE-08
     title: Confirm CaptureDraft use case
     file: docs/tasks/CAPTURE-08-confirm-draft-use-case.md
-    status: blocked
+    status: ready
     depends_on:
       - CAPTURE-06
       - CAPTURE-07

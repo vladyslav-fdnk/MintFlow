@@ -1,6 +1,6 @@
 # CAPTURE-07 — User Capture Preferences (Timezone, Default Currency, UI Language)
 
-Status: review
+Status: done
 
 ## Goal
 
