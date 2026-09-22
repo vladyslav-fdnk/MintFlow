@@ -7,6 +7,7 @@ from mintflow.infrastructure.persistence.authentication_rate_limits import (
 from mintflow.infrastructure.persistence.authentication_retention import (
     PostgreSQLAuthenticationRetentionRepository,
 )
+from mintflow.infrastructure.persistence.categories import SqlAlchemyCategoryRepository
 from mintflow.infrastructure.persistence.database import (
     create_database_engine,
     create_session_factory,
@@ -21,6 +22,7 @@ __all__ = [
     "SqlAlchemyAuthenticationAuditAppender",
     "PostgreSQLAuthenticationRateLimiter",
     "PostgreSQLAuthenticationRetentionRepository",
+    "SqlAlchemyCategoryRepository",
     "SqlAlchemyLoginChallengeConsumer",
     "SqlAlchemyLoginChallengeStore",
     "SqlAlchemyWebSessionRepository",

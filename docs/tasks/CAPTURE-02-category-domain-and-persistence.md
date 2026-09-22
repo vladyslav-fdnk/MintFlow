@@ -1,6 +1,6 @@
 # CAPTURE-02 — System Category Domain and Persistence
 
-Status: blocked
+Status: review
 
 ## Goal
 

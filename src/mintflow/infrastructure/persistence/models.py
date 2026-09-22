@@ -2,6 +2,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -173,3 +174,13 @@ class AuthenticationAuditRecordModel(Base):
         PostgreSQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
     )
     subject_record_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+
+
+class CategoryRecord(Base):
+    __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("key", name="uq_categories_key"),)
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    key: Mapped[str] = mapped_column(String(32), nullable=False)
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
