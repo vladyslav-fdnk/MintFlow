@@ -1,8 +1,8 @@
-# The user-foundation, capture-foundation, expense-management, dashboard, and maintenance
-# sprints are complete. telegram-client is the active sprint: account linking and manual capture
-# in the Telegram Client (MVP section 5). Its design (docs/telegram_client_design.md) is approved.
-# Receipt capture and recognition are the next sprint.
-sprint: telegram-client
+# All earlier sprints (user-foundation through telegram-client, plus maintenance) are
+# complete. receipt-recognition is the active sprint: receipt photos in Telegram, background
+# recognition, and the shared review card (MVP sections 5 and 7). Its design
+# (docs/receipt_recognition_design.md) is approved; the provider must be free (R1).
+sprint: receipt-recognition
 
 tasks:
   - id: AUTH-03
@@ -349,3 +349,68 @@ tasks:
     status: done
     human_approval: approved
     depends_on: []
+
+  - id: RCPT-01
+    title: Receipt Domain and Draft Recognition Provenance
+    file: docs/tasks/RCPT-01-receipt-domain.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: RCPT-02
+    title: Receipt Persistence
+    file: docs/tasks/RCPT-02-receipt-persistence.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-01
+
+  - id: RCPT-03
+    title: Recognition Boundary and Candidate Selection
+    file: docs/tasks/RCPT-03-recognition-boundary.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-01
+
+  - id: RCPT-04
+    title: Telegram Receipt Intake
+    file: docs/tasks/RCPT-04-telegram-receipt-intake.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-02
+
+  - id: RCPT-05
+    title: Receipt Worker
+    file: docs/tasks/RCPT-05-receipt-worker.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-02
+      - RCPT-03
+      - RCPT-04
+
+  - id: RCPT-06
+    title: Recognition Delay Message and Manual Fallback
+    file: docs/tasks/RCPT-06-recognition-delay-and-manual-fallback.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-05
+
+  - id: RCPT-07
+    title: Recognition Provider Adapter
+    file: docs/tasks/RCPT-07-recognition-provider-adapter.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-03
+
+  - id: RCPT-08
+    title: Receipt Image and Recognition Retention
+    file: docs/tasks/RCPT-08-receipt-retention.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - RCPT-02
