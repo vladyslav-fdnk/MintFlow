@@ -7,7 +7,7 @@ answering ``401``. An error renders a generic HTML page only for a browser (``Ac
 
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import PlainTextResponse, Response
@@ -17,7 +17,7 @@ from mintflow.http.authentication import (
     AuthenticateWebSessionDependency,
     get_authenticated_principal,
 )
-from mintflow.web.rendering import STATIC_PATH, redirect, render, static_files
+from mintflow.web.rendering import redirect, render
 
 SIGN_IN_PATH: Final = "/sign-in"
 # Paths served by the JSON API or by authentication; everything else is a Web page.
@@ -59,26 +59,18 @@ def wants_html_error(request: Request) -> bool:
     )
 
 
-async def _sign_in_required(request: Request, exc: Exception) -> Response:
+async def sign_in_required(request: Request, exc: Exception) -> Response:
     return redirect(SIGN_IN_PATH)
 
 
-async def _http_error(request: Request, exc: Exception) -> Response:
+async def http_error(request: Request, exc: Exception) -> Response:
     assert isinstance(exc, StarletteHTTPException)
     if not wants_html_error(request):
         return await http_exception_handler(request, exc)
     return render("error.html", {"status_code": exc.status_code}, status_code=exc.status_code)
 
 
-async def _server_error(request: Request, exc: Exception) -> Response:
+async def server_error(request: Request, exc: Exception) -> Response:
     if not wants_html_error(request):
         return PlainTextResponse("Internal Server Error", status_code=500)
     return render("error.html", {"status_code": 500}, status_code=500)
-
-
-def install_web(application: FastAPI) -> None:
-    application.include_router(router)
-    application.mount(STATIC_PATH, static_files(), name="static")
-    application.add_exception_handler(SignInRequired, _sign_in_required)
-    application.add_exception_handler(StarletteHTTPException, _http_error)
-    application.add_exception_handler(Exception, _server_error)

@@ -1,6 +1,6 @@
 # WEB-02 — Sign-in and Sign-out Pages
 
-Status: ready
+Status: done
 
 ## Goal
 

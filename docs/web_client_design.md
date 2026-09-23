@@ -55,9 +55,10 @@ These are already decided and are not reopened here:
 - An unauthenticated request for a page gets `303` to `/sign-in`; JSON endpoints keep their
   `401`. Another user's expense is `404`, never `403`.
 - `/sign-in` is an HTML form that calls `RequestMagicLink` with return target `dashboard` and
-  always shows the same "check your email" page (no account enumeration). It applies the same
-  rate limits and approved-Origin check as the JSON endpoint. The magic-link confirmation page
-  already redirects to `/dashboard`.
+  always shows the same "check your email" page (no account enumeration). It goes through the
+  same use case, so rate limits and audit records match the JSON endpoint, and it additionally
+  requires the approved Origin (the JSON request endpoint does not check Origin; the form, being
+  a browser form, can). The magic-link confirmation page already redirects to `/dashboard`.
 - Sign out is a button posting to the existing `/auth/logout`, then going to `/sign-in`.
 
 ### W3. Mutations use htmx with the existing CSRF header

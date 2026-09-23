@@ -423,14 +423,14 @@ tasks:
   - id: WEB-02
     title: Sign-in and Sign-out Pages
     file: docs/tasks/WEB-02-sign-in-and-sign-out.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - WEB-01
   - id: WEB-03
     title: Dashboard Page
     file: docs/tasks/WEB-03-dashboard-page.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - WEB-01

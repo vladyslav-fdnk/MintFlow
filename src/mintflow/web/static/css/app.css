@@ -136,3 +136,53 @@ h1 {
   font-size: 1.5rem;
   margin: 0.5rem 0 var(--space);
 }
+
+.form {
+  display: grid;
+  gap: var(--space);
+  max-width: 28rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.field label {
+  font-weight: 600;
+}
+
+.field input,
+.field select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--muted);
+  border-radius: var(--radius);
+  background: var(--background);
+  color: var(--text);
+}
+
+.field input[aria-invalid="true"] {
+  border: 2px solid var(--danger);
+}
+
+/* The error is text with an icon-free prefix, so colour is never the only signal. */
+.field-error {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.field-error::before {
+  content: "Error: ";
+}
+
+.button {
+  justify-self: start;
+  padding: 0 1.25rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  cursor: pointer;
+}

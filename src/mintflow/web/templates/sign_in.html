@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Sign in") }}{% endblock %}
+{% block navigation %}{% endblock %}
+{% block content %}
+<h1>{{ _("Sign in to MintFlow") }}</h1>
+<p>{{ _("We will email you a link. Open it on this device to sign in; no password needed.") }}</p>
+<form class="form" method="post" action="/sign-in">
+  <div class="field">
+    <label for="email">{{ _("Email address") }}</label>
+    <input id="email" name="email" type="email" autocomplete="email" required maxlength="320"
+      value="{{ email }}"
+      {% if error %}aria-invalid="true" aria-describedby="email-error" autofocus{% endif %}>
+    {% if error %}
+    <p id="email-error" class="field-error">{{ error }}</p>
+    {% endif %}
+  </div>
+  <button type="submit" class="button">{{ _("Email me a sign-in link") }}</button>
+</form>
+{% endblock %}
