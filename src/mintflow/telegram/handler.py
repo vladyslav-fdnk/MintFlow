@@ -16,7 +16,8 @@ from mintflow.domain.user import User
 from mintflow.telegram import messages
 from mintflow.telegram.bot_api import TelegramApiError, TelegramBotApi
 from mintflow.telegram.outgoing import CallbackAnswer, EditMessage, Outgoing, Reply
-from mintflow.telegram.updates import TelegramUpdate, UpdateKind
+from mintflow.telegram.receipt_intake import ReceiptRejection, ReceiptUpload, receipt_upload
+from mintflow.telegram.updates import TelegramMessage, TelegramUpdate, UpdateKind
 
 logger = logging.getLogger("mintflow.telegram.handler")
 
@@ -36,6 +37,8 @@ class LinkedCapture(Protocol):
 
     def on_text(self, user: User, chat_id: int, text: str) -> list[Outgoing]: ...
 
+    def on_media(self, user: User, chat_id: int, upload: ReceiptUpload) -> list[Outgoing]: ...
+
     def on_callback(
         self, user: User, chat_id: int, message_id: int, callback_query_id: str, data: str
     ) -> list[Outgoing] | None: ...
@@ -47,6 +50,13 @@ class UpdateLedger(Protocol):
     def commit(self) -> None: ...
 
     def rollback(self) -> None: ...
+
+
+_REJECTION_MESSAGES: dict[ReceiptRejection, str] = {
+    ReceiptRejection.ALBUM: messages.RECEIPT_ALBUM,
+    ReceiptRejection.UNSUPPORTED: messages.RECEIPT_UNSUPPORTED,
+    ReceiptRejection.TOO_LARGE: messages.RECEIPT_TOO_LARGE,
+}
 
 
 def _command(text: str) -> str:
@@ -101,7 +111,11 @@ class TelegramUpdateHandler:
             return self._on_callback(user, chat.id, message_id, callback.id, callback.data or "")
 
         message = update.message
-        if message is None or message.text is None:
+        if message is None:
+            return []
+        if update.kind is UpdateKind.MEDIA_MESSAGE:
+            return self._on_media(sender.id, chat.id, message)
+        if message.text is None:
             return []
         payload = update.start_payload
         if payload is not None:
@@ -123,6 +137,15 @@ class TelegramUpdateHandler:
         if user is None:
             return [Reply(chat.id, messages.NOT_LINKED)]
         return self._on_linked_text(user, chat.id, message.text)
+
+    def _on_media(self, sender_id: int, chat_id: int, message: TelegramMessage) -> list[Outgoing]:
+        user = self._resolve_user.execute(telegram_user_id=sender_id)
+        if user is None:
+            return [Reply(chat_id, messages.NOT_LINKED)]
+        upload = receipt_upload(message)
+        if isinstance(upload, ReceiptRejection):
+            return [Reply(chat_id, _REJECTION_MESSAGES[upload])]
+        return self._capture.on_media(user, chat_id, upload)
 
     def _on_linked_text(self, user: User, chat_id: int, text: str) -> list[Outgoing]:
         if text.strip().startswith("/"):

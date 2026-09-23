@@ -6,7 +6,7 @@ from itertools import count
 
 from pydantic import SecretStr
 
-from mintflow.telegram.bot_api import InlineKeyboard, SentMessage, TelegramApiError
+from mintflow.telegram.bot_api import InlineKeyboard, SentMessage, TelegramApiError, TelegramFile
 from mintflow.telegram.updates import TelegramUpdate
 
 
@@ -23,6 +23,8 @@ class RecordingTelegramBotApi:
     calls: list[RecordedCall] = field(default_factory=list)
     pending_updates: list[TelegramUpdate] = field(default_factory=list)
     fail_methods: set[str] = field(default_factory=set)
+    # file_id -> file bytes, served by get_file/download_file.
+    files: dict[str, bytes] = field(default_factory=dict)
     _message_ids: Iterator[int] = field(default_factory=lambda: count(1))
 
     def _record(self, method: str, **arguments: object) -> None:
@@ -68,3 +70,16 @@ class RecordingTelegramBotApi:
         ]
         self.pending_updates = [update for update in self.pending_updates if update not in ready]
         return ready
+
+    def get_file(self, *, file_id: str) -> TelegramFile:
+        self._record("get_file", file_id=file_id)
+        if file_id not in self.files:
+            raise TelegramApiError("getFile", error_code=400)
+        return TelegramFile(file_path=f"photos/{file_id}", file_size=len(self.files[file_id]))
+
+    def download_file(self, *, file_path: str, max_bytes: int) -> bytes:
+        self._record("download_file", file_path=file_path)
+        content = self.files[file_path.removeprefix("photos/")]
+        if len(content) > max_bytes:
+            raise TelegramApiError("downloadFile")
+        return content

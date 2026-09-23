@@ -1,3 +1,8 @@
+from mintflow.application.receipts.images import (
+    ACCEPTED_RECEIPT_MEDIA_TYPES,
+    MAX_RECEIPT_IMAGE_BYTES,
+    sniff_media_type,
+)
 from mintflow.application.receipts.recognition import (
     AmountLabel,
     CurrencyCandidate,
@@ -13,6 +18,8 @@ from mintflow.application.receipts.recognition import (
 )
 
 __all__ = [
+    "ACCEPTED_RECEIPT_MEDIA_TYPES",
+    "MAX_RECEIPT_IMAGE_BYTES",
     "AmountLabel",
     "CurrencyCandidate",
     "CurrencyEvidence",
@@ -24,4 +31,5 @@ __all__ = [
     "SelectedValues",
     "TotalCandidate",
     "select_values",
+    "sniff_media_type",
 ]

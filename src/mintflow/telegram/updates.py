@@ -28,11 +28,28 @@ class TelegramChat(_TelegramModel):
     type: str
 
 
+class TelegramPhotoSize(_TelegramModel):
+    file_id: str
+    width: int = 0
+    height: int = 0
+    file_size: int | None = None
+
+
+class TelegramDocument(_TelegramModel):
+    file_id: str
+    mime_type: str | None = None
+    file_size: int | None = None
+
+
 class TelegramMessage(_TelegramModel):
     message_id: int
     sender: TelegramUser | None = Field(default=None, alias="from")
     chat: TelegramChat
     text: str | None = None
+    photo: tuple[TelegramPhotoSize, ...] | None = None
+    document: TelegramDocument | None = None
+    # Set when the message is one item of an album.
+    media_group_id: str | None = None
     # Present on forwarded messages (Bot API 7.0+ and the legacy fields).
     forward_origin: dict[str, object] | None = None
     forward_date: int | None = None
@@ -51,6 +68,7 @@ class TelegramCallbackQuery(_TelegramModel):
 
 class UpdateKind(StrEnum):
     TEXT_MESSAGE = "text_message"
+    MEDIA_MESSAGE = "media_message"
     CALLBACK = "callback"
     IGNORABLE = "ignorable"
 
@@ -65,13 +83,12 @@ class TelegramUpdate(_TelegramModel):
         if self.callback_query is not None and self.callback_query.data is not None:
             return UpdateKind.CALLBACK
         message = self.message
-        if (
-            message is not None
-            and message.text is not None
-            and message.sender is not None
-            and not message.sender.is_bot
-        ):
+        if message is None or message.sender is None or message.sender.is_bot:
+            return UpdateKind.IGNORABLE
+        if message.text is not None:
             return UpdateKind.TEXT_MESSAGE
+        if message.photo or message.document is not None:
+            return UpdateKind.MEDIA_MESSAGE
         return UpdateKind.IGNORABLE
 
     @property

@@ -96,7 +96,6 @@ def test_callback_query() -> None:
     "payload",
     [
         {"update_id": 3, "edited_message": _message()},
-        {"update_id": 3, "message": _message(text=None, photo=[{"file_id": "x"}])},
         {"update_id": 3, "message": {**_message(), "from": {**USER, "is_bot": True}}},
         {"update_id": 3, "callback_query": {"id": "cb", "from": USER}},
         {"update_id": 3, "channel_post": {"message_id": 1, "chat": {"id": -1, "type": "channel"}}},
@@ -111,3 +110,17 @@ def test_unsupported_updates_are_ignorable(payload: dict[str, object]) -> None:
 )
 def test_malformed_payloads_are_not_updates(raw: bytes) -> None:
     assert parse_update(raw) is None
+
+
+def test_photos_and_documents_are_media_messages() -> None:
+    photo = _parse({"update_id": 4, "message": _message(text=None, photo=[{"file_id": "x"}])})
+    document = _parse(
+        {
+            "update_id": 5,
+            "message": _message(text=None, document={"file_id": "d", "mime_type": "image/png"}),
+        }
+    )
+
+    assert photo.kind is document.kind is UpdateKind.MEDIA_MESSAGE
+    assert photo.message is not None and photo.message.photo is not None
+    assert document.message is not None and document.message.document is not None

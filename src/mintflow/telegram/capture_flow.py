@@ -39,6 +39,7 @@ from mintflow.domain.capture import (
     DraftFieldSource,
     Expense,
     MerchantName,
+    Receipt,
     TransactionDate,
 )
 from mintflow.domain.user import User
@@ -53,6 +54,7 @@ from mintflow.telegram.parsing import (
     parse_date,
     to_money,
 )
+from mintflow.telegram.receipt_intake import ReceiptUpload
 
 _DRAFT_ACTION_PREFIX: Final = "d"
 ADD_ACTION: Final = "add"
@@ -66,6 +68,10 @@ class DraftRepository(Protocol):
     def get(self, *, draft_id: UUID, owner_id: UUID) -> CaptureDraft | None: ...
 
     def update(self, draft: CaptureDraft, *, commit: bool = True) -> None: ...
+
+
+class ReceiptQueue(Protocol):
+    def create(self, receipt: Receipt, *, telegram_file_id: str | None) -> None: ...
 
 
 class CategoryRepository(Protocol):
@@ -107,6 +113,7 @@ class ManualCaptureFlow:
         categories: CategoryRepository,
         confirm: DraftConfirmer,
         history: ExpenseHistory,
+        receipts: ReceiptQueue,
         web_origin: str,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -115,6 +122,7 @@ class ManualCaptureFlow:
         self._categories = categories
         self._confirm = confirm
         self._history = history
+        self._receipts = receipts
         self._web_origin = web_origin
         self._clock = clock
 
@@ -139,6 +147,8 @@ class ManualCaptureFlow:
         draft = self._active_draft(user, conversation)
         if draft is None:
             return [Reply(chat_id, messages.NO_ACTIVE_DRAFT)]
+        if draft.state is CaptureDraftState.AWAITING_RECOGNITION:
+            return [Reply(chat_id, messages.RECEIPT_STILL_READING)]
         awaiting = conversation.awaiting
         if awaiting is AwaitingInput.AMOUNT:
             return self._on_amount(user, chat_id, conversation, draft, text)
@@ -186,8 +196,49 @@ class ManualCaptureFlow:
         conversation = self._lock(user)
         existing = self._active_draft(user, conversation)
         if existing is not None:
+            if conversation.pending_receipt_file_id is not None:
+                self._conversations.save(conversation.with_pending_receipt(None, now=self._clock()))
             return [Reply(chat_id, messages.DRAFT_CONFLICT, _conflict_keyboard(existing))]
         return self._create_draft(user, chat_id, conversation)
+
+    def on_media(self, user: User, chat_id: int, upload: ReceiptUpload) -> list[Outgoing]:
+        """A receipt photo: queue it now, recognize it in the background (design R5)."""
+        conversation = self._lock(user)
+        existing = self._active_draft(user, conversation)
+        if existing is not None:
+            self._conversations.save(
+                conversation.with_pending_receipt(upload.file_id, now=self._clock())
+            )
+            return [
+                Reply(
+                    chat_id,
+                    messages.RECEIPT_CONFLICT,
+                    _conflict_keyboard(existing, discard_label="Discard and use this receipt"),
+                )
+            ]
+        return self._create_receipt_draft(user, chat_id, conversation, upload.file_id)
+
+    def _create_receipt_draft(
+        self, user: User, chat_id: int, conversation: TelegramConversation, file_id: str
+    ) -> list[Outgoing]:
+        now = self._clock()
+        receipt = Receipt.receive(owner_id=user.id, now=now)
+        self._receipts.create(receipt, telegram_file_id=file_id)
+        today = now.astimezone(_zone(user)).date()
+        draft = CaptureDraft.start_from_receipt(owner_id=user.id, receipt_id=receipt.id, now=now)
+        draft = draft.set_transaction_date(
+            caller_id=user.id,
+            transaction_date=TransactionDate(today),
+            now=now,
+            source=DraftFieldSource.DEFAULT,
+        )
+        self._drafts.create(draft, commit=False)
+        self._conversations.save(
+            conversation.with_draft(
+                draft.id, awaiting=AwaitingInput.NOTHING, currency_is_default=False, now=now
+            )
+        )
+        return [Reply(chat_id, messages.RECEIPT_RECEIVED)]
 
     def _create_draft(
         self, user: User, chat_id: int, conversation: TelegramConversation
@@ -392,11 +443,18 @@ class ManualCaptureFlow:
         if action == "cancel":
             return [EditMessage(chat_id, message_id, self._cancel(user, conversation, draft))]
         if action == "continue":
+            if conversation.pending_receipt_file_id is not None:
+                conversation = conversation.with_pending_receipt(None, now=now)
+                self._conversations.save(conversation)
             return self._prompt_for(chat_id, conversation, draft)
         if action == "discard":
             # Cancel the old draft and start the new one in the same transaction.
+            pending = conversation.pending_receipt_file_id
             self._cancel(user, conversation, draft)
-            return self._create_draft(user, chat_id, conversation.finished(now=now))
+            fresh = conversation.finished(now=now)
+            if pending is not None:
+                return self._create_receipt_draft(user, chat_id, fresh, pending)
+            return self._create_draft(user, chat_id, fresh)
         return []
 
     def _advance(
@@ -482,6 +540,7 @@ class ManualCaptureFlow:
         draft = self._drafts.get(draft_id=conversation.active_draft_id, owner_id=user.id)
         if draft is None or draft.state not in (
             CaptureDraftState.COLLECTING,
+            CaptureDraftState.AWAITING_RECOGNITION,
             CaptureDraftState.READY_FOR_REVIEW,
         ):
             # Confirmed elsewhere, cancelled, or expired: the conversation no longer points at it.
@@ -492,6 +551,8 @@ class ManualCaptureFlow:
     def _prompt_for(
         self, chat_id: int, conversation: TelegramConversation, draft: CaptureDraft
     ) -> list[Outgoing]:
+        if draft.state is CaptureDraftState.AWAITING_RECOGNITION:
+            return [Reply(chat_id, messages.RECEIPT_STILL_READING)]
         awaiting = conversation.awaiting
         if awaiting is AwaitingInput.AMOUNT:
             return [Reply(chat_id, messages.ASK_AMOUNT)]
@@ -554,10 +615,12 @@ class ManualCaptureFlow:
         )
 
 
-def _conflict_keyboard(draft: CaptureDraft) -> InlineKeyboard:
+def _conflict_keyboard(
+    draft: CaptureDraft, *, discard_label: str = "Discard and start new"
+) -> InlineKeyboard:
     return (
         (InlineButton("Continue", callback_data=draft_action(draft.id, "continue")),),
-        (InlineButton("Discard and start new", callback_data=draft_action(draft.id, "discard")),),
+        (InlineButton(discard_label, callback_data=draft_action(draft.id, "discard")),),
     )
 
 

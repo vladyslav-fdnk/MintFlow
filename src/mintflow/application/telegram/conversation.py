@@ -29,10 +29,15 @@ class TelegramConversation:
     awaiting: AwaitingInput
     currency_is_default: bool
     updated_at: datetime
+    # A receipt photo sent while another draft was active, kept until the user chooses to
+    # continue that draft or discard it for the photo (callback data cannot hold a file id).
+    pending_receipt_file_id: str | None = None
 
     def __post_init__(self) -> None:
         if self.active_draft_id is None and self.awaiting is not AwaitingInput.NOTHING:
             raise ValueError("a conversation without a draft cannot wait for input")
+        if self.active_draft_id is None and self.pending_receipt_file_id is not None:
+            raise ValueError("a pending receipt only waits behind an active draft")
 
     @classmethod
     def idle(cls, *, user_id: UUID, now: datetime) -> "TelegramConversation":
@@ -43,6 +48,9 @@ class TelegramConversation:
             currency_is_default=False,
             updated_at=now,
         )
+
+    def with_pending_receipt(self, file_id: str | None, *, now: datetime) -> "TelegramConversation":
+        return replace(self, pending_receipt_file_id=file_id, updated_at=now)
 
     def waiting_for(self, awaiting: AwaitingInput, *, now: datetime) -> "TelegramConversation":
         return replace(self, awaiting=awaiting, updated_at=now)
@@ -55,6 +63,7 @@ class TelegramConversation:
             active_draft_id=draft_id,
             awaiting=awaiting,
             currency_is_default=currency_is_default,
+            pending_receipt_file_id=None,
             updated_at=now,
         )
 

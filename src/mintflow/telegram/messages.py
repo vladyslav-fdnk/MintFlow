@@ -113,3 +113,17 @@ RECENT_HEADER: Final = "Your latest expenses:"
 
 def recent_line(*, date: str, merchant: str | None, amount: str, category: str) -> str:
     return f"{date} · {merchant or 'No merchant'} · {amount} · {category}"
+
+
+RECEIPT_RECEIVED: Final = (
+    "Got it! I'm reading your receipt. I'll show you what I found in a moment."
+)
+RECEIPT_STILL_READING: Final = "I'm still reading your receipt. I'll send the details shortly."
+RECEIPT_ALBUM: Final = "Please send one receipt at a time, as a single photo."
+RECEIPT_UNSUPPORTED: Final = (
+    "I can only read receipt photos (JPEG, PNG, or WebP). Please send the receipt as a photo."
+)
+RECEIPT_TOO_LARGE: Final = "That file is too large. Please send a photo of the receipt instead."
+RECEIPT_CONFLICT: Final = (
+    "You already have an expense in progress. Continue it, or discard it and use this receipt?"
+)

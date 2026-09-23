@@ -7,6 +7,7 @@ from mintflow.domain.user import User
 from mintflow.telegram import TelegramUpdate, messages
 from mintflow.telegram.handler import TelegramUpdateHandler
 from mintflow.telegram.outgoing import CallbackAnswer, Outgoing, Reply
+from mintflow.telegram.receipt_intake import ReceiptUpload
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
 NOW = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
@@ -71,6 +72,10 @@ class FakeCapture:
     def on_text(self, user: User, chat_id: int, text: str) -> list[Outgoing]:
         self.calls.append(("text", text))
         return [Reply(chat_id, "capture text")]
+
+    def on_media(self, user: User, chat_id: int, upload: ReceiptUpload) -> list[Outgoing]:
+        self.calls.append(("media", upload.file_id))
+        return [Reply(chat_id, "capture media")]
 
     def on_callback(
         self, user: User, chat_id: int, message_id: int, callback_query_id: str, data: str
@@ -322,3 +327,46 @@ def test_a_failed_send_is_logged_without_content_and_does_not_raise(
     assert "telegram_reply_failed method=send_message" in caplog.text
     assert messages.LINK_CLAIMED not in caplog.text
     assert "token" not in caplog.text.replace("telegram_reply_failed", "")
+
+
+def _photo(update_id: int = 7, **extra: object) -> TelegramUpdate:
+    return TelegramUpdate.model_validate(
+        {
+            "update_id": update_id,
+            "message": {
+                "message_id": 12,
+                "from": {"id": SENDER_ID, "is_bot": False, "first_name": "Ada"},
+                "chat": {"id": SENDER_ID, "type": "private"},
+                "date": 0,
+                "photo": [{"file_id": "photo-file", "width": 800, "height": 600}],
+                **extra,
+            },
+        }
+    )
+
+
+def test_linked_receipt_photos_go_to_the_capture_flow() -> None:
+    harness = Harness(linked=True)
+
+    harness.handler.handle(_photo())
+
+    assert harness.capture.calls == [("media", "photo-file")]
+    assert harness.texts() == ["capture media"]
+
+
+def test_unlinked_receipt_photos_are_refused_and_stored_nowhere() -> None:
+    harness = Harness()
+
+    harness.handler.handle(_photo())
+
+    assert harness.capture.calls == []
+    assert harness.texts() == [messages.NOT_LINKED]
+
+
+def test_unusable_receipts_get_an_instruction_and_reach_no_flow() -> None:
+    harness = Harness(linked=True)
+
+    harness.handler.handle(_photo(media_group_id="album-1"))
+
+    assert harness.capture.calls == []
+    assert harness.texts() == [messages.RECEIPT_ALBUM]

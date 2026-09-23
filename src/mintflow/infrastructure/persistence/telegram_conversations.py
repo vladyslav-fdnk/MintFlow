@@ -41,6 +41,7 @@ class SqlAlchemyTelegramConversationRepository:
             awaiting=AwaitingInput(record.awaiting),
             currency_is_default=record.currency_is_default,
             updated_at=record.updated_at,
+            pending_receipt_file_id=record.pending_receipt_file_id,
         )
 
     def save(self, conversation: TelegramConversation) -> None:
@@ -49,6 +50,7 @@ class SqlAlchemyTelegramConversationRepository:
             "awaiting": conversation.awaiting.value,
             "currency_is_default": conversation.currency_is_default,
             "updated_at": conversation.updated_at,
+            "pending_receipt_file_id": conversation.pending_receipt_file_id,
         }
         self._session.execute(
             insert(TelegramConversationRecord)

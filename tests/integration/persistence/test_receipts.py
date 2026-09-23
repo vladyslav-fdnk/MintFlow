@@ -10,6 +10,7 @@ from sqlalchemy import Engine, delete, event, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from mintflow.application.receipts import MAX_RECEIPT_IMAGE_BYTES
 from mintflow.domain.capture import (
     UNCATEGORIZED_KEY,
     CaptureDraft,
@@ -29,7 +30,6 @@ from mintflow.infrastructure.persistence import (
     SqlAlchemyReceiptRepository,
 )
 from mintflow.infrastructure.persistence.models import (
-    MAX_RECEIPT_IMAGE_BYTES,
     ReceiptRecord,
     RecognitionResultRecord,
     UserRecord,

@@ -38,6 +38,7 @@ from mintflow.infrastructure.persistence import (
     SqlAlchemyCaptureDraftRepository,
     SqlAlchemyCategoryRepository,
     SqlAlchemyExpenseRepository,
+    SqlAlchemyReceiptRepository,
     SqlAlchemyTelegramConversationRepository,
     SqlAlchemyTelegramLinkRepository,
     SqlAlchemyTelegramUpdateLedger,
@@ -214,6 +215,7 @@ def build_telegram_update_handler(
             clock=runtime.clock,
         ),
         history=expenses,
+        receipts=SqlAlchemyReceiptRepository(session),
         web_origin=runtime.web_origin,
         clock=runtime.clock,
     )

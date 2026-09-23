@@ -19,6 +19,7 @@ from mintflow.domain.capture import (
     DraftFieldSource,
     Expense,
     Money,
+    Receipt,
 )
 from mintflow.domain.user import Timezone, User
 from mintflow.telegram import messages
@@ -29,6 +30,7 @@ from mintflow.telegram.capture_flow import (
     draft_action,
 )
 from mintflow.telegram.outgoing import CallbackAnswer, EditMessage, Outgoing, Reply
+from mintflow.telegram.receipt_intake import ReceiptUpload
 
 NOW = datetime(2026, 9, 23, 9, 0, tzinfo=UTC)
 CHAT = 4242
@@ -106,6 +108,14 @@ class FakeConfirm:
         return expense
 
 
+class FakeReceipts:
+    def __init__(self) -> None:
+        self.created: list[tuple[Receipt, str | None]] = []
+
+    def create(self, receipt: Receipt, *, telegram_file_id: str | None) -> None:
+        self.created.append((receipt, telegram_file_id))
+
+
 class FakeHistory:
     """Newest first, like the real query; only this user's confirmed Expenses."""
 
@@ -136,12 +146,14 @@ class Harness:
         self.drafts = FakeDrafts()
         self.confirmer = FakeConfirm(self.drafts)
         self.history = FakeHistory(self.confirmer)
+        self.receipts = FakeReceipts()
         self.flow = ManualCaptureFlow(
             conversations=self.conversations,
             drafts=self.drafts,
             categories=FakeCategories(),
             confirm=self.confirmer,
             history=self.history,
+            receipts=self.receipts,
             web_origin="https://app.mintflow.test",
             clock=lambda: NOW,
         )
@@ -526,3 +538,99 @@ def test_unknown_commands_are_not_this_flows() -> None:
 
     assert harness.flow.on_command(harness.user, CHAT, "/settings") is None
     assert harness.flow.on_callback(harness.user, CHAT, CARD, "cb", "other") is None
+
+
+def _send_photo(harness: Harness, file_id: str = "photo-1") -> list[Outgoing]:
+    return harness.flow.on_media(harness.user, CHAT, ReceiptUpload(file_id=file_id))
+
+
+def test_a_receipt_photo_queues_a_receipt_and_a_waiting_draft() -> None:
+    harness = Harness()
+
+    replies = _send_photo(harness)
+
+    assert _texts(replies) == [messages.RECEIPT_RECEIVED]
+    [(receipt, file_id)] = harness.receipts.created
+    assert file_id == "photo-1"
+    draft = harness.draft
+    assert draft.state is CaptureDraftState.AWAITING_RECOGNITION
+    assert draft.source is CaptureSource.TELEGRAM_RECEIPT
+    assert draft.receipt_id == receipt.id
+    assert draft.transaction_date_source is DraftFieldSource.DEFAULT
+    assert harness.drafts.commits == [False]
+
+
+def test_text_while_reading_a_receipt_gets_a_wait_message() -> None:
+    harness = Harness()
+    _send_photo(harness)
+
+    assert _texts(harness.text("12.50")) == [messages.RECEIPT_STILL_READING]
+    assert harness.draft.amount is None
+
+
+def test_a_waiting_receipt_draft_can_be_cancelled() -> None:
+    harness = Harness()
+    _send_photo(harness)
+    draft_id = harness.draft.id
+
+    assert _texts(harness.command("/cancel")) == [messages.DRAFT_CANCELLED]
+    assert harness.drafts.rows[draft_id].state is CaptureDraftState.CANCELLED
+
+
+def test_a_photo_during_another_draft_is_held_until_the_user_chooses() -> None:
+    harness = Harness()
+    harness.command("/add")
+    manual = harness.draft.id
+
+    replies = _send_photo(harness, "held-photo")
+
+    [reply] = replies
+    assert isinstance(reply, Reply) and reply.text == messages.RECEIPT_CONFLICT
+    assert reply.keyboard is not None
+    assert [button.text for row in reply.keyboard for button in row] == [
+        "Continue",
+        "Discard and use this receipt",
+    ]
+    assert harness.conversation.pending_receipt_file_id == "held-photo"
+    assert harness.receipts.created == []
+    assert harness.draft.id == manual
+
+
+def test_discard_uses_the_held_photo() -> None:
+    harness = Harness()
+    harness.command("/add")
+    manual = harness.draft.id
+    _send_photo(harness, "held-photo")
+
+    replies = harness.press("discard", draft_id=manual)
+
+    assert _texts(replies) == [messages.RECEIPT_RECEIVED]
+    assert harness.drafts.rows[manual].state is CaptureDraftState.CANCELLED
+    [(_receipt, file_id)] = harness.receipts.created
+    assert file_id == "held-photo"
+    assert harness.draft.state is CaptureDraftState.AWAITING_RECOGNITION
+    assert harness.conversation.pending_receipt_file_id is None
+
+
+def test_continue_forgets_the_held_photo() -> None:
+    harness = Harness()
+    harness.command("/add")
+    _send_photo(harness, "held-photo")
+
+    assert _texts(harness.press("continue")) == [messages.ASK_AMOUNT]
+    assert harness.conversation.pending_receipt_file_id is None
+    assert harness.receipts.created == []
+
+
+def test_add_after_a_held_photo_discards_to_a_manual_draft() -> None:
+    harness = Harness()
+    harness.command("/add")
+    manual = harness.draft.id
+    _send_photo(harness, "held-photo")
+    harness.command("/add")
+
+    replies = harness.press("discard", draft_id=manual)
+
+    assert _texts(replies) == [messages.ASK_AMOUNT]
+    assert harness.receipts.created == []
+    assert harness.draft.source is CaptureSource.TELEGRAM_MANUAL

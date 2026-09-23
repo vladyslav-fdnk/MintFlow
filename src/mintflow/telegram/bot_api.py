@@ -47,6 +47,12 @@ type InlineKeyboard = tuple[tuple[InlineButton, ...], ...]
 
 
 @dataclass(frozen=True, slots=True)
+class TelegramFile:
+    file_path: str
+    file_size: int | None
+
+
+@dataclass(frozen=True, slots=True)
 class SentMessage:
     chat_id: int
     message_id: int
@@ -68,6 +74,10 @@ class TelegramBotApi(Protocol):
     def delete_webhook(self) -> None: ...
 
     def get_updates(self, *, offset: int | None, timeout_seconds: int) -> list[TelegramUpdate]: ...
+
+    def get_file(self, *, file_id: str) -> TelegramFile: ...
+
+    def download_file(self, *, file_path: str, max_bytes: int) -> bytes: ...
 
 
 def _keyboard_json(keyboard: InlineKeyboard) -> dict[str, object]:
@@ -188,3 +198,28 @@ class HttpxTelegramBotApi:
                 if isinstance(update_id, int):
                     updates.append(TelegramUpdate(update_id=update_id))
         return updates
+
+    def get_file(self, *, file_id: str) -> TelegramFile:
+        result = self._call("getFile", {"file_id": file_id})
+        if not isinstance(result, dict) or not isinstance(result.get("file_path"), str):
+            raise TelegramApiError("getFile")
+        size = result.get("file_size")
+        return TelegramFile(
+            file_path=result["file_path"], file_size=size if isinstance(size, int) else None
+        )
+
+    def download_file(self, *, file_path: str, max_bytes: int) -> bytes:
+        """Stream a file, refusing more than ``max_bytes``. The URL contains the token."""
+        url = f"{self._base_url}/file/bot{self._token.get_secret_value()}/{file_path}"
+        content = bytearray()
+        try:
+            with self._client.stream("GET", url) as response:
+                if response.status_code != 200:
+                    raise TelegramApiError("downloadFile", error_code=response.status_code)
+                for chunk in response.iter_bytes():
+                    content.extend(chunk)
+                    if len(content) > max_bytes:
+                        raise TelegramApiError("downloadFile")
+        except httpx.HTTPError:
+            raise TelegramApiError("downloadFile") from None
+        return bytes(content)

@@ -40,6 +40,7 @@ from mintflow.main import create_app
 from mintflow.telegram import TelegramUpdate, messages
 from mintflow.telegram.handler import TelegramUpdateHandler
 from mintflow.telegram.outgoing import Outgoing
+from mintflow.telegram.receipt_intake import ReceiptUpload
 from mintflow.telegram.runtime import TelegramRuntime
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
@@ -302,6 +303,9 @@ class UnusedCapture:
 
     def on_text(self, user: User, chat_id: int, text: str) -> list[Outgoing]:
         raise AssertionError("unexpected capture text")
+
+    def on_media(self, user: User, chat_id: int, upload: ReceiptUpload) -> list[Outgoing]:
+        raise AssertionError("unexpected capture media")
 
     def on_callback(
         self, user: User, chat_id: int, message_id: int, callback_query_id: str, data: str

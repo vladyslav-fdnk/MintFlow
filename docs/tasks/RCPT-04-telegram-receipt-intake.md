@@ -1,6 +1,6 @@
 # RCPT-04 — Telegram Receipt Intake
 
-Status: ready
+Status: done
 
 ## Goal
 

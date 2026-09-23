@@ -376,7 +376,7 @@ tasks:
   - id: RCPT-04
     title: Telegram Receipt Intake
     file: docs/tasks/RCPT-04-telegram-receipt-intake.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - RCPT-02
@@ -384,7 +384,7 @@ tasks:
   - id: RCPT-05
     title: Receipt Worker
     file: docs/tasks/RCPT-05-receipt-worker.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-02

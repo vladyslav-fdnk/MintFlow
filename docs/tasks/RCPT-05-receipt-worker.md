@@ -1,6 +1,6 @@
 # RCPT-05 — Receipt Worker
 
-Status: blocked
+Status: ready
 
 ## Goal
 

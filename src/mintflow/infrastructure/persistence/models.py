@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from mintflow.application.receipts.images import MAX_RECEIPT_IMAGE_BYTES
 from mintflow.domain.user import UserStatus
 
 
@@ -506,6 +507,10 @@ class TelegramConversationRecord(Base):
             "active_draft_id IS NOT NULL OR awaiting = 'nothing'",
             name="ck_telegram_conversations_waiting_needs_draft",
         ),
+        CheckConstraint(
+            "pending_receipt_file_id IS NULL OR active_draft_id IS NOT NULL",
+            name="ck_telegram_conversations_pending_receipt_needs_draft",
+        ),
     )
 
     user_id: Mapped[UUID] = mapped_column(
@@ -519,9 +524,7 @@ class TelegramConversationRecord(Base):
     awaiting: Mapped[str] = mapped_column(String(16), nullable=False)
     currency_is_default: Mapped[bool] = mapped_column(Boolean, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-
-
-MAX_RECEIPT_IMAGE_BYTES = 10 * 1024 * 1024
+    pending_receipt_file_id: Mapped[str | None] = mapped_column(String(256))
 
 
 class ReceiptRecord(Base):

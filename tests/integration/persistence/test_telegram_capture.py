@@ -27,6 +27,7 @@ from mintflow.infrastructure.persistence import (
 from mintflow.infrastructure.persistence.models import (
     CaptureDraftRecord,
     ExpenseRecord,
+    ReceiptRecord,
     TelegramConnectionRecord,
     TelegramConversationRecord,
     UserRecord,
@@ -382,4 +383,69 @@ def test_polling_uses_the_webhook_composition_including_deduplication(
         == 1
     )
     assert _sent_texts(poll_bot) == [messages.ASK_AMOUNT]
+    application.state.database_engine.dispose()
+
+
+def _photo_update(file_id: str) -> dict[str, object]:
+    update = _text("unused")
+    message = update["message"]
+    assert isinstance(message, dict)
+    del message["text"]
+    message["photo"] = [{"file_id": file_id, "width": 1280, "height": 960, "file_size": 150_000}]
+    return update
+
+
+@pytest.mark.anyio
+async def test_a_receipt_photo_is_queued_once_through_the_webhook(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user_id = _linked_user(db_session)
+    application, bot = _application(migrated_database_url)
+    photo = _photo_update("receipt-file-1")
+
+    await _deliver(application, photo)
+    await _deliver(application, photo)  # Telegram redelivers the same update
+
+    db_session.expire_all()
+    receipts = db_session.execute(
+        select(ReceiptRecord.state, ReceiptRecord.telegram_file_id).where(
+            ReceiptRecord.owner_id == user_id
+        )
+    ).all()
+    assert [tuple(row) for row in receipts] == [("queued", "receipt-file-1")]
+    draft = db_session.execute(
+        select(CaptureDraftRecord.state, CaptureDraftRecord.source).where(
+            CaptureDraftRecord.owner_id == user_id
+        )
+    ).one()
+    assert tuple(draft) == ("awaiting_recognition", "telegram_receipt")
+    assert _sent_texts(bot) == [messages.RECEIPT_RECEIVED]
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_discarding_a_draft_for_a_held_receipt_through_the_webhook(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user_id = _linked_user(db_session)
+    application, bot = _application(migrated_database_url)
+    await _deliver(application, _text("/add"))
+    await _deliver(application, _photo_update("held-file"))
+
+    await _deliver(application, _press(_button(bot, "Discard and use this receipt")))
+
+    db_session.expire_all()
+    states = sorted(
+        db_session.scalars(
+            select(CaptureDraftRecord.state).where(CaptureDraftRecord.owner_id == user_id)
+        ).all()
+    )
+    assert states == ["awaiting_recognition", "cancelled"]
+    assert (
+        db_session.scalar(
+            select(ReceiptRecord.telegram_file_id).where(ReceiptRecord.owner_id == user_id)
+        )
+        == "held-file"
+    )
+    assert _sent_texts(bot)[-1] == messages.RECEIPT_RECEIVED
     application.state.database_engine.dispose()
