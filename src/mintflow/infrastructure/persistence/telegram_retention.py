@@ -84,7 +84,7 @@ class PostgreSQLTelegramRetentionRepository:
             WITH candidates AS (
                 SELECT id
                 FROM capture_drafts
-                WHERE state IN ('collecting', 'ready_for_review')
+                WHERE state IN ('awaiting_recognition', 'collecting', 'ready_for_review')
                   AND modified_at <= :cutoff
                 ORDER BY modified_at, id
                 FOR UPDATE SKIP LOCKED
@@ -95,13 +95,16 @@ class PostgreSQLTelegramRetentionRepository:
                 SET state = 'expired', modified_at = :now
                 FROM candidates
                 WHERE target.id = candidates.id
-                  AND target.state IN ('collecting', 'ready_for_review')
+                  AND target.state IN ('awaiting_recognition', 'collecting', 'ready_for_review')
                   AND target.modified_at <= :cutoff
                 RETURNING target.id
             ),
             released AS (
                 UPDATE telegram_conversations AS conversation
-                SET active_draft_id = NULL, awaiting = 'nothing', updated_at = :now
+                SET active_draft_id = NULL,
+                    awaiting = 'nothing',
+                    pending_receipt_file_id = NULL,
+                    updated_at = :now
                 FROM expired
                 WHERE conversation.active_draft_id = expired.id
                 RETURNING conversation.user_id
@@ -109,6 +112,55 @@ class PostgreSQLTelegramRetentionRepository:
             SELECT id FROM expired
             """,
             {"cutoff": inactive_cutoff, "now": now, "batch_size": batch_size},
+        )
+
+    def delete_receipt_data(
+        self, *, finished_cutoff: datetime, now: datetime, batch_size: int
+    ) -> int:
+        """Delete images and recognition results of receipts whose draft finished long ago.
+
+        Only drafts that were confirmed, cancelled, or expired count, from the moment they
+        finished; a receipt without such a draft is never touched. The receipt row stays, so
+        Expenses keep their receipt id; it records that the image was removed and forgets the
+        Telegram file id, so no worker can fetch the image again. A receipt being processed
+        is skipped until its attempt finishes.
+        """
+        return self._run(
+            """
+            WITH candidates AS (
+                SELECT receipt.id
+                FROM receipts AS receipt
+                JOIN capture_drafts AS draft ON draft.receipt_id = receipt.id
+                WHERE receipt.image_removed_at IS NULL
+                  AND receipt.state <> 'processing'
+                  AND draft.state IN ('confirmed', 'cancelled', 'expired')
+                  AND COALESCE(draft.confirmed_at, draft.modified_at) <= :cutoff
+                ORDER BY COALESCE(draft.confirmed_at, draft.modified_at), receipt.id
+                FOR UPDATE OF receipt SKIP LOCKED
+                LIMIT :batch_size
+            ),
+            images AS (
+                DELETE FROM receipt_images AS image
+                USING candidates
+                WHERE image.receipt_id = candidates.id
+                RETURNING image.receipt_id
+            ),
+            results AS (
+                DELETE FROM recognition_results AS result
+                USING candidates
+                WHERE result.receipt_id = candidates.id
+                RETURNING result.id
+            ),
+            removed AS (
+                UPDATE receipts AS target
+                SET image_removed_at = :now, telegram_file_id = NULL, modified_at = :now
+                FROM candidates
+                WHERE target.id = candidates.id
+                RETURNING target.id
+            )
+            SELECT id FROM removed
+            """,
+            {"cutoff": finished_cutoff, "now": now, "batch_size": batch_size},
         )
 
     def _run(self, statement: str, parameters: dict[str, Any]) -> int:

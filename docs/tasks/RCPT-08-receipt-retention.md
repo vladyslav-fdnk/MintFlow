@@ -1,6 +1,6 @@
 # RCPT-08 — Receipt Image and Recognition Retention
 
-Status: ready
+Status: done
 
 ## Goal
 

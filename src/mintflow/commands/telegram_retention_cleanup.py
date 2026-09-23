@@ -27,7 +27,10 @@ def _positive_integer(value: str) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Delete expired Telegram data and expire abandoned drafts in batches."
+        description=(
+            "Delete expired Telegram data and receipt images, and expire abandoned drafts, "
+            "in batches."
+        )
     )
     parser.add_argument("--batch-size", type=_positive_integer, default=DEFAULT_BATCH_SIZE)
     arguments = parser.parse_args(argv)

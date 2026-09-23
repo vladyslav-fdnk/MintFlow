@@ -410,7 +410,7 @@ tasks:
   - id: RCPT-08
     title: Receipt Image and Recognition Retention
     file: docs/tasks/RCPT-08-receipt-retention.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - RCPT-02

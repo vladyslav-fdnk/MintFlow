@@ -5,26 +5,39 @@ from threading import Barrier
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import Engine, func, select
+from sqlalchemy import Engine, func, select, update
 from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import hash_token
+from mintflow.application.capture import ConfirmCaptureDraft
 from mintflow.application.telegram.retention import CleanUpTelegramRetention
 from mintflow.commands import telegram_retention_cleanup
 from mintflow.config import get_settings
 from mintflow.domain.capture import (
+    UNCATEGORIZED_KEY,
     CaptureDraft,
     CaptureDraftState,
     CaptureSource,
     CurrencyCode,
     Money,
+    Receipt,
+    RecognitionResult,
     TransactionDate,
 )
 from mintflow.domain.user import UserStatus
-from mintflow.infrastructure.persistence import SqlAlchemyCaptureDraftRepository
+from mintflow.infrastructure.persistence import (
+    SqlAlchemyCaptureDraftRepository,
+    SqlAlchemyExpenseRepository,
+    SqlAlchemyReceiptImageStore,
+    SqlAlchemyReceiptRepository,
+    SqlAlchemyUserRepository,
+)
 from mintflow.infrastructure.persistence.models import (
     CaptureDraftRecord,
     ExpenseRecord,
+    ReceiptImageRecord,
+    ReceiptRecord,
+    RecognitionResultRecord,
     TelegramConnectionRecord,
     TelegramConversationRecord,
     TelegramLinkChallengeRecord,
@@ -294,5 +307,238 @@ def test_command_prints_counts_and_exits_zero(
         "link_challenges_deleted",
         "unlinked_connections_deleted",
         "drafts_expired",
+        "receipts_cleared",
         "total",
     }
+
+
+# --- RCPT-08: receipt images and recognition results -----------------------------------------
+
+JPEG = b"\xff\xd8\xff\xe0receipt"
+
+
+def _receipt_draft(
+    session: Session,
+    owner_id: UUID,
+    *,
+    state: CaptureDraftState,
+    finished_at: datetime,
+    receipt_state: str = "recognized",
+) -> tuple[UUID, UUID]:
+    """A receipt with its image, a recognition result, and a draft.
+
+    Returns the receipt id and the draft id. A finished ``state`` is reached at
+    ``finished_at``; otherwise the draft is left ready for review.
+    """
+    received = finished_at - DAY
+    receipts = SqlAlchemyReceiptRepository(session)
+    drafts = SqlAlchemyCaptureDraftRepository(session)
+    receipt = Receipt.receive(owner_id=owner_id, now=received)
+    attempt = receipt.claim(now=received, lease=timedelta(minutes=2))
+    assert attempt.attempt_id is not None
+    stored = (
+        attempt
+        if receipt_state == "processing"
+        else attempt.complete(attempt_id=attempt.attempt_id, now=received)
+    )
+    receipts.create(stored, telegram_file_id="telegram-file")
+    SqlAlchemyReceiptImageStore(session).put(
+        receipt_id=receipt.id, media_type="image/jpeg", content=JPEG, now=received
+    )
+    result = RecognitionResult.for_attempt(
+        receipt=receipt,
+        attempt_id=attempt.attempt_id,
+        merchant=None,
+        transaction_date=TransactionDate(received.date()),
+        total=Money(minor_units=1250, currency=CurrencyCode("EUR")),
+        now=received,
+    )
+    receipts.save_result(result)
+    draft = CaptureDraft.start_from_receipt(owner_id=owner_id, receipt_id=receipt.id, now=received)
+    draft = draft.apply_recognition(
+        result=result, fallback_category_key=UNCATEGORIZED_KEY, now=received
+    )
+    drafts.create(draft)
+    if state is CaptureDraftState.CONFIRMED:
+        ConfirmCaptureDraft(
+            draft_repository=drafts,
+            expense_repository=SqlAlchemyExpenseRepository(session),
+            user_repository=SqlAlchemyUserRepository(session),
+            clock=lambda: finished_at,
+        ).execute(draft_id=draft.id, caller_id=owner_id)
+    elif state is CaptureDraftState.CANCELLED:
+        drafts.update(draft.cancel(caller_id=owner_id, now=finished_at))
+    elif state is CaptureDraftState.EXPIRED:
+        drafts.update(draft.expire(now=finished_at))
+    # Open states: the draft stays ready for review; callers adjust it directly.
+    session.commit()
+    return receipt.id, draft.id
+
+
+def _has_receipt_data(session: Session, receipt_id: UUID) -> bool:
+    session.expire_all()
+    images = session.scalar(
+        select(func.count())
+        .select_from(ReceiptImageRecord)
+        .where(ReceiptImageRecord.receipt_id == receipt_id)
+    )
+    results = session.scalar(
+        select(func.count())
+        .select_from(RecognitionResultRecord)
+        .where(RecognitionResultRecord.receipt_id == receipt_id)
+    )
+    assert images == results
+    return bool(images)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [CaptureDraftState.CONFIRMED, CaptureDraftState.CANCELLED, CaptureDraftState.EXPIRED],
+)
+def test_receipt_data_is_kept_for_exactly_30_days_after_the_draft_finished(
+    db_session: Session, state: CaptureDraftState
+) -> None:
+    user_id = _user(db_session)
+    due, _ = _receipt_draft(db_session, user_id, state=state, finished_at=NOW - 30 * DAY)
+    kept, _ = _receipt_draft(db_session, user_id, state=state, finished_at=NOW - 30 * DAY + SECOND)
+
+    assert _cleanup(db_session)["receipts_cleared"] == 1
+
+    assert not _has_receipt_data(db_session, due)
+    assert _has_receipt_data(db_session, kept)
+    removed = db_session.get(ReceiptRecord, due)
+    assert removed is not None
+    assert (removed.image_removed_at, removed.telegram_file_id) == (NOW, None)
+    untouched = db_session.get(ReceiptRecord, kept)
+    assert untouched is not None and untouched.image_removed_at is None
+
+
+def test_expenses_keep_their_receipt_and_values(db_session: Session) -> None:
+    user_id = _user(db_session)
+    receipt_id, draft_id = _receipt_draft(
+        db_session, user_id, state=CaptureDraftState.CONFIRMED, finished_at=NOW - 40 * DAY
+    )
+    before = db_session.scalars(select(ExpenseRecord)).one()
+    snapshot = (before.id, before.receipt_id, before.amount_minor_units, before.transaction_date)
+    db_session.commit()
+
+    _cleanup(db_session)
+
+    db_session.expire_all()
+    after = db_session.scalars(select(ExpenseRecord)).one()
+    assert (after.id, after.receipt_id, after.amount_minor_units, after.transaction_date) == (
+        snapshot
+    )
+    assert after.receipt_id == receipt_id
+    draft = db_session.get(CaptureDraftRecord, draft_id)
+    assert draft is not None
+    assert (draft.state, draft.receipt_id, draft.recognition_result_id) == (
+        "confirmed",
+        receipt_id,
+        None,
+    )
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        CaptureDraftState.AWAITING_RECOGNITION,
+        CaptureDraftState.COLLECTING,
+        CaptureDraftState.READY_FOR_REVIEW,
+    ],
+)
+def test_open_drafts_keep_their_receipt_data(db_session: Session, state: CaptureDraftState) -> None:
+    user_id = _user(db_session)
+    receipt_id, draft_id = _receipt_draft(
+        db_session, user_id, state=state, finished_at=NOW - 60 * DAY
+    )
+    values: dict[str, object] = {"state": state.value, "modified_at": NOW - 60 * DAY}
+    if state is CaptureDraftState.AWAITING_RECOGNITION:
+        values["recognition_result_id"] = None
+    db_session.execute(
+        update(CaptureDraftRecord).where(CaptureDraftRecord.id == draft_id).values(**values)
+    )
+    db_session.commit()
+
+    counts = _cleanup(db_session)
+
+    # The abandoned draft expires now, so its 30 days only start today.
+    assert (counts["drafts_expired"], counts["receipts_cleared"]) == (1, 0)
+    assert _state(db_session, draft_id) == CaptureDraftState.EXPIRED.value
+    assert _has_receipt_data(db_session, receipt_id)
+
+
+def test_a_receipt_being_processed_is_skipped(db_session: Session) -> None:
+    user_id = _user(db_session)
+    receipt_id, _ = _receipt_draft(
+        db_session,
+        user_id,
+        state=CaptureDraftState.CANCELLED,
+        finished_at=NOW - 40 * DAY,
+        receipt_state="processing",
+    )
+
+    assert _cleanup(db_session)["receipts_cleared"] == 0
+    assert _has_receipt_data(db_session, receipt_id)
+
+
+def test_receipt_batches_are_bounded_and_reruns_find_nothing(db_session: Session) -> None:
+    user_id = _user(db_session)
+    for _ in range(3):
+        _receipt_draft(
+            db_session, user_id, state=CaptureDraftState.CANCELLED, finished_at=NOW - 40 * DAY
+        )
+
+    counts = [_cleanup(db_session, batch_size=2)["receipts_cleared"] for _ in range(3)]
+
+    assert counts == [2, 1, 0]
+    assert db_session.scalar(select(func.count()).select_from(ReceiptImageRecord)) == 0
+
+
+def test_concurrent_runs_clear_each_receipt_once(engine: Engine) -> None:
+    with Session(engine) as setup:
+        user_id = _user(setup)
+        for _ in range(10):
+            _receipt_draft(
+                setup, user_id, state=CaptureDraftState.EXPIRED, finished_at=NOW - 40 * DAY
+            )
+    barrier = Barrier(2)
+
+    def run() -> int:
+        with Session(engine) as session:
+            service = CleanUpTelegramRetention(
+                repository=PostgreSQLTelegramRetentionRepository(session), clock=lambda: NOW
+            )
+            barrier.wait(timeout=5)
+            return service.execute(batch_size=10).receipts_cleared
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        counts = list(executor.map(lambda _: run(), range(2)))
+
+    assert sum(counts) == 10
+    with Session(engine) as session:
+        assert session.scalar(select(func.count()).select_from(ReceiptImageRecord)) == 0
+        assert session.scalar(select(func.count()).select_from(RecognitionResultRecord)) == 0
+        assert set(session.scalars(select(ReceiptRecord.image_removed_at))) == {NOW}
+
+
+def test_expiry_releases_a_conversation_holding_a_pending_receipt(db_session: Session) -> None:
+    user_id = _user(db_session)
+    abandoned = _draft(db_session, user_id, modified_at=NOW - 8 * DAY)
+    db_session.add(
+        TelegramConversationRecord(
+            user_id=user_id,
+            active_draft_id=abandoned.id,
+            awaiting="amount",
+            currency_is_default=False,
+            pending_receipt_file_id="held-photo",
+            updated_at=NOW - 8 * DAY,
+        )
+    )
+    db_session.commit()
+
+    assert _cleanup(db_session)["drafts_expired"] == 1
+
+    conversation = db_session.get(TelegramConversationRecord, user_id)
+    assert conversation is not None
+    assert (conversation.active_draft_id, conversation.pending_receipt_file_id) == (None, None)

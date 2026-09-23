@@ -1,7 +1,9 @@
 """Telegram retention and abandoned-draft expiry (docs/telegram_client_design.md, T9).
 
 One batch per data kind per run, like the authentication cleanup (AUTH-15); a
-scheduler reruns it. Expiring a draft never creates an Expense.
+scheduler reruns it. Expiring a draft never creates an Expense. Receipt images and
+recognition results go 30 days after their draft finished; Expenses and their
+receipt ids are never touched (receipt_recognition_design.md, R4).
 """
 
 from collections.abc import Callable
@@ -17,6 +19,8 @@ PROCESSED_UPDATE_RETENTION: Final = timedelta(days=7)
 TELEGRAM_LINK_CHALLENGE_RETENTION: Final = timedelta(days=30)
 UNLINKED_TELEGRAM_CONNECTION_RETENTION: Final = timedelta(days=30)
 ABANDONED_DRAFT_INACTIVITY: Final = timedelta(days=7)
+# Receipt images and recognition results, after their draft finished (design R4).
+RECEIPT_DATA_RETENTION: Final = timedelta(days=30)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +29,7 @@ class TelegramRetentionResult:
     link_challenges_deleted: int
     unlinked_connections_deleted: int
     drafts_expired: int
+    receipts_cleared: int
 
     def aggregate_counts(self) -> dict[str, int]:
         counts = asdict(self)
@@ -40,6 +45,10 @@ class TelegramRetentionRepository(Protocol):
 
     def expire_abandoned_drafts(
         self, *, inactive_cutoff: datetime, now: datetime, batch_size: int
+    ) -> int: ...
+
+    def delete_receipt_data(
+        self, *, finished_cutoff: datetime, now: datetime, batch_size: int
     ) -> int: ...
 
 
@@ -71,5 +80,8 @@ class CleanUpTelegramRetention:
             ),
             drafts_expired=self._repository.expire_abandoned_drafts(
                 inactive_cutoff=now - ABANDONED_DRAFT_INACTIVITY, now=now, batch_size=size
+            ),
+            receipts_cleared=self._repository.delete_receipt_data(
+                finished_cutoff=now - RECEIPT_DATA_RETENTION, now=now, batch_size=size
             ),
         )
