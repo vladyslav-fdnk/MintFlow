@@ -4,12 +4,18 @@ from uuid import UUID, uuid4
 
 from mintflow.domain.capture.enums import CaptureDraftState, CaptureSource, DraftFieldSource
 from mintflow.domain.capture.money import Money
+from mintflow.domain.capture.receipt import RecognitionResult
 from mintflow.domain.capture.values import MerchantName, TransactionDate
 
-# States from which the draft may still be edited, reviewed into, cancelled,
-# or expired. AWAITING_RECOGNITION is deliberately absent: it is reserved
-# for the receipt-capture sprint and unreachable by any code in this task.
-_OPEN_STATES = (CaptureDraftState.COLLECTING, CaptureDraftState.READY_FOR_REVIEW)
+# States from which the draft may still be edited, cancelled, or expired. A
+# receipt draft is editable while recognition runs: the user's input always wins.
+_OPEN_STATES = (
+    CaptureDraftState.COLLECTING,
+    CaptureDraftState.AWAITING_RECOGNITION,
+    CaptureDraftState.READY_FOR_REVIEW,
+)
+# Fields a recognition result may fill: never one the user has supplied.
+_RECOGNITION_MAY_FILL = (None, DraftFieldSource.DEFAULT)
 
 
 def _require_aware(now: datetime) -> None:
@@ -19,7 +25,7 @@ def _require_aware(now: datetime) -> None:
 
 def _reject_recognition_provenance(source: DraftFieldSource) -> None:
     if source is DraftFieldSource.RECOGNITION:
-        raise ValueError("recognition provenance cannot be produced in this sprint")
+        raise ValueError("recognition provenance is set only by apply_recognition")
 
 
 def _require_stable_key(category_key: str) -> None:
@@ -56,6 +62,8 @@ class CaptureDraft:
     created_at: datetime
     modified_at: datetime
     confirmed_at: datetime | None
+    receipt_id: UUID | None = None
+    recognition_result_id: UUID | None = None
 
     def _ensure_owner(self, caller_id: UUID) -> None:
         if caller_id != self.owner_id:
@@ -89,6 +97,67 @@ class CaptureDraft:
             modified_at=created_at,
             confirmed_at=None,
         )
+
+    @classmethod
+    def start_from_receipt(
+        cls, *, owner_id: UUID, receipt_id: UUID, now: datetime
+    ) -> "CaptureDraft":
+        """A Telegram receipt draft, waiting for recognition (receipt_recognition_design R5)."""
+        draft = cls.start(owner_id=owner_id, source=CaptureSource.TELEGRAM_RECEIPT, now=now)
+        return replace(draft, state=CaptureDraftState.AWAITING_RECOGNITION, receipt_id=receipt_id)
+
+    def apply_recognition(
+        self, *, result: RecognitionResult, fallback_category_key: str, now: datetime
+    ) -> "CaptureDraft":
+        """Fill only empty or defaulted fields from a result; user-supplied values always win.
+
+        Proposes ``fallback_category_key`` (Uncategorized) when no category is set. A draft
+        still waiting for recognition moves to review when amount and date are known, and to
+        collecting otherwise, so the user is asked for what is missing.
+        """
+        _require_aware(now)
+        if result.owner_id != self.owner_id or result.receipt_id != self.receipt_id:
+            raise ValueError("result belongs to another draft")
+        self._ensure_editable()
+        _require_stable_key(fallback_category_key)
+        draft = self
+        recognized = DraftFieldSource.RECOGNITION
+        if result.total is not None and draft.amount_source in _RECOGNITION_MAY_FILL:
+            draft = replace(draft, amount=result.total, amount_source=recognized)
+        if (
+            result.transaction_date is not None
+            and draft.transaction_date_source in _RECOGNITION_MAY_FILL
+        ):
+            draft = replace(
+                draft, transaction_date=result.transaction_date, transaction_date_source=recognized
+            )
+        if result.merchant is not None and draft.merchant_source in _RECOGNITION_MAY_FILL:
+            draft = replace(draft, merchant=result.merchant, merchant_source=recognized)
+        if draft.category_key is None:
+            draft = replace(
+                draft,
+                category_key=fallback_category_key,
+                category_key_source=DraftFieldSource.DEFAULT,
+            )
+        state = draft.state
+        if state is CaptureDraftState.AWAITING_RECOGNITION:
+            complete = draft.amount is not None and draft.transaction_date is not None
+            state = CaptureDraftState.READY_FOR_REVIEW if complete else CaptureDraftState.COLLECTING
+        return replace(
+            draft,
+            state=state,
+            recognition_result_id=result.id,
+            revision=self.revision + 1,
+            modified_at=now.astimezone(UTC),
+        )
+
+    def continue_manually(self, *, caller_id: UUID, now: datetime) -> "CaptureDraft":
+        """Stop waiting for recognition; a late result may still fill untouched fields."""
+        self._ensure_owner(caller_id)
+        _require_aware(now)
+        if self.state is not CaptureDraftState.AWAITING_RECOGNITION:
+            return self
+        return replace(self, state=CaptureDraftState.COLLECTING, modified_at=now.astimezone(UTC))
 
     def set_amount(
         self,

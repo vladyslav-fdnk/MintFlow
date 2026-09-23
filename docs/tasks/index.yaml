@@ -353,14 +353,14 @@ tasks:
   - id: RCPT-01
     title: Receipt Domain and Draft Recognition Provenance
     file: docs/tasks/RCPT-01-receipt-domain.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
 
   - id: RCPT-02
     title: Receipt Persistence
     file: docs/tasks/RCPT-02-receipt-persistence.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-01
@@ -368,7 +368,7 @@ tasks:
   - id: RCPT-03
     title: Recognition Boundary and Candidate Selection
     file: docs/tasks/RCPT-03-recognition-boundary.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-01

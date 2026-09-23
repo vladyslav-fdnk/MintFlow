@@ -3,6 +3,7 @@ from mintflow.domain.capture.draft import CaptureDraft
 from mintflow.domain.capture.enums import CaptureDraftState, CaptureSource, DraftFieldSource
 from mintflow.domain.capture.expense import Expense
 from mintflow.domain.capture.money import MAX_MAJOR_UNITS, CurrencyCode, Money
+from mintflow.domain.capture.receipt import Receipt, ReceiptState, RecognitionResult
 from mintflow.domain.capture.values import MerchantName, TransactionDate
 
 __all__ = [
@@ -17,5 +18,8 @@ __all__ = [
     "Expense",
     "MerchantName",
     "Money",
+    "Receipt",
+    "ReceiptState",
+    "RecognitionResult",
     "TransactionDate",
 ]

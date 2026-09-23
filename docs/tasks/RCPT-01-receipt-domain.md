@@ -1,6 +1,6 @@
 # RCPT-01 — Receipt Domain and Draft Recognition Provenance
 
-Status: ready
+Status: done
 
 ## Goal
 

@@ -92,6 +92,7 @@ class ConfirmCaptureDraft:
             merchant=draft.merchant,
             note=draft.note,
             source=draft.source,
+            receipt_id=draft.receipt_id,
             now=now,
         )
         self._expense_repository.create(expense, commit=False)

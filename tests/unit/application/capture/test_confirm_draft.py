@@ -290,3 +290,21 @@ def test_future_date_rule_uses_the_owners_timezone_not_utc() -> None:
     expense = use_case.execute(draft_id=draft.id, caller_id=OWNER)
 
     assert expense.transaction_date == transaction_date
+
+
+def test_a_receipt_draft_carries_its_receipt_into_the_expense() -> None:
+    receipt_id = uuid4()
+    draft = replace(_draft(), receipt_id=receipt_id, source=CaptureSource.TELEGRAM_RECEIPT)
+    use_case, _draft_repository, expense_repository = _use_case(draft)
+
+    expense = use_case.execute(draft_id=draft.id, caller_id=OWNER)
+
+    assert expense.receipt_id == receipt_id
+    assert expense.source is CaptureSource.TELEGRAM_RECEIPT
+
+
+def test_a_manual_draft_creates_an_expense_without_a_receipt() -> None:
+    draft = _draft()
+    use_case, _draft_repository, _expense_repository = _use_case(draft)
+
+    assert use_case.execute(draft_id=draft.id, caller_id=OWNER).receipt_id is None
