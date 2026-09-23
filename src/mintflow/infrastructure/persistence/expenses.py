@@ -139,6 +139,19 @@ class SqlAlchemyExpenseRepository:
         )
         return _to_domain(record) if record is not None else None
 
+    def get_owned_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
+        """Lock an owned Expense in any deletion state, for delete and restore only.
+
+        The one deliberate exception to the active-record rule: restoring
+        must find a soft-deleted Expense. Not a financial-history read.
+        """
+        record = self._session.scalar(
+            select(ExpenseRecord)
+            .where(ExpenseRecord.id == expense_id, ExpenseRecord.owner_id == owner_id)
+            .with_for_update()
+        )
+        return _to_domain(record) if record is not None else None
+
     def list_history(
         self,
         *,

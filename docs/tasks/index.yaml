@@ -214,7 +214,7 @@ tasks:
   - id: EXPENSE-06
     title: Delete and restore Expense
     file: docs/tasks/EXPENSE-06-delete-and-restore.md
-    status: ready
+    status: review
     human_approval: approved
     depends_on:
       - EXPENSE-03

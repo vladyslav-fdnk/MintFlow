@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -9,9 +10,11 @@ from httpx import ASGITransport, AsyncClient
 from mintflow.application.authentication import AuthenticatedWebSession
 from mintflow.application.capture import (
     ConfirmCaptureDraft,
+    DeleteExpense,
     EditExpense,
     ExpenseChangeRecord,
     ExpenseEdit,
+    RestoreExpense,
 )
 from mintflow.config import Settings
 from mintflow.domain.capture import (
@@ -36,8 +39,10 @@ from mintflow.http.capture import (
     get_capture_draft_repository,
     get_capture_runtime,
     get_confirm_capture_draft,
+    get_delete_expense,
     get_edit_expense,
     get_expense_repository,
+    get_restore_expense,
 )
 from mintflow.main import create_app
 
@@ -99,6 +104,9 @@ class FakeExpenseRepository:
     def get_active_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         return self.get_active(expense_id=expense_id, owner_id=owner_id)
 
+    def get_owned_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
+        return self.get(expense_id=expense_id, owner_id=owner_id)
+
     def update(self, expense: Expense, *, commit: bool = True) -> None:
         self.store[expense.id] = expense
 
@@ -134,6 +142,15 @@ class RecordingConfirmCaptureDraft:
 
     def execute(self, *, draft_id: UUID, caller_id: UUID) -> Expense:
         self.calls.append((draft_id, caller_id))
+        raise AssertionError("the use case must not be invoked")
+
+
+class RecordingDeletionStateChange:
+    def __init__(self) -> None:
+        self.calls: list[tuple[UUID, UUID]] = []
+
+    def execute(self, *, expense_id: UUID, caller_id: UUID) -> Expense:
+        self.calls.append((expense_id, caller_id))
         raise AssertionError("the use case must not be invoked")
 
 
@@ -640,6 +657,16 @@ def _app_with_edit(
     application, _draft_repository, expense_repository, owner_id = _app_with_confirm(settings)
     user = replace(User.create(now=NOW), id=owner_id)
     change_records = FakeChangeRecords()
+    application.dependency_overrides[get_delete_expense] = lambda: DeleteExpense(
+        expense_repository=expense_repository,
+        change_records=change_records,
+        clock=lambda: NOW + timedelta(minutes=5),
+    )
+    application.dependency_overrides[get_restore_expense] = lambda: RestoreExpense(
+        expense_repository=expense_repository,
+        change_records=change_records,
+        clock=lambda: NOW + timedelta(minutes=10),
+    )
     application.dependency_overrides[get_edit_expense] = lambda: EditExpense(
         expense_repository=expense_repository,
         change_records=change_records,
@@ -850,3 +877,146 @@ async def test_edit_expense_requires_authentication(settings: Settings) -> None:
 
     assert response.status_code == 401
     assert recorder.calls == []
+
+
+@pytest.mark.anyio
+async def test_delete_hides_the_expense_and_restore_brings_it_back(settings: Settings) -> None:
+    application, expenses, change_records, expense = _app_with_edit(settings)
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        deleted = await client.delete(
+            f"/capture/expenses/{expense.id}", cookies=_cookies(), headers=csrf_headers
+        )
+        deleted_again = await client.delete(
+            f"/capture/expenses/{expense.id}", cookies=_cookies(), headers=csrf_headers
+        )
+        view_while_deleted = await client.get(f"/capture/expenses/{expense.id}", cookies=_cookies())
+        edit_while_deleted = await client.patch(
+            f"/capture/expenses/{expense.id}",
+            cookies=_cookies(),
+            headers=csrf_headers,
+            json={"note": "x"},
+        )
+        restored = await client.post(
+            f"/capture/expenses/{expense.id}/restore", cookies=_cookies(), headers=csrf_headers
+        )
+        restored_again = await client.post(
+            f"/capture/expenses/{expense.id}/restore", cookies=_cookies(), headers=csrf_headers
+        )
+        view_after_restore = await client.get(f"/capture/expenses/{expense.id}", cookies=_cookies())
+
+    assert deleted.status_code == deleted_again.status_code == 204
+    assert deleted.content == b""
+    assert deleted.headers["cache-control"] == "no-store"
+    assert view_while_deleted.status_code == edit_while_deleted.status_code == 404
+    assert restored.status_code == restored_again.status_code == 200
+    assert view_after_restore.json() == restored.json() == restored_again.json()
+    assert restored.json()["modified_at"] == (NOW + timedelta(minutes=10)).isoformat().replace(
+        "+00:00", "Z"
+    )
+    assert expenses.store[expense.id] == replace(expense, modified_at=NOW + timedelta(minutes=10))
+    assert [record.change_type.value for record in change_records.records] == [
+        "deleted",
+        "restored",
+    ]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method", "suffix", "dependency"),
+    [
+        pytest.param("DELETE", "", get_delete_expense, id="delete"),
+        pytest.param("POST", "/restore", get_restore_expense, id="restore"),
+    ],
+)
+async def test_delete_and_restore_csrf_failure_never_invokes_the_use_case(
+    settings: Settings, method: str, suffix: str, dependency: Callable[..., object]
+) -> None:
+    application, expenses, _change_records, expense = _app_with_edit(settings)
+    recorder = RecordingDeletionStateChange()
+    application.dependency_overrides[dependency] = lambda: recorder
+    valid = _csrf_headers(application, settings)
+    invalid_cases = [
+        {},
+        {"Origin": valid["Origin"]},
+        {**valid, CSRF_HEADER_NAME: "wrong-token"},
+        {**valid, "Origin": "https://attacker.test"},
+    ]
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        responses = [
+            await client.request(
+                method,
+                f"/capture/expenses/{expense.id}{suffix}",
+                cookies=_cookies(),
+                headers=headers,
+            )
+            for headers in invalid_cases
+        ]
+
+    assert [response.status_code for response in responses] == [403] * len(invalid_cases)
+    assert recorder.calls == []
+    assert expenses.store[expense.id] == expense
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("method", "suffix"),
+    [pytest.param("DELETE", "", id="delete"), pytest.param("POST", "/restore", id="restore")],
+)
+async def test_delete_and_restore_of_foreign_or_unknown_expenses_match_not_found(
+    settings: Settings, method: str, suffix: str
+) -> None:
+    application, expenses, change_records, expense = _app_with_edit(settings)
+    foreign = replace(expense, id=uuid4(), owner_id=uuid4()).delete(now=NOW)
+    expenses.store[foreign.id] = foreign
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        foreign_response = await client.request(
+            method,
+            f"/capture/expenses/{foreign.id}{suffix}",
+            cookies=_cookies(),
+            headers=csrf_headers,
+        )
+        unknown_response = await client.request(
+            method, f"/capture/expenses/{uuid4()}{suffix}", cookies=_cookies(), headers=csrf_headers
+        )
+        view_response = await client.get(f"/capture/expenses/{uuid4()}", cookies=_cookies())
+
+    assert foreign_response.status_code == unknown_response.status_code == 404
+    assert foreign_response.json() == unknown_response.json() == view_response.json()
+    assert expenses.store[foreign.id] == foreign
+    assert change_records.records == []
+
+
+@pytest.mark.anyio
+async def test_delete_and_restore_require_authentication(settings: Settings) -> None:
+    application, _expenses, _change_records, expense = _app_with_edit(settings)
+    application.dependency_overrides[get_authenticate_web_session] = lambda: (
+        StubSessionAuthentication(None)
+    )
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        delete_response = await client.delete(
+            f"/capture/expenses/{expense.id}", cookies=_cookies(), headers=csrf_headers
+        )
+        restore_response = await client.post(
+            f"/capture/expenses/{expense.id}/restore", cookies=_cookies(), headers=csrf_headers
+        )
+
+    assert delete_response.status_code == restore_response.status_code == 401

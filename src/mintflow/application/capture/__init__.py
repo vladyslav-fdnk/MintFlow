@@ -19,6 +19,7 @@ from mintflow.application.capture.expense_changes import (
     ExpenseFieldChange,
     expense_field_values,
 )
+from mintflow.application.capture.expense_deletion import DeleteExpense, RestoreExpense
 from mintflow.application.capture.expense_history import (
     MAX_HISTORY_PAGE_SIZE,
     ExpenseHistoryFilter,
@@ -40,6 +41,7 @@ __all__ = [
     "CaptureDraftAccessDenied",
     "CaptureDraftNotConfirmable",
     "ConfirmCaptureDraft",
+    "DeleteExpense",
     "EditExpense",
     "ExpenseChangeRecord",
     "ExpenseChangeRecordAppender",
@@ -53,6 +55,7 @@ __all__ = [
     "ExpenseHistoryPosition",
     "ExpenseNotFound",
     "InvalidExpenseHistoryCursor",
+    "RestoreExpense",
     "Unchanged",
     "decode_history_cursor",
     "encode_history_cursor",

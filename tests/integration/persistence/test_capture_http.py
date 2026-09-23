@@ -464,3 +464,55 @@ async def test_edit_confirmed_expense_end_to_end_records_the_change(
     }
 
     application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_delete_and_restore_expense_end_to_end(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user = _add_user(db_session)
+    secret = "J" * 43
+    _add_session(db_session, user_id=user.id, secret=secret)
+    application = _application(migrated_database_url)
+
+    draft_id = (await _request(application, "POST", "/capture/drafts", secret=secret)).json()["id"]
+    await _request(
+        application,
+        "PATCH",
+        f"/capture/drafts/{draft_id}",
+        secret=secret,
+        json={
+            "amount_minor_units": 4200,
+            "currency": "USD",
+            "transaction_date": NOW.date().isoformat(),
+        },
+    )
+    await _request(application, "POST", f"/capture/drafts/{draft_id}/ready", secret=secret)
+    confirm = await _request(
+        application, "POST", f"/capture/drafts/{draft_id}/confirm", secret=secret
+    )
+    expense_path = f"/capture/expenses/{confirm.json()['id']}"
+
+    rejected_csrf = await _request(application, "DELETE", expense_path, secret=secret, csrf=False)
+    deleted = await _request(application, "DELETE", expense_path, secret=secret)
+    view_while_deleted = await _request(application, "GET", expense_path, secret=secret)
+    restored = await _request(application, "POST", f"{expense_path}/restore", secret=secret)
+    view_after_restore = await _request(application, "GET", expense_path, secret=secret)
+
+    assert rejected_csrf.status_code == 403
+    assert deleted.status_code == 204
+    assert view_while_deleted.status_code == 404
+    assert restored.status_code == 200
+    assert view_after_restore.json() == restored.json()
+    assert {key: value for key, value in restored.json().items() if key != "modified_at"} == {
+        key: value for key, value in confirm.json().items() if key != "modified_at"
+    }
+    db_session.expire_all()
+    change_types = db_session.scalars(
+        select(ExpenseChangeRecordModel.change_type)
+        .where(ExpenseChangeRecordModel.expense_id == UUID(confirm.json()["id"]))
+        .order_by(ExpenseChangeRecordModel.occurred_at, ExpenseChangeRecordModel.change_type)
+    ).all()
+    assert sorted(change_types) == ["deleted", "restored"]
+
+    application.state.database_engine.dispose()

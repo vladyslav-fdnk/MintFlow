@@ -5,7 +5,7 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from mintflow.application.capture import (
@@ -13,10 +13,12 @@ from mintflow.application.capture import (
     CaptureDraftAccessDenied,
     CaptureDraftNotConfirmable,
     ConfirmCaptureDraft,
+    DeleteExpense,
     EditExpense,
     ExpenseEdit,
     ExpenseEditRejected,
     ExpenseNotFound,
+    RestoreExpense,
     Unchanged,
 )
 from mintflow.domain.capture import (
@@ -142,6 +144,36 @@ async def get_edit_expense(
 
 
 EditExpenseDependency = Annotated[EditExpense, Depends(get_edit_expense)]
+
+
+async def get_delete_expense(
+    session: DatabaseSession,
+    expense_repository: ExpenseRepositoryDependency,
+    runtime: CaptureRuntimeDependency,
+) -> DeleteExpense:
+    return DeleteExpense(
+        expense_repository=expense_repository,
+        change_records=SqlAlchemyExpenseChangeRecordAppender(session),
+        clock=runtime.clock,
+    )
+
+
+DeleteExpenseDependency = Annotated[DeleteExpense, Depends(get_delete_expense)]
+
+
+async def get_restore_expense(
+    session: DatabaseSession,
+    expense_repository: ExpenseRepositoryDependency,
+    runtime: CaptureRuntimeDependency,
+) -> RestoreExpense:
+    return RestoreExpense(
+        expense_repository=expense_repository,
+        change_records=SqlAlchemyExpenseChangeRecordAppender(session),
+        clock=runtime.clock,
+    )
+
+
+RestoreExpenseDependency = Annotated[RestoreExpense, Depends(get_restore_expense)]
 
 
 class EditCaptureDraftRequest(BaseModel):
@@ -578,4 +610,32 @@ async def edit_expense(
         raise _expense_not_found() from None
     except ExpenseEditRejected:
         raise _rejected() from None
+    return _expense_response(expense)
+
+
+@router.delete("/expenses/{expense_id}", status_code=204)
+async def delete_expense(
+    expense_id: UUID,
+    principal: CsrfProtectedPrincipalDependency,
+    delete_use_case: DeleteExpenseDependency,
+) -> Response:
+    """Soft-delete an Expense. Deleting an already deleted Expense is also 204."""
+    try:
+        delete_use_case.execute(expense_id=expense_id, caller_id=principal.user_id)
+    except ExpenseNotFound:
+        raise _expense_not_found() from None
+    return Response(status_code=204, headers=authentication_security_headers())
+
+
+@router.post("/expenses/{expense_id}/restore")
+async def restore_expense(
+    expense_id: UUID,
+    principal: CsrfProtectedPrincipalDependency,
+    restore_use_case: RestoreExpenseDependency,
+) -> JSONResponse:
+    """Return a soft-deleted Expense to history. Restoring an active Expense is also 200."""
+    try:
+        expense = restore_use_case.execute(expense_id=expense_id, caller_id=principal.user_id)
+    except ExpenseNotFound:
+        raise _expense_not_found() from None
     return _expense_response(expense)
