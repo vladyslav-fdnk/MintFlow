@@ -21,10 +21,14 @@ from mintflow.http.capture import build_capture_runtime
 from mintflow.http.capture import (
     router as capture_router,
 )
+from mintflow.http.telegram import (
+    router as telegram_router,
+)
 from mintflow.infrastructure.email import create_local_email_sender
 from mintflow.infrastructure.persistence import create_database_engine, create_session_factory
 from mintflow.logging import configure_logging
 from mintflow.readiness import is_postgresql_ready
+from mintflow.telegram.runtime import build_telegram_runtime
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -47,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 email_sender=authentication_email_sender,
             )
             capture_runtime = build_capture_runtime()
+            telegram_runtime = build_telegram_runtime(runtime_settings)
             composition_cleanup.pop_all()
     except (SQLAlchemyError, TypeError, ValueError):
         raise AuthenticationConfigurationError(
@@ -73,10 +78,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.authentication_email_sender = authentication_email_sender
     application.state.authentication_runtime = authentication_runtime
     application.state.capture_runtime = capture_runtime
+    application.state.telegram_runtime = telegram_runtime
     application.state.database_engine = database_engine
     application.include_router(authentication_router)
     application.include_router(capture_router)
     application.include_router(analytics_router)
+    application.include_router(telegram_router)
 
     @application.get("/health/live", tags=["health"])
     async def liveness() -> JSONResponse:

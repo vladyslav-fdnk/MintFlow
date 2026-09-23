@@ -10,7 +10,9 @@ from mintflow.infrastructure.persistence.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers created before migrations run (for example by the application when
+    # tests migrate in-process); fileConfig would otherwise disable them silently.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

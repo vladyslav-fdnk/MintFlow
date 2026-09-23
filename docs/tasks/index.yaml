@@ -296,7 +296,7 @@ tasks:
   - id: TG-04
     title: Telegram Linking Web Endpoints
     file: docs/tasks/TG-04-telegram-linking-endpoints.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - TG-01

@@ -1,5 +1,6 @@
 """An in-memory Telegram Bot API for tests. Never used by the running application."""
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import count
 
@@ -22,7 +23,7 @@ class RecordingTelegramBotApi:
     calls: list[RecordedCall] = field(default_factory=list)
     pending_updates: list[TelegramUpdate] = field(default_factory=list)
     fail_methods: set[str] = field(default_factory=set)
-    _message_ids: count[int] = field(default_factory=lambda: count(1))
+    _message_ids: Iterator[int] = field(default_factory=lambda: count(1))
 
     def _record(self, method: str, **arguments: object) -> None:
         self.calls.append(RecordedCall(method=method, arguments=arguments))
