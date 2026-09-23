@@ -1,9 +1,9 @@
-# The user-foundation (AUTH-03..AUTH-15) and capture-foundation (CAPTURE-01..CAPTURE-10)
-# sprints are complete. expense-management is the active sprint: the backend for the Web
-# Client's Expense history, editing, and recoverable deletion, with a restrained change record.
-# Its design (docs/expense_management_design.md) is approved. Analytics, receipts,
-# Telegram, purge, and account deletion are deferred.
-sprint: expense-management
+# The user-foundation (AUTH-03..AUTH-15), capture-foundation (CAPTURE-01..CAPTURE-10), and
+# expense-management (EXPENSE-01..EXPENSE-07) sprints are complete. dashboard is the active
+# sprint: the JSON API behind the Web Client dashboard (MVP section 8). Its design
+# (docs/dashboard_design.md) is approved.
+# Frontend, currency conversion, merchant drill-through, and product metrics are deferred.
+sprint: dashboard
 
 tasks:
   - id: AUTH-03
@@ -226,3 +226,34 @@ tasks:
     human_approval: approved
     depends_on:
       - EXPENSE-06
+
+  - id: DASH-01
+    title: Dashboard period rules
+    file: docs/tasks/DASH-01-dashboard-period-rules.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: DASH-02
+    title: Analytics read repository
+    file: docs/tasks/DASH-02-analytics-read-repository.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: DASH-03
+    title: Build Dashboard use case
+    file: docs/tasks/DASH-03-build-dashboard-use-case.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - DASH-01
+      - DASH-02
+
+  - id: DASH-04
+    title: Dashboard endpoint
+    file: docs/tasks/DASH-04-dashboard-endpoint.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - DASH-03
