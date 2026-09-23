@@ -1,8 +1,9 @@
-# The user-foundation sprint (AUTH-03..AUTH-15) is complete/in final review.
-# capture-foundation is the active sprint: the manual-capture-to-confirmation
-# core loop (CaptureDraft -> Expense). Receipt capture, recognition, expense
-# editing/deletion, listing, and analytics are deferred to a follow-on sprint.
-sprint: capture-foundation
+# The user-foundation (AUTH-03..AUTH-15) and capture-foundation (CAPTURE-01..CAPTURE-10)
+# sprints are complete. expense-management is the active sprint: the backend for the Web
+# Client's Expense history, editing, and recoverable deletion, with a restrained change record.
+# Its design (docs/expense_management_design.md) is approved. Analytics, receipts,
+# Telegram, purge, and account deletion are deferred.
+sprint: expense-management
 
 tasks:
   - id: AUTH-03
@@ -171,3 +172,49 @@ tasks:
     status: done
     depends_on:
       - CAPTURE-09
+
+  - id: EXPENSE-01
+    title: Active-record rule and history listing query
+    file: docs/tasks/EXPENSE-01-history-listing-query.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: EXPENSE-02
+    title: Expense history list endpoint
+    file: docs/tasks/EXPENSE-02-history-list-endpoint.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - EXPENSE-01
+
+  - id: EXPENSE-03
+    title: Expense change records
+    file: docs/tasks/EXPENSE-03-expense-change-records.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: EXPENSE-04
+    title: Edit Expense use case
+    file: docs/tasks/EXPENSE-04-edit-expense-use-case.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - EXPENSE-03
+
+  - id: EXPENSE-05
+    title: Edit Expense endpoint
+    file: docs/tasks/EXPENSE-05-edit-expense-endpoint.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - EXPENSE-04
+
+  - id: EXPENSE-06
+    title: Delete and restore Expense
+    file: docs/tasks/EXPENSE-06-delete-and-restore.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - EXPENSE-03
