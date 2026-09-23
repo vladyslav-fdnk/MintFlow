@@ -1,6 +1,6 @@
 # TG-01 — Telegram Settings and Bot API Client
 
-Status: ready
+Status: done
 
 ## Goal
 

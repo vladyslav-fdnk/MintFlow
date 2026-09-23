@@ -386,6 +386,7 @@ dependencies = [
     { name = "alembic" },
     { name = "email-validator" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "psycopg", extra = ["binary"] },
     { name = "pydantic-settings" },
     { name = "sqlalchemy" },
@@ -394,7 +395,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "httpx" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pytest" },
@@ -406,6 +406,7 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.16,<2.0" },
     { name = "email-validator", specifier = ">=2.2,<3.0" },
     { name = "fastapi", specifier = ">=0.116,<1.0" },
+    { name = "httpx", specifier = ">=0.28,<1.0" },
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4.0" },
     { name = "pydantic-settings", specifier = ">=2.10,<3.0" },
     { name = "sqlalchemy", specifier = ">=2.0,<3.0" },
@@ -414,7 +415,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "httpx", specifier = ">=0.28,<1.0" },
     { name = "mypy", specifier = ">=1.17,<2.0" },
     { name = "pre-commit", specifier = ">=4.2,<5.0" },
     { name = "pytest", specifier = ">=8.4,<10.0" },

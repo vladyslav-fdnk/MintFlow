@@ -274,7 +274,7 @@ tasks:
   - id: TG-01
     title: Telegram Settings and Bot API Client
     file: docs/tasks/TG-01-telegram-bot-api-client.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
 

@@ -1,8 +1,13 @@
+import re
 from functools import lru_cache
 from typing import Literal
 
 from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Telegram's own rules for bot usernames and webhook secret tokens.
+_TELEGRAM_USERNAME = re.compile(r"[A-Za-z0-9_]{5,32}")
+_TELEGRAM_WEBHOOK_SECRET = re.compile(r"[A-Za-z0-9_-]{1,256}")
 
 
 class Settings(BaseSettings):
@@ -21,6 +26,9 @@ class Settings(BaseSettings):
     mailpit_smtp_port: int = Field(default=1025, ge=1, le=65535)
     mailpit_smtp_timeout_seconds: float = Field(default=5.0, gt=0)
     mailpit_from_email: EmailStr | None = None
+    telegram_bot_token: SecretStr | None = None
+    telegram_bot_username: str | None = None
+    telegram_webhook_secret: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -40,6 +48,35 @@ class Settings(BaseSettings):
         if self.mailpit_smtp_host is None or self.mailpit_from_email is None:
             raise ValueError("Mailpit requires an SMTP host and sender address")
         return self
+
+    @model_validator(mode="after")
+    def validate_telegram_configuration(self) -> "Settings":
+        """Telegram is enabled only by all three values together; none of them is echoed."""
+
+        provided = [
+            self.telegram_bot_token is not None,
+            self.telegram_bot_username is not None,
+            self.telegram_webhook_secret is not None,
+        ]
+        if any(provided) and not all(provided):
+            raise ValueError(
+                "Telegram requires a bot token, bot username, and webhook secret together"
+            )
+        if self.telegram_bot_username is not None and not _TELEGRAM_USERNAME.fullmatch(
+            self.telegram_bot_username
+        ):
+            raise ValueError("Telegram bot username must be 5-32 letters, digits, or underscores")
+        if self.telegram_webhook_secret is not None and not _TELEGRAM_WEBHOOK_SECRET.fullmatch(
+            self.telegram_webhook_secret.get_secret_value()
+        ):
+            raise ValueError(
+                "Telegram webhook secret must be 1-256 letters, digits, underscores, or hyphens"
+            )
+        return self
+
+    @property
+    def telegram_enabled(self) -> bool:
+        return self.telegram_bot_token is not None
 
     @field_validator("authentication_return_targets")
     @classmethod
