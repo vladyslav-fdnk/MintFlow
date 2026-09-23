@@ -1,3 +1,4 @@
+import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -9,6 +10,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from mintflow.application.capture import (
+    MAX_HISTORY_PAGE_SIZE,
     UNCHANGED,
     CaptureDraftAccessDenied,
     CaptureDraftNotConfirmable,
@@ -17,9 +19,14 @@ from mintflow.application.capture import (
     EditExpense,
     ExpenseEdit,
     ExpenseEditRejected,
+    ExpenseHistoryFilter,
+    ExpenseHistoryPosition,
     ExpenseNotFound,
+    InvalidExpenseHistoryCursor,
     RestoreExpense,
     Unchanged,
+    decode_history_cursor,
+    encode_history_cursor,
 )
 from mintflow.domain.capture import (
     CaptureDraft,
@@ -47,6 +54,8 @@ from mintflow.infrastructure.persistence import (
 
 MAX_CAPTURE_REQUEST_BODY_BYTES = 4_096
 MAX_NOTE_LENGTH = 2_000
+DEFAULT_HISTORY_PAGE_SIZE = 50
+MAX_HISTORY_FILTER_VALUES = 32
 GENERIC_DRAFT_NOT_FOUND_MESSAGE = "Draft not found."
 GENERIC_DRAFT_REJECTED_MESSAGE = "The request could not be applied."
 GENERIC_MALFORMED_BODY_MESSAGE = "The request body is invalid."
@@ -249,6 +258,74 @@ class EditExpenseRequest(BaseModel):
             category_key=self.category_key if self.category_key is not None else UNCHANGED,
             note=self.note if "note" in supplied else UNCHANGED,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class ExpenseHistoryQuery:
+    history_filter: ExpenseHistoryFilter
+    limit: int
+    after: ExpenseHistoryPosition | None
+
+
+_HISTORY_QUERY_PARAMETERS = frozenset(
+    {"date_from", "date_to", "category", "currency", "limit", "cursor"}
+)
+_ISO_DATE_PATTERN = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+_LIMIT_PATTERN = re.compile(r"[1-9][0-9]{0,2}")
+
+
+def parse_expense_history_query(request: Request) -> ExpenseHistoryQuery | None:
+    """Parse history query parameters by hand, returning None on any invalid input.
+
+    Deliberately not FastAPI query validation: its 422 body echoes the
+    offending values, while every capture error is generic.
+    """
+    params = request.query_params
+    if not set(params.keys()) <= _HISTORY_QUERY_PARAMETERS:
+        return None
+    single: dict[str, str | None] = {}
+    for name in ("date_from", "date_to", "limit", "cursor"):
+        values = params.getlist(name)
+        if len(values) > 1:
+            return None
+        single[name] = values[0] if values else None
+    categories = params.getlist("category")
+    currencies = params.getlist("currency")
+    if len(categories) > MAX_HISTORY_FILTER_VALUES or len(currencies) > MAX_HISTORY_FILTER_VALUES:
+        return None
+    if not all(0 < len(category) <= 32 for category in categories):
+        return None
+    try:
+        date_from = _parse_iso_date(single["date_from"])
+        date_to = _parse_iso_date(single["date_to"])
+        history_filter = ExpenseHistoryFilter(
+            date_from=date_from,
+            date_to=date_to,
+            category_keys=frozenset(categories),
+            currencies=frozenset(CurrencyCode(currency) for currency in currencies),
+        )
+        limit = _parse_limit(single["limit"])
+        cursor = single["cursor"]
+        after = decode_history_cursor(cursor) if cursor is not None else None
+    except (ValueError, InvalidExpenseHistoryCursor):
+        return None
+    return ExpenseHistoryQuery(history_filter=history_filter, limit=limit, after=after)
+
+
+def _parse_iso_date(value: str | None) -> date | None:
+    if value is None:
+        return None
+    if not _ISO_DATE_PATTERN.fullmatch(value):
+        raise ValueError("expected an ISO date")
+    return date.fromisoformat(value)
+
+
+def _parse_limit(value: str | None) -> int:
+    if value is None:
+        return DEFAULT_HISTORY_PAGE_SIZE
+    if not _LIMIT_PATTERN.fullmatch(value) or int(value) > MAX_HISTORY_PAGE_SIZE:
+        raise ValueError("limit out of range")
+    return int(value)
 
 
 class CategoryResponse(BaseModel):
@@ -569,6 +646,41 @@ async def confirm_draft(
     except CaptureDraftNotConfirmable:
         raise _rejected() from None
     return _expense_response(expense)
+
+
+@router.get("/expenses")
+async def list_expenses(
+    request: Request,
+    principal: AuthenticatedPrincipalDependency,
+    expense_repository: ExpenseRepositoryDependency,
+) -> JSONResponse:
+    """One page of the caller's active Expenses, newest transaction date first.
+
+    Follow ``next_cursor`` until it is null to read the whole filtered
+    history. Unknown category keys simply match nothing.
+    """
+    query = parse_expense_history_query(request)
+    if query is None:
+        raise _malformed()
+    page = expense_repository.list_history(
+        owner_id=principal.user_id,
+        history_filter=query.history_filter,
+        limit=query.limit,
+        after=query.after,
+    )
+    return JSONResponse(
+        {
+            "items": [
+                _to_expense_response(expense).model_dump(mode="json") for expense in page.items
+            ],
+            "next_cursor": (
+                encode_history_cursor(page.next_position)
+                if page.next_position is not None
+                else None
+            ),
+        },
+        headers=authentication_security_headers(),
+    )
 
 
 @router.get("/expenses/{expense_id}")

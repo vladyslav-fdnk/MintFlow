@@ -14,7 +14,11 @@ from mintflow.application.capture import (
     EditExpense,
     ExpenseChangeRecord,
     ExpenseEdit,
+    ExpenseHistoryFilter,
+    ExpenseHistoryPage,
+    ExpenseHistoryPosition,
     RestoreExpense,
+    encode_history_cursor,
 )
 from mintflow.config import Settings
 from mintflow.domain.capture import (
@@ -106,6 +110,41 @@ class FakeExpenseRepository:
 
     def get_owned_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         return self.get(expense_id=expense_id, owner_id=owner_id)
+
+    def list_history(
+        self,
+        *,
+        owner_id: UUID,
+        history_filter: ExpenseHistoryFilter,
+        limit: int,
+        after: ExpenseHistoryPosition | None = None,
+    ) -> ExpenseHistoryPage:
+        """An in-memory stand-in; the real query is covered against PostgreSQL."""
+
+        def key(expense: Expense) -> tuple[object, ...]:
+            return (expense.transaction_date.value, expense.created_at, expense.id)
+
+        matching = sorted(
+            (
+                expense
+                for expense in self.store.values()
+                if expense.owner_id == owner_id
+                and expense.is_active
+                and (
+                    not history_filter.category_keys
+                    or expense.category_key in history_filter.category_keys
+                )
+                and (
+                    after is None
+                    or key(expense) < (after.transaction_date, after.created_at, after.expense_id)
+                )
+            ),
+            key=key,
+            reverse=True,
+        )
+        items = tuple(matching[:limit])
+        next_position = ExpenseHistoryPosition.after(items[-1]) if len(matching) > limit else None
+        return ExpenseHistoryPage(items=items, next_position=next_position)
 
     def update(self, expense: Expense, *, commit: bool = True) -> None:
         self.store[expense.id] = expense
@@ -1020,3 +1059,149 @@ async def test_delete_and_restore_require_authentication(settings: Settings) -> 
         )
 
     assert delete_response.status_code == restore_response.status_code == 401
+
+
+def _add_history(
+    expenses: FakeExpenseRepository, owner_id: UUID, *, count: int, category_key: str = "groceries"
+) -> list[Expense]:
+    added = []
+    for day in range(count):
+        expense = Expense.create(
+            owner_id=owner_id,
+            money=Money(minor_units=100 + day, currency=CurrencyCode("USD")),
+            transaction_date=TransactionDate(NOW.date() - timedelta(days=day)),
+            category_key=category_key,
+            capture_draft_id=uuid4(),
+            source=CaptureSource.WEB_MANUAL,
+            now=NOW,
+        )
+        expenses.store[expense.id] = expense
+        added.append(expense)
+    return added
+
+
+@pytest.mark.anyio
+async def test_list_expenses_pages_through_the_callers_active_history(settings: Settings) -> None:
+    application, expenses, _change_records, expense = _app_with_edit(settings)
+    own = _add_history(expenses, expense.owner_id, count=4)
+    _add_history(expenses, uuid4(), count=3)
+    deleted = replace(own[1], id=uuid4()).delete(now=NOW)
+    expenses.store[deleted.id] = deleted
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        pages = []
+        params: dict[str, str] = {"limit": "2"}
+        while True:
+            response = await client.get("/capture/expenses", params=params, cookies=_cookies())
+            assert response.status_code == 200
+            assert response.headers["cache-control"] == "no-store"
+            pages.append(response.json())
+            if response.json()["next_cursor"] is None:
+                break
+            params = {"limit": "2", "cursor": response.json()["next_cursor"]}
+
+    ids = [item["id"] for page in pages for item in page["items"]]
+    assert [len(page["items"]) for page in pages] == [2, 2, 1]
+    assert len(ids) == len(set(ids)) == 5
+    assert set(ids) == {str(item.id) for item in [expense, *own]}
+    assert set(pages[0]["items"][0]) == {
+        "id",
+        "amount_minor_units",
+        "currency",
+        "transaction_date",
+        "merchant",
+        "category_key",
+        "note",
+        "source",
+        "capture_draft_id",
+        "created_at",
+        "modified_at",
+    }
+
+
+@pytest.mark.anyio
+async def test_list_expenses_unknown_category_is_an_empty_result(settings: Settings) -> None:
+    application, _expenses, _change_records, _expense = _app_with_edit(settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.get(
+            "/capture/expenses", params={"category": "not_a_category"}, cookies=_cookies()
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "next_cursor": None}
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "params",
+    [
+        pytest.param({"date_from": "2026-08-05", "date_to": "2026-08-04"}, id="inverted range"),
+        pytest.param({"date_from": "yesterday"}, id="bad date"),
+        pytest.param({"currency": "ZZZ"}, id="bad currency"),
+        pytest.param({"limit": "500"}, id="limit too large"),
+        pytest.param({"cursor": "c2VjcmV0LWlucHV0"}, id="malformed cursor"),
+        pytest.param({"merchant": "secret-input"}, id="unknown parameter"),
+    ],
+)
+async def test_list_expenses_rejects_invalid_parameters_without_echoing_them(
+    settings: Settings, params: dict[str, str]
+) -> None:
+    application, _expenses, _change_records, _expense = _app_with_edit(settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.get("/capture/expenses", params=params, cookies=_cookies())
+
+    assert response.status_code == 422
+    assert response.json() == {"detail": "The request body is invalid."}
+    for value in params.values():
+        assert value not in response.text
+
+
+@pytest.mark.anyio
+async def test_list_expenses_cursor_from_another_user_reveals_nothing_of_theirs(
+    settings: Settings,
+) -> None:
+    application, expenses, _change_records, expense = _app_with_edit(settings)
+    stranger_id = uuid4()
+    stranger_history = _add_history(expenses, stranger_id, count=5)
+    # A cursor positioned inside the stranger's history, as they would receive it.
+    foreign_cursor = encode_history_cursor(ExpenseHistoryPosition.after(stranger_history[0]))
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.get(
+            "/capture/expenses", params={"cursor": foreign_cursor}, cookies=_cookies()
+        )
+
+    assert response.status_code == 200
+    returned = {item["id"] for item in response.json()["items"]}
+    assert returned <= {str(expense.id)}
+    assert not returned & {str(item.id) for item in stranger_history}
+
+
+@pytest.mark.anyio
+async def test_list_expenses_requires_authentication(settings: Settings) -> None:
+    application, _expenses, _change_records, _expense = _app_with_edit(settings)
+    application.dependency_overrides[get_authenticate_web_session] = lambda: (
+        StubSessionAuthentication(None)
+    )
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.get("/capture/expenses", cookies=_cookies())
+
+    assert response.status_code == 401

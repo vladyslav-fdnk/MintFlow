@@ -5,7 +5,13 @@ import pytest
 from fastapi import Request
 from pydantic import ValidationError
 
-from mintflow.application.capture import UNCHANGED, ExpenseEdit
+from mintflow.application.capture import (
+    UNCHANGED,
+    ExpenseEdit,
+    ExpenseHistoryFilter,
+    ExpenseHistoryPosition,
+    encode_history_cursor,
+)
 from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
@@ -16,6 +22,7 @@ from mintflow.domain.capture import (
     TransactionDate,
 )
 from mintflow.http.capture import (
+    DEFAULT_HISTORY_PAGE_SIZE,
     MAX_CAPTURE_REQUEST_BODY_BYTES,
     EditCaptureDraftRequest,
     EditExpenseRequest,
@@ -27,6 +34,7 @@ from mintflow.http.capture import (
     _to_response,
     parse_edit_capture_draft_request,
     parse_edit_expense_request,
+    parse_expense_history_query,
 )
 
 OWNER = uuid4()
@@ -282,3 +290,75 @@ async def test_parse_expense_edit_request_rejects_oversized_bodies() -> None:
 
     assert await parse_edit_expense_request(_request_with_body(body)) is None
     assert await parse_edit_expense_request(_request_with_body(b"not json")) is None
+
+
+def _request_with_query(query_string: bytes) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/capture/expenses",
+            "headers": [],
+            "query_string": query_string,
+        }
+    )
+
+
+def test_history_query_defaults_to_no_filters_and_the_default_page_size() -> None:
+    query = parse_expense_history_query(_request_with_query(b""))
+
+    assert query is not None
+    assert query.history_filter == ExpenseHistoryFilter()
+    assert query.limit == DEFAULT_HISTORY_PAGE_SIZE
+    assert query.after is None
+
+
+def test_history_query_parses_every_parameter() -> None:
+    position = ExpenseHistoryPosition(
+        transaction_date=date(2026, 8, 4), created_at=NOW, expense_id=uuid4()
+    )
+    cursor = encode_history_cursor(position)
+    query = parse_expense_history_query(
+        _request_with_query(
+            b"date_from=2026-08-01&date_to=2026-08-31&category=groceries&category=health"
+            b"&currency=usd&currency=EUR&limit=100&cursor=" + cursor.encode()
+        )
+    )
+
+    assert query is not None
+    assert query.history_filter == ExpenseHistoryFilter(
+        date_from=date(2026, 8, 1),
+        date_to=date(2026, 8, 31),
+        category_keys=frozenset({"groceries", "health"}),
+        currencies=frozenset({CurrencyCode("USD"), CurrencyCode("EUR")}),
+    )
+    assert query.limit == 100
+    assert query.after == position
+
+
+@pytest.mark.parametrize(
+    "query_string",
+    [
+        pytest.param(b"date_from=2026-8-1", id="non-iso date"),
+        pytest.param(b"date_from=20260801", id="compact date"),
+        pytest.param(b"date_to=2026-02-30", id="impossible date"),
+        pytest.param(b"date_from=2026-08-05&date_to=2026-08-04", id="inverted range"),
+        pytest.param(b"date_from=2026-08-01&date_from=2026-08-02", id="repeated date"),
+        pytest.param(b"currency=ZZZ", id="unsupported currency"),
+        pytest.param(b"category=", id="empty category"),
+        pytest.param(b"category=" + b"x" * 33, id="overlong category"),
+        pytest.param(b"&".join([b"category=c%d" % i for i in range(33)]), id="too many categories"),
+        pytest.param(b"limit=0", id="zero limit"),
+        pytest.param(b"limit=101", id="limit over maximum"),
+        pytest.param(b"limit=-5", id="negative limit"),
+        pytest.param(b"limit=05", id="leading zero limit"),
+        pytest.param(b"limit=ten", id="non-numeric limit"),
+        pytest.param("limit=١٠".encode(), id="non-ascii digits"),
+        pytest.param(b"limit=5&limit=6", id="repeated limit"),
+        pytest.param(b"cursor=not-a-cursor", id="malformed cursor"),
+        pytest.param(b"cursor=", id="empty cursor"),
+        pytest.param(b"merchant=Shop", id="unknown parameter"),
+    ],
+)
+def test_history_query_rejects_invalid_parameters(query_string: bytes) -> None:
+    assert parse_expense_history_query(_request_with_query(query_string)) is None

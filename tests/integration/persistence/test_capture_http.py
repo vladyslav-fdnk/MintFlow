@@ -14,6 +14,14 @@ from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import hash_token
 from mintflow.config import Settings
+from mintflow.domain.capture import (
+    CaptureDraft,
+    CaptureSource,
+    CurrencyCode,
+    Expense,
+    Money,
+    TransactionDate,
+)
 from mintflow.domain.user import UserStatus
 from mintflow.http.authentication import (
     AUTHENTICATED_SESSION_COOKIE_NAME,
@@ -21,6 +29,10 @@ from mintflow.http.authentication import (
     AuthenticationRuntime,
 )
 from mintflow.http.capture import CaptureRuntime
+from mintflow.infrastructure.persistence import (
+    SqlAlchemyCaptureDraftRepository,
+    SqlAlchemyExpenseRepository,
+)
 from mintflow.infrastructure.persistence.models import (
     CaptureDraftRecord,
     ExpenseChangeRecordModel,
@@ -563,5 +575,60 @@ async def test_reconfirming_a_draft_whose_expense_was_deleted_is_rejected_until_
         )
         == 1
     )
+
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_list_expenses_walks_filtered_history_through_the_real_route(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    owner = _add_user(db_session)
+    stranger = _add_user(db_session)
+    secret = "L" * 43
+    _add_session(db_session, user_id=owner.id, secret=secret)
+    application = _application(migrated_database_url)
+    drafts = SqlAlchemyCaptureDraftRepository(db_session)
+    expenses = SqlAlchemyExpenseRepository(db_session)
+
+    def add(owner_id: UUID, *, day: int, category_key: str, currency: str) -> Expense:
+        draft = CaptureDraft.start(owner_id=owner_id, source=CaptureSource.WEB_MANUAL, now=NOW)
+        drafts.create(draft)
+        expense = Expense.create(
+            owner_id=owner_id,
+            money=Money(minor_units=1000 + day, currency=CurrencyCode(currency)),
+            transaction_date=TransactionDate(NOW.date() - timedelta(days=day)),
+            category_key=category_key,
+            capture_draft_id=draft.id,
+            source=CaptureSource.WEB_MANUAL,
+            now=NOW,
+        )
+        expenses.create(expense)
+        return expense
+
+    matching = [
+        add(owner.id, day=day, category_key="groceries", currency="EUR") for day in range(5)
+    ]
+    add(owner.id, day=1, category_key="groceries", currency="USD")
+    add(owner.id, day=1, category_key="health", currency="EUR")
+    add(owner.id, day=30, category_key="groceries", currency="EUR")
+    add(stranger.id, day=1, category_key="groceries", currency="EUR")
+    deleted = add(owner.id, day=2, category_key="groceries", currency="EUR")
+    expenses.update(deleted.delete(now=NOW))
+
+    date_from = (NOW.date() - timedelta(days=10)).isoformat()
+    query = f"category=groceries&currency=EUR&date_from={date_from}&limit=2"
+    walked: list[str] = []
+    cursor: str | None = None
+    while True:
+        path = f"/capture/expenses?{query}" + (f"&cursor={cursor}" if cursor else "")
+        response = await _request(application, "GET", path, secret=secret)
+        assert response.status_code == 200
+        walked.extend(item["id"] for item in response.json()["items"])
+        cursor = response.json()["next_cursor"]
+        if cursor is None:
+            break
+
+    assert walked == [str(expense.id) for expense in matching]
 
     application.state.database_engine.dispose()

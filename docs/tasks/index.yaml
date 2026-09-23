@@ -183,7 +183,7 @@ tasks:
   - id: EXPENSE-02
     title: Expense history list endpoint
     file: docs/tasks/EXPENSE-02-history-list-endpoint.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - EXPENSE-01
