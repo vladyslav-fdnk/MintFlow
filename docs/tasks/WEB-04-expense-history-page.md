@@ -1,6 +1,6 @@
 # WEB-04 — Expense History Page
 
-Status: blocked
+Status: ready
 
 ## Goal
 

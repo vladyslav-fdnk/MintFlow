@@ -44,12 +44,6 @@ async def get_page_principal(
 PagePrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_page_principal)]
 
 
-@router.get("/dashboard")
-async def dashboard(principal: PagePrincipalDependency) -> Response:
-    # A placeholder until WEB-03 renders the dashboard itself.
-    return render("dashboard.html", {"active": "dashboard"})
-
-
 def wants_html_error(request: Request) -> bool:
     path = request.url.path
     return (

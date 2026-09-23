@@ -1,7 +1,10 @@
 """A small HTML reader for page tests (web design W10); never used to serve requests."""
 
+import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+
+_MARKUP_WHITESPACE = re.compile(r"[ \t\n\r\f]+")
 
 # Elements that never have a closing tag.
 _VOID: frozenset[str] = frozenset(
@@ -23,9 +26,12 @@ class Element:
 
     @property
     def text(self) -> str:
-        """All text inside, in document order, whitespace-collapsed."""
+        """All text inside, in document order, with markup whitespace collapsed.
+
+        Only ASCII whitespace collapses: no-break and thin spaces are part of formatted values.
+        """
         parts = [item if isinstance(item, str) else item.text for item in self.content]
-        return " ".join(" ".join(parts).split())
+        return _MARKUP_WHITESPACE.sub(" ", " ".join(parts)).strip(" ")
 
     def iter(self) -> list["Element"]:
         found = [self]

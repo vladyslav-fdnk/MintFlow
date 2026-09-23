@@ -430,14 +430,14 @@ tasks:
   - id: WEB-03
     title: Dashboard Page
     file: docs/tasks/WEB-03-dashboard-page.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - WEB-01
   - id: WEB-04
     title: Expense History Page
     file: docs/tasks/WEB-04-expense-history-page.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - WEB-01

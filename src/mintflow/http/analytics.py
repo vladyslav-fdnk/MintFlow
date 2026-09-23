@@ -5,6 +5,7 @@ from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
+from starlette.datastructures import QueryParams
 
 from mintflow.application.analytics import (
     BuildDashboard,
@@ -62,7 +63,11 @@ def parse_dashboard_query(request: Request) -> DashboardQuery | None:
     Like the history endpoint, this avoids FastAPI query validation, whose
     422 body echoes the submitted values.
     """
-    params = request.query_params
+    return parse_dashboard_params(request.query_params)
+
+
+def parse_dashboard_params(params: QueryParams) -> DashboardQuery | None:
+    """The rules of ``parse_dashboard_query``, for callers that prepare the parameters."""
     if not set(params.keys()) <= _DASHBOARD_QUERY_PARAMETERS:
         return None
     values: dict[str, str | None] = {}

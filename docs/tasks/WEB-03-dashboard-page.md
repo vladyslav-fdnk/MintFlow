@@ -1,6 +1,6 @@
 # WEB-03 — Dashboard Page
 
-Status: ready
+Status: done
 
 ## Goal
 

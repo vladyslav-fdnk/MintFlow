@@ -22,6 +22,16 @@
     }
   });
 
+  // After a partial update, move focus to the updated region so keyboard and screen-reader
+  // users land on the new content (web design W6).
+  document.addEventListener("htmx:afterSettle", function (event) {
+    const selector = event.detail.elt.dataset && event.detail.elt.dataset.focusTarget;
+    const target = selector ? document.querySelector(selector) : null;
+    if (target) {
+      target.focus();
+    }
+  });
+
   // Elements with data-redirect-after navigate there once their request succeeded.
   document.addEventListener("htmx:afterRequest", function (event) {
     const target = event.detail.elt.dataset.redirectAfter;

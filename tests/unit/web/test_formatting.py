@@ -6,8 +6,8 @@ from mintflow.domain.capture import CurrencyCode, Money
 from mintflow.domain.user import Locale
 from mintflow.web.formatting import display_locale, format_date, format_money
 
-NBSP = " "
-NARROW_NBSP = " "
+NBSP = "\u00a0"
+NARROW_NBSP = "\u202f"
 
 
 def _money(minor_units: int, currency: str) -> Money:

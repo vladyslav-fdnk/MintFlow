@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import FastAPI
+from fastapi.responses import Response as FastAPIResponse
 from httpx import ASGITransport, AsyncClient, Response
 
 from mintflow.application.authentication import AuthenticatedWebSession
@@ -15,7 +16,8 @@ from mintflow.http.authentication import (
     get_authenticate_web_session,
 )
 from mintflow.main import create_app
-from mintflow.web.rendering import CONTENT_SECURITY_POLICY, static_url
+from mintflow.web import PagePrincipalDependency
+from mintflow.web.rendering import CONTENT_SECURITY_POLICY, render, static_url
 from mintflow.web.testing import parse_html
 
 ORIGIN = "https://app.mintflow.test"
@@ -41,6 +43,10 @@ def _application(settings: Settings, *, signed_in: bool) -> FastAPI:
     @application.post("/test/web-mutation")
     async def mutation(principal: CsrfProtectedPrincipalDependency) -> dict[str, str]:
         return {"user_id": str(principal.user_id)}
+
+    @application.get("/test/web-page")
+    async def page(principal: PagePrincipalDependency) -> FastAPIResponse:
+        return render("sign_in_sent.html")
 
     @application.get("/test/web-failure")
     async def failure() -> None:
@@ -100,14 +106,13 @@ async def test_a_signed_in_page_is_rendered_with_the_security_headers(settings: 
     response = await _request(
         _application(settings, signed_in=True),
         "GET",
-        "/dashboard",
+        "/test/web-page",
         cookies={AUTHENTICATED_SESSION_COOKIE_NAME: SECRET},
     )
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     _assert_page_headers(response)
-    assert parse_html(response.text).find("h1").text == "Dashboard"
 
 
 @pytest.mark.anyio

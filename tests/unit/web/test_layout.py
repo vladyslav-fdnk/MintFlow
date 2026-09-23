@@ -4,9 +4,16 @@ from mintflow.http.authentication import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
 from mintflow.web.rendering import TEMPLATES, static_url
 from mintflow.web.testing import Element, parse_html
 
+# A page like every signed-in page: the base layout with a heading.
+_SIGNED_IN_PAGE = TEMPLATES.from_string(
+    '{% extends "base.html" %}{% block title %}Dashboard{% endblock %}'
+    "{% block content %}<h1>Dashboard</h1>{% endblock %}"
+)
 
-def _page(template: str = "dashboard.html", **context: object) -> Element:
-    return parse_html(TEMPLATES.get_template(template).render(active="dashboard", **context))
+
+def _page(template: str | None = None, **context: object) -> Element:
+    page = _SIGNED_IN_PAGE if template is None else TEMPLATES.get_template(template)
+    return parse_html(page.render(active="dashboard", **context))
 
 
 def test_the_layout_has_landmarks_a_skip_link_and_a_status_region() -> None:
@@ -36,12 +43,16 @@ def test_navigation_marks_the_current_page_and_offers_sign_out() -> None:
 @pytest.mark.parametrize(
     ("template", "context"),
     [
-        ("dashboard.html", {}),
+        (None, {}),
+        ("sign_in.html", {"email": "a@b", "error": "Wrong"}),
+        ("sign_in_sent.html", {}),
         ("error.html", {"status_code": 404}),
         ("error.html", {"status_code": 500}),
     ],
 )
-def test_pages_contain_no_inline_script_or_style(template: str, context: dict[str, object]) -> None:
+def test_pages_contain_no_inline_script_or_style(
+    template: str | None, context: dict[str, object]
+) -> None:
     page = _page(template, **context)
 
     assert all("src" in script.attrs for script in page.find_all("script"))
