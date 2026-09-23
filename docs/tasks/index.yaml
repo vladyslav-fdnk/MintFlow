@@ -1,9 +1,8 @@
-# The user-foundation (AUTH-03..AUTH-15), capture-foundation (CAPTURE-01..CAPTURE-10), and
-# expense-management (EXPENSE-01..EXPENSE-07) sprints are complete. dashboard is the active
-# sprint: the JSON API behind the Web Client dashboard (MVP section 8). Its design
-# (docs/dashboard_design.md) is approved.
-# Frontend, currency conversion, merchant drill-through, and product metrics are deferred.
-sprint: dashboard
+# The user-foundation (AUTH-03..AUTH-15), capture-foundation (CAPTURE-01..CAPTURE-10),
+# expense-management (EXPENSE-01..EXPENSE-07), and dashboard (DASH-01..DASH-04) sprints are
+# complete. maintenance is the active sprint: two small fixes left over from earlier sprints
+# (test isolation from the local environment, and an accurate invalid-query message).
+sprint: maintenance
 
 tasks:
   - id: AUTH-03
@@ -257,3 +256,17 @@ tasks:
     human_approval: approved
     depends_on:
       - DASH-03
+
+  - id: MAINT-01
+    title: Isolate tests from the local environment
+    file: docs/tasks/MAINT-01-isolate-tests-from-local-environment.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: MAINT-02
+    title: Accurate generic message for invalid query parameters
+    file: docs/tasks/MAINT-02-generic-invalid-query-message.md
+    status: ready
+    human_approval: approved
+    depends_on: []
