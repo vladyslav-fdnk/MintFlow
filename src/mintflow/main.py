@@ -7,6 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from mintflow.application.authentication.login_challenge import EmailSender
 from mintflow.config import Settings, get_settings
+from mintflow.http.analytics import (
+    router as analytics_router,
+)
 from mintflow.http.authentication import (
     AuthenticationConfigurationError,
     build_authentication_runtime,
@@ -73,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.state.database_engine = database_engine
     application.include_router(authentication_router)
     application.include_router(capture_router)
+    application.include_router(analytics_router)
 
     @application.get("/health/live", tags=["health"])
     async def liveness() -> JSONResponse:

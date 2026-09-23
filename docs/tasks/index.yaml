@@ -253,7 +253,7 @@ tasks:
   - id: DASH-04
     title: Dashboard endpoint
     file: docs/tasks/DASH-04-dashboard-endpoint.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - DASH-03
