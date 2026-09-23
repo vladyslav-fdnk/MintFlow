@@ -1,6 +1,6 @@
 # WEB-07 — Telegram-to-Web Loop and Accessibility Checklist
 
-Status: blocked
+Status: ready
 
 ## Goal
 

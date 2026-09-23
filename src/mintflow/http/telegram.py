@@ -157,8 +157,8 @@ async def confirm_link_challenge(
     runtime: TelegramRuntimeDependency,
     repository: TelegramLinkRepositoryDependency,
 ) -> JSONResponse:
-    connection = ConfirmTelegramLink(repository=repository, clock=runtime.clock).execute(
-        challenge_id=challenge_id, session=_web_session(principal)
+    connection = confirm_telegram_link(
+        runtime=runtime, repository=repository, challenge_id=challenge_id, principal=principal
     )
     if connection is None:
         raise HTTPException(
@@ -166,13 +166,29 @@ async def confirm_link_challenge(
             detail=GENERIC_TELEGRAM_LINK_FAILED_MESSAGE,
             headers=authentication_security_headers(),
         )
+    return _json(_connection_json(connection))
+
+
+def confirm_telegram_link(
+    *,
+    runtime: TelegramRuntime,
+    repository: SqlAlchemyTelegramLinkRepository,
+    challenge_id: UUID,
+    principal: AuthenticatedPrincipal,
+) -> TelegramConnection | None:
+    """Confirm from the initiating Web session, then tell the user in Telegram (best effort)."""
+    connection = ConfirmTelegramLink(repository=repository, clock=runtime.clock).execute(
+        challenge_id=challenge_id, session=_web_session(principal)
+    )
+    if connection is None:
+        return None
     # The link is committed; the bot's acknowledgement is best effort (design section 7.6).
     # In a private chat the chat id is the Telegram user id.
     try:
         runtime.bot_api.send_message(chat_id=connection.telegram_user_id, text=messages.LINKED)
     except TelegramApiError as error:
         logger.warning("telegram_link_ack_failed method=%s code=%s", error.method, error.error_code)
-    return _json(_connection_json(connection))
+    return connection
 
 
 @router.get("/connection")

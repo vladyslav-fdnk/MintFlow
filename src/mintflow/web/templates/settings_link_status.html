@@ -1,0 +1,18 @@
+{% set waiting = state == states.WAITING_FOR_TELEGRAM.value %}
+<div id="link-status" class="link-status"
+  {% if waiting %}hx-get="/settings/telegram/link/{{ challenge_id }}" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  {% if error %}<p class="notice notice-error" role="alert">{{ error }}</p>{% endif %}
+  {% if waiting %}
+  <p>{{ _("Waiting for Telegram…") }}</p>
+  {% elif state == states.AWAITING_CONFIRMATION.value %}
+  <p>{{ _("Connect the Telegram account {name}?").format(name=display_name or _("that you just used")) }}</p>
+  <p class="actions">
+    <button type="button" class="button" hx-post="/settings/telegram/link/{{ challenge_id }}/confirm" hx-target="#link-status" hx-swap="outerHTML">{{ _("Confirm") }}</button>
+    <a href="/settings">{{ _("Cancel") }}</a>
+  </p>
+  {% elif state == states.CONNECTED.value %}
+  <p>{{ _("Telegram is connected.") }} <a href="/settings">{{ _("Back to settings") }}</a></p>
+  {% else %}
+  <p>{{ _("This link has expired.") }} <a href="/settings">{{ _("Start again") }}</a></p>
+  {% endif %}
+</div>

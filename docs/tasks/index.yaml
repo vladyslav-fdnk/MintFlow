@@ -451,14 +451,14 @@ tasks:
   - id: WEB-06
     title: Settings Page
     file: docs/tasks/WEB-06-settings-page.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - WEB-01
   - id: WEB-07
     title: Telegram-to-Web Loop and Accessibility Checklist
     file: docs/tasks/WEB-07-telegram-to-web-loop.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - WEB-02

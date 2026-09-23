@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Disconnect Telegram") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Disconnect Telegram?") }}</h1>
+<p>{{ _("The bot will stop accepting expenses from {name} and will no longer show your account.").format(name=telegram.display_name or _("your Telegram account")) }}</p>
+<p>{{ _("Your expenses stay. You can connect again at any time.") }}</p>
+<p class="actions">
+  <button type="button" class="button button-danger" hx-post="/settings/telegram/disconnect">{{ _("Disconnect") }}</button>
+  <a href="/settings">{{ _("Keep it connected") }}</a>
+</p>
+{% endblock %}

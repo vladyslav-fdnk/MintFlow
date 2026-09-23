@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Settings") }}{% endblock %}
+{% macro field_error(name) %}
+{% if errors.get(name) %}<p id="{{ name }}-error" class="field-error">{{ errors[name] }}</p>{% endif %}
+{% endmacro %}
+{% macro invalid(name) %}{% if errors.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{% endmacro %}
+{% block content %}
+<h1>{{ _("Settings") }}</h1>
+
+<section aria-labelledby="preferences-title">
+  <h2 id="preferences-title">{{ _("Your conventions") }}</h2>
+  <form id="preferences-form" class="form" method="post" action="/settings/preferences"
+    hx-post="/settings/preferences" hx-target="#preferences-form" hx-select="#preferences-form"
+    hx-swap="outerHTML" data-warn-unsaved data-focus-first="#preferences-form [aria-invalid], #preferences-form .form-error">
+    {% if form_error %}<p class="notice notice-error form-error" role="alert" tabindex="-1">{{ form_error }}</p>{% endif %}
+    <div class="field">
+      <label for="timezone">{{ _("Timezone") }}</label>
+      <select id="timezone" name="timezone" aria-describedby="timezone-hint{% if errors.get('timezone') %} timezone-error{% endif %}"{% if errors.get("timezone") %} aria-invalid="true"{% endif %}>
+        {% for name in timezones %}
+        <option value="{{ name }}"{% if name == form.timezone %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      <p id="timezone-hint" class="hint">{{ _("Decides what \"today\" and \"this month\" mean on your dashboard.") }}</p>
+      {{ field_error("timezone") }}
+    </div>
+    <div class="field">
+      <label for="default_currency">{{ _("Default currency") }}</label>
+      <select id="default_currency" name="default_currency" aria-describedby="currency-hint{% if errors.get('default_currency') %} default_currency-error{% endif %}"{% if errors.get("default_currency") %} aria-invalid="true"{% endif %}>
+        <option value="">{{ _("None: always ask") }}</option>
+        {% for code in currencies %}
+        <option value="{{ code }}"{% if code == form.default_currency %} selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+      <p id="currency-hint" class="hint">{{ _("Used when you type an amount without a currency. Amounts in different currencies are never converted or added together.") }}</p>
+      {{ field_error("default_currency") }}
+    </div>
+    <div class="field">
+      <label for="locale">{{ _("Number and date format") }}</label>
+      <select id="locale" name="locale"{{ invalid("locale") }}>
+        <option value="">{{ _("Automatic (English)") }}</option>
+        {% for tag, name in locales %}
+        <option value="{{ tag }}"{% if tag == form.locale %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+      {{ field_error("locale") }}
+    </div>
+    <p class="actions"><button type="submit" class="button">{{ _("Save settings") }}</button></p>
+  </form>
+</section>
+
+<section id="telegram" aria-labelledby="telegram-title">
+  <h2 id="telegram-title">{{ _("Telegram") }}</h2>
+  {% if not telegram.available %}
+  <p>{{ _("Telegram is not set up on this server.") }}</p>
+  {% elif telegram.connected %}
+  <p>{{ _("Connected as {name} since {date}.").format(name=telegram.display_name or _("your Telegram account"), date=telegram.linked_at) }}</p>
+  <p class="actions">
+    <a class="button" href="{{ telegram.bot_url }}">{{ _("Open the bot") }}</a>
+    <a href="/settings/telegram/disconnect">{{ _("Disconnect Telegram") }}</a>
+  </p>
+  {% else %}
+  <p>{{ _("Connect Telegram to add expenses by sending the bot an amount or a receipt photo.") }}</p>
+  <p class="actions">
+    <button type="button" class="button" hx-post="/settings/telegram/link" hx-target="#telegram" hx-swap="outerHTML" data-focus-target="#telegram">{{ _("Connect Telegram") }}</button>
+  </p>
+  {% endif %}
+</section>
+{% endblock %}

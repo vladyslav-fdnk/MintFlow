@@ -21,6 +21,11 @@ class Timezone:
             raise ValueError(f"unknown IANA timezone: {self.value!r}")
 
 
+def available_timezone_names() -> tuple[str, ...]:
+    """Every IANA timezone a User may choose, sorted."""
+    return tuple(sorted(_AVAILABLE_TIMEZONES))
+
+
 _LOCALE_PATTERN = re.compile(r"[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*")
 
 

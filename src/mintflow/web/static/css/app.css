@@ -438,3 +438,13 @@ td {
 .button-danger {
   background: var(--danger);
 }
+
+.steps {
+  display: grid;
+  gap: var(--space);
+  padding-left: 1.25rem;
+}
+
+.link-status {
+  margin-top: var(--space);
+}

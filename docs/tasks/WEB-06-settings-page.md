@@ -1,6 +1,6 @@
 # WEB-06 — Settings Page
 
-Status: ready
+Status: done
 
 ## Goal
 

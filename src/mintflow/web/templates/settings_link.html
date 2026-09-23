@@ -1,0 +1,12 @@
+<section id="telegram" aria-labelledby="telegram-title" tabindex="-1">
+  <h2 id="telegram-title">{{ _("Telegram") }}</h2>
+  <ol class="steps">
+    <li>{{ _("Open the bot in Telegram and press Start. The link works once, for five minutes.") }}
+      <p><a class="button" href="{{ deep_link }}" target="_blank" rel="noopener noreferrer">{{ _("Open Telegram") }}</a></p>
+    </li>
+    <li>{{ _("Come back here and confirm the account.") }}</li>
+  </ol>
+  <div class="link-status-region" aria-live="polite">
+    {% include "settings_link_status.html" %}
+  </div>
+</section>
