@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Page not found") if status_code == 404 else _("Something went wrong") }}{% endblock %}
+{% block navigation %}{% endblock %}
+{% block content %}
+{% if status_code == 404 %}
+<h1>{{ _("Page not found") }}</h1>
+<p>{{ _("This page does not exist, or it is not yours to see.") }}</p>
+{% elif status_code >= 500 %}
+<h1>{{ _("Something went wrong") }}</h1>
+<p>{{ _("Nothing was lost. Please try again in a moment.") }}</p>
+{% else %}
+<h1>{{ _("Something went wrong") }}</h1>
+<p>{{ _("This request could not be completed.") }}</p>
+{% endif %}
+<p><a href="/dashboard">{{ _("Go to the dashboard") }}</a></p>
+{% endblock %}

@@ -1,0 +1,138 @@
+/* MintFlow Web. Colours meet WCAG 2.2 AA contrast on their backgrounds (web design W6). */
+
+:root {
+  --text: #1a1d21;
+  --muted: #4a5360;
+  --background: #ffffff;
+  --surface: #f3f5f7;
+  --border: #c5ccd3;
+  --accent: #0b6b4f;
+  --accent-text: #ffffff;
+  --danger: #a4161a;
+  --focus: #1d4ed8;
+  --space: 1rem;
+  --radius: 0.375rem;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--background);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip-link:focus {
+  left: var(--space);
+  top: var(--space);
+  padding: 0.5rem 1rem;
+  background: var(--background);
+  z-index: 10;
+}
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem var(--space);
+  padding: 0.5rem var(--space);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.site-header ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Touch targets are at least 44 by 44 CSS pixels. */
+.site-header a,
+.link-button,
+button,
+input,
+select {
+  min-height: 44px;
+  font: inherit;
+}
+
+.site-header a,
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.75rem;
+  color: var(--text);
+  border-radius: var(--radius);
+}
+
+.site-header a[aria-current="page"] {
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+.link-button {
+  border: 0;
+  background: none;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+main {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: var(--space);
+}
+
+main:focus {
+  outline: none;
+}
+
+.status:empty {
+  display: none;
+}
+
+.status {
+  max-width: 64rem;
+  margin: var(--space) auto 0;
+  padding: 0.75rem var(--space);
+  border-left: 4px solid var(--accent);
+  background: var(--surface);
+}
+
+h1 {
+  font-size: 1.5rem;
+  margin: 0.5rem 0 var(--space);
+}

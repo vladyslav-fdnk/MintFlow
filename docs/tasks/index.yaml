@@ -417,13 +417,13 @@ tasks:
   - id: WEB-01
     title: Web Foundation
     file: docs/tasks/WEB-01-web-foundation.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
   - id: WEB-02
     title: Sign-in and Sign-out Pages
     file: docs/tasks/WEB-02-sign-in-and-sign-out.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - WEB-01

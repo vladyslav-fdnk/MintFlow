@@ -1,6 +1,6 @@
 # WEB-01 — Web Foundation
 
-Status: ready
+Status: done
 
 ## Goal
 

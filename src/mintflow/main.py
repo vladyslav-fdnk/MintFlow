@@ -29,6 +29,7 @@ from mintflow.infrastructure.persistence import create_database_engine, create_s
 from mintflow.logging import configure_logging
 from mintflow.readiness import is_postgresql_ready
 from mintflow.telegram.runtime import build_telegram_runtime
+from mintflow.web import install_web
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -84,6 +85,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(capture_router)
     application.include_router(analytics_router)
     application.include_router(telegram_router)
+    install_web(application)
 
     @application.get("/health/live", tags=["health"])
     async def liveness() -> JSONResponse:
