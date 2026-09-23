@@ -1,6 +1,6 @@
 # EXPENSE-04 — Edit Expense Use Case
 
-Status: review
+Status: done
 
 ## Goal
 

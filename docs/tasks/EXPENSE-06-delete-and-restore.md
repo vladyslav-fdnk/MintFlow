@@ -1,6 +1,6 @@
 # EXPENSE-06 — Delete and Restore Expense
 
-Status: blocked
+Status: ready
 
 ## Goal
 

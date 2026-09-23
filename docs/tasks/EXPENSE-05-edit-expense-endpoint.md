@@ -1,6 +1,6 @@
 # EXPENSE-05 — Edit Expense Endpoint
 
-Status: blocked
+Status: ready
 
 ## Goal
 

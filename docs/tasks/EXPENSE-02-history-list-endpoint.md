@@ -1,6 +1,6 @@
 # EXPENSE-02 — Expense History List Endpoint
 
-Status: blocked
+Status: ready
 
 ## Goal
 

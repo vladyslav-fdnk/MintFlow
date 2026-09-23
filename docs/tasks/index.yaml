@@ -176,14 +176,14 @@ tasks:
   - id: EXPENSE-01
     title: Active-record rule and history listing query
     file: docs/tasks/EXPENSE-01-history-listing-query.md
-    status: review
+    status: done
     human_approval: approved
     depends_on: []
 
   - id: EXPENSE-02
     title: Expense history list endpoint
     file: docs/tasks/EXPENSE-02-history-list-endpoint.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - EXPENSE-01
@@ -191,14 +191,14 @@ tasks:
   - id: EXPENSE-03
     title: Expense change records
     file: docs/tasks/EXPENSE-03-expense-change-records.md
-    status: review
+    status: done
     human_approval: approved
     depends_on: []
 
   - id: EXPENSE-04
     title: Edit Expense use case
     file: docs/tasks/EXPENSE-04-edit-expense-use-case.md
-    status: review
+    status: done
     human_approval: approved
     depends_on:
       - EXPENSE-03
@@ -206,7 +206,7 @@ tasks:
   - id: EXPENSE-05
     title: Edit Expense endpoint
     file: docs/tasks/EXPENSE-05-edit-expense-endpoint.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - EXPENSE-04
@@ -214,7 +214,7 @@ tasks:
   - id: EXPENSE-06
     title: Delete and restore Expense
     file: docs/tasks/EXPENSE-06-delete-and-restore.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - EXPENSE-03
