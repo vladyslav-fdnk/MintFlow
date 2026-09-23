@@ -191,7 +191,7 @@ tasks:
   - id: EXPENSE-03
     title: Expense change records
     file: docs/tasks/EXPENSE-03-expense-change-records.md
-    status: ready
+    status: review
     human_approval: approved
     depends_on: []
 

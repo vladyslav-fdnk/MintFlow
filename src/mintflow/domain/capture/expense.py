@@ -32,9 +32,10 @@ class Expense:
     implemented here: this dataclass has no access to the draft or Receipt,
     so that check is the confirmation use case's (CAPTURE-08) job.
 
-    Known gap: post-confirmation edits are not yet paired with an audit
-    record (decision 7 selects a lightweight audit trail as eventual MVP
-    behavior). Wiring that in is left to a later task, not silently dropped.
+    Post-confirmation edits, deletions, and restorations are recorded by the
+    application layer as ``ExpenseChangeRecord`` rows written in the same
+    transaction (decision 7; docs/expense_management_design.md, D1). The
+    domain methods below only produce the new state.
     """
 
     id: UUID

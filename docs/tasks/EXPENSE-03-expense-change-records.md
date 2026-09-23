@@ -1,6 +1,6 @@
 # EXPENSE-03 — Expense Change Records
 
-Status: ready
+Status: review
 
 ## Goal
 

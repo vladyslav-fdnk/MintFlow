@@ -15,6 +15,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -329,3 +330,37 @@ Index(
     ExpenseRecord.id.desc(),
     postgresql_where=ExpenseRecord.deleted_at.is_(None),
 )
+
+
+class ExpenseChangeRecordModel(Base):
+    """Append-only change record for a confirmed Expense (design D1)."""
+
+    __tablename__ = "expense_change_records"
+    __table_args__ = (
+        CheckConstraint(
+            "change_type IN ('edited', 'deleted', 'restored')",
+            name="ck_expense_change_records_change_type",
+        ),
+        CheckConstraint(
+            "(change_type = 'edited' AND changes IS NOT NULL "
+            "AND jsonb_typeof(changes) = 'object' AND changes <> '{}'::jsonb) "
+            "OR (change_type <> 'edited' AND changes IS NULL)",
+            name="ck_expense_change_records_changes_match_type",
+        ),
+        Index("ix_expense_change_records_expense_id_occurred_at", "expense_id", "occurred_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    expense_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("expenses.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    actor_user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    change_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    changes: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
