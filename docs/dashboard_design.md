@@ -27,7 +27,7 @@ These are already decided and are not reopened here:
   spending over time, spending by category, top five merchants plus "Other", largest category,
   and largest expense. Nothing else.
 
-## 3. Proposed decisions (need approval)
+## 3. Decisions
 
 ### D1. One endpoint, one snapshot
 
@@ -72,10 +72,13 @@ combined.
 
 - The compared window is the part of the selected period up to the user's local today. A period
   entirely in the future has no comparison.
-- If the period starts on the first day of a month, the previous period covers the same day
-  offsets one month earlier, clamped to that month's length. For example, 1–23 August compares
-  with 1–23 July, and 1–31 March compares with 1–29 February in a leap year. Otherwise it is the
-  window of equal length immediately before.
+- If the compared window starts on the first day of a month and stays inside that month, the
+  previous period covers the same day offsets one month earlier, clamped to that month's length.
+  For example, 1–23 August compares with 1–23 July, and 1–31 March compares with 1–29 February
+  in a leap year. Otherwise it is the window of equal length immediately before. (Clarified
+  during DASH-01: shifting a multi-month window by one month would overlap the window itself.)
+- There is no comparison when the previous window would start before 2000, where no Expense can
+  exist.
 - The comparison is `null` when the previous period has no Expenses in the selected currency.
   The percentage is `null` when the previous total is zero, which cannot happen for positive
   amounts but is guarded anyway.

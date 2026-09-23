@@ -230,7 +230,7 @@ tasks:
   - id: DASH-01
     title: Dashboard period rules
     file: docs/tasks/DASH-01-dashboard-period-rules.md
-    status: ready
+    status: review
     human_approval: approved
     depends_on: []
 

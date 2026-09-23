@@ -1,6 +1,6 @@
 # DASH-01 — Dashboard Period Rules
 
-Status: ready
+Status: review
 
 ## Goal
 
