@@ -516,3 +516,52 @@ async def test_delete_and_restore_expense_end_to_end(
     assert sorted(change_types) == ["deleted", "restored"]
 
     application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_reconfirming_a_draft_whose_expense_was_deleted_is_rejected_until_restored(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user = _add_user(db_session)
+    secret = "K" * 43
+    _add_session(db_session, user_id=user.id, secret=secret)
+    application = _application(migrated_database_url)
+
+    draft_id = (await _request(application, "POST", "/capture/drafts", secret=secret)).json()["id"]
+    await _request(
+        application,
+        "PATCH",
+        f"/capture/drafts/{draft_id}",
+        secret=secret,
+        json={
+            "amount_minor_units": 4200,
+            "currency": "USD",
+            "transaction_date": NOW.date().isoformat(),
+        },
+    )
+    await _request(application, "POST", f"/capture/drafts/{draft_id}/ready", secret=secret)
+    confirm_path = f"/capture/drafts/{draft_id}/confirm"
+    confirm = await _request(application, "POST", confirm_path, secret=secret)
+    expense_path = f"/capture/expenses/{confirm.json()['id']}"
+
+    await _request(application, "DELETE", expense_path, secret=secret)
+    reconfirm_while_deleted = await _request(application, "POST", confirm_path, secret=secret)
+    await _request(application, "POST", f"{expense_path}/restore", secret=secret)
+    reconfirm_after_restore = await _request(application, "POST", confirm_path, secret=secret)
+
+    assert confirm.status_code == 200
+    assert reconfirm_while_deleted.status_code == 409
+    assert set(reconfirm_while_deleted.json()) == {"detail"}
+    assert reconfirm_after_restore.status_code == 200
+    assert reconfirm_after_restore.json()["id"] == confirm.json()["id"]
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(ExpenseRecord)
+            .where(ExpenseRecord.capture_draft_id == UUID(draft_id))
+        )
+        == 1
+    )
+
+    application.state.database_engine.dispose()

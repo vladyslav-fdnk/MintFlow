@@ -105,4 +105,8 @@ class ConfirmCaptureDraft:
         existing = self._expense_repository.get(expense_id=draft.expense_id, owner_id=caller_id)
         if existing is None:
             raise CaptureDraftNotConfirmable("confirmed draft has no linked expense")
+        if not existing.is_active:
+            # Returning it would present a soft-deleted Expense as financial
+            # history (EXPENSE-07); restoring it is the way back.
+            raise CaptureDraftNotConfirmable("confirmed draft's expense has been deleted")
         return existing

@@ -199,6 +199,45 @@ def test_duplicate_confirmation_returns_existing_expense_with_no_writes() -> Non
     assert draft_repository.updated is None
 
 
+def _confirmed_draft_with_expense() -> tuple[CaptureDraft, Expense]:
+    expense_id = uuid4()
+    draft = _draft(state="confirmed", expense_id=expense_id)
+    expense = replace(
+        Expense.create(
+            owner_id=OWNER,
+            money=MONEY,
+            transaction_date=TransactionDate(date(2026, 8, 6)),
+            category_key="groceries",
+            capture_draft_id=draft.id,
+            source=CaptureSource.WEB_MANUAL,
+            now=NOW,
+        ),
+        id=expense_id,
+    )
+    return draft, expense
+
+
+def test_duplicate_confirmation_of_a_deleted_expense_is_rejected_with_no_writes() -> None:
+    draft, expense = _confirmed_draft_with_expense()
+    use_case, draft_repository, expense_repository = _use_case(
+        draft, existing_expense=expense.delete(now=NOW)
+    )
+
+    with pytest.raises(CaptureDraftNotConfirmable, match="deleted"):
+        use_case.execute(draft_id=draft.id, caller_id=OWNER)
+    assert expense_repository.created is None
+    assert draft_repository.updated is None
+
+
+def test_duplicate_confirmation_of_a_restored_expense_returns_it_again() -> None:
+    draft, expense = _confirmed_draft_with_expense()
+    restored = expense.delete(now=NOW).restore(now=NOW + timedelta(minutes=1))
+    use_case, _draft_repository, expense_repository = _use_case(draft, existing_expense=restored)
+
+    assert use_case.execute(draft_id=draft.id, caller_id=OWNER) is restored
+    assert expense_repository.created is None
+
+
 def test_rejects_a_caller_who_is_not_the_owner() -> None:
     draft = _draft()
     use_case, draft_repository, expense_repository = _use_case(draft)

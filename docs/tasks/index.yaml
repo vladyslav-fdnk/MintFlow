@@ -222,7 +222,7 @@ tasks:
   - id: EXPENSE-07
     title: Reject re-confirming a draft whose Expense was deleted
     file: docs/tasks/EXPENSE-07-reject-reconfirming-a-deleted-expense.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - EXPENSE-06

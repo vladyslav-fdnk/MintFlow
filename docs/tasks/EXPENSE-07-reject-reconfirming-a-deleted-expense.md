@@ -1,6 +1,6 @@
 # EXPENSE-07 — Reject Re-confirming a Draft Whose Expense Was Deleted
 
-Status: ready
+Status: done
 
 ## Goal
 
