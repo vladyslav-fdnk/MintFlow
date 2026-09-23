@@ -11,7 +11,6 @@ from urllib.parse import urlencode
 
 from babel import Locale as BabelLocale
 from fastapi import APIRouter, Request
-from starlette.datastructures import QueryParams
 from starlette.responses import Response
 
 from mintflow.application.analytics import (
@@ -45,7 +44,7 @@ from mintflow.web.formatting import (
     format_short_date,
     ngettext,
 )
-from mintflow.web.pages import PagePrincipalDependency, SignInRequired
+from mintflow.web.pages import PagePrincipalDependency, SignInRequired, non_empty_params
 from mintflow.web.rendering import render
 
 DASHBOARD_PATH: Final = "/dashboard"
@@ -329,11 +328,6 @@ class Onboarding:
 # --- route ------------------------------------------------------------------------------------
 
 
-def _filters(request: Request) -> QueryParams:
-    # An emptied form field means "not set", not an invalid value.
-    return QueryParams([(key, value) for key, value in request.query_params.multi_items() if value])
-
-
 @router.get(DASHBOARD_PATH)
 async def dashboard_page(
     request: Request,
@@ -341,7 +335,7 @@ async def dashboard_page(
     build_dashboard: BuildDashboardDependency,
     session: DatabaseSession,
 ) -> Response:
-    query = parse_dashboard_params(_filters(request))
+    query = parse_dashboard_params(non_empty_params(request))
     invalid = query is None
     try:
         dashboard = build_dashboard.execute(

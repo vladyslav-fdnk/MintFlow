@@ -344,3 +344,47 @@ td {
   height: 0.5rem;
   background: var(--surface);
 }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.history td,
+.history th {
+  text-align: left;
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
+.history .amount {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.history td a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.load-more {
+  display: flex;
+  align-items: center;
+  gap: var(--space);
+  margin-top: var(--space);
+}
+
+/* htmx's own indicator styles are disabled by the CSP-friendly config; these replace them. */
+.htmx-indicator {
+  display: none;
+}
+
+.htmx-request .htmx-indicator,
+.htmx-request.htmx-indicator {
+  display: inline;
+}

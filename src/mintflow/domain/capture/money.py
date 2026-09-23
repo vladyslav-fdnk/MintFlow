@@ -31,6 +31,11 @@ _CURRENCY_CATALOGUE: Final[dict[str, _CurrencyMetadata]] = {
 }
 
 
+def supported_currency_codes() -> tuple[str, ...]:
+    """Every currency MintFlow accepts, in catalogue order."""
+    return tuple(_CURRENCY_CATALOGUE)
+
+
 @dataclass(frozen=True, slots=True)
 class CurrencyCode:
     """A validated ISO 4217 alphabetic currency code.

@@ -22,13 +22,22 @@
     }
   });
 
-  // After a partial update, move focus to the updated region so keyboard and screen-reader
-  // users land on the new content (web design W6).
+  // After a partial update, move focus to the new content so keyboard and screen-reader users
+  // land on it (web design W6): the last element matching data-focus-target, which for
+  // appended pages is the first row of the newest page.
   document.addEventListener("htmx:afterSettle", function (event) {
     const selector = event.detail.elt.dataset && event.detail.elt.dataset.focusTarget;
-    const target = selector ? document.querySelector(selector) : null;
-    if (target) {
-      target.focus();
+    const matches = selector ? document.querySelectorAll(selector) : [];
+    if (matches.length > 0) {
+      matches[matches.length - 1].focus();
+    }
+  });
+
+  // A failed request leaves the page as it was and says so in the status region.
+  document.addEventListener("htmx:responseError", function () {
+    const status = document.getElementById("status");
+    if (status) {
+      status.textContent = "Something went wrong. Please try again.";
     }
   });
 

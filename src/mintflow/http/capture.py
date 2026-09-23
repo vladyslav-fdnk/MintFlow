@@ -8,6 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from starlette.datastructures import QueryParams
 
 from mintflow.application.capture import (
     MAX_HISTORY_PAGE_SIZE,
@@ -281,7 +282,11 @@ def parse_expense_history_query(request: Request) -> ExpenseHistoryQuery | None:
     Deliberately not FastAPI query validation: its 422 body echoes the
     offending values, while every capture error is generic.
     """
-    params = request.query_params
+    return parse_expense_history_params(request.query_params)
+
+
+def parse_expense_history_params(params: QueryParams) -> ExpenseHistoryQuery | None:
+    """The rules of ``parse_expense_history_query``, for callers that prepare the parameters."""
     if not set(params.keys()) <= _HISTORY_QUERY_PARAMETERS:
         return None
     single: dict[str, str | None] = {}

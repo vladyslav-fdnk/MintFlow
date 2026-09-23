@@ -9,6 +9,7 @@ from typing import Annotated, Final
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
+from starlette.datastructures import QueryParams
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import PlainTextResponse, Response
 
@@ -42,6 +43,11 @@ async def get_page_principal(
 
 
 PagePrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_page_principal)]
+
+
+def non_empty_params(request: Request) -> QueryParams:
+    """The query without empty values: an emptied form field means "not set", not invalid."""
+    return QueryParams([(key, value) for key, value in request.query_params.multi_items() if value])
 
 
 def wants_html_error(request: Request) -> bool:

@@ -1,6 +1,6 @@
 # WEB-05 — Expense Detail, Edit, Delete, and Restore
 
-Status: blocked
+Status: ready
 
 ## Goal
 

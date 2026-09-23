@@ -1,6 +1,6 @@
 # WEB-04 — Expense History Page
 
-Status: ready
+Status: done
 
 ## Goal
 

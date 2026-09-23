@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Expenses") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Expenses") }}</h1>
+
+<form class="filters" method="get" action="/expenses">
+  <fieldset>
+    <legend>{{ _("Filter expenses") }}</legend>
+    <div class="field">
+      <label for="date_from">{{ _("From") }}</label>
+      <input id="date_from" name="date_from" type="date" value="{{ view.date_from }}">
+    </div>
+    <div class="field">
+      <label for="date_to">{{ _("To") }}</label>
+      <input id="date_to" name="date_to" type="date" value="{{ view.date_to }}">
+    </div>
+    <div class="field">
+      <label for="category">{{ _("Category") }}</label>
+      <select id="category" name="category">
+        <option value="">{{ _("All categories") }}</option>
+        {% for key, name in view.category_options %}
+        <option value="{{ key }}"{% if key == view.category %} selected{% endif %}>{{ name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="currency">{{ _("Currency") }}</label>
+      <select id="currency" name="currency">
+        <option value="">{{ _("All currencies") }}</option>
+        {% for code in view.currency_options %}
+        <option value="{{ code }}"{% if code == view.currency %} selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="button">{{ _("Show") }}</button>
+  </fieldset>
+  {% if view.filtered %}<p><a href="/expenses">{{ _("Clear filters") }}</a></p>{% endif %}
+</form>
+
+{% if invalid_filters %}
+<p class="notice notice-error" role="alert">{{ _("Those filters are not valid, so all expenses are shown. The start date must not be after the end date.") }}</p>
+{% endif %}
+{% if view.continued %}
+<p><a href="/expenses">{{ _("Back to the newest expenses") }}</a></p>
+{% endif %}
+
+{% if view.rows %}
+<table class="history">
+  <caption class="visually-hidden">{{ _("Expenses, newest first") }}</caption>
+  <thead>
+    <tr>
+      <th scope="col">{{ _("Date") }}</th>
+      <th scope="col">{{ _("Merchant") }}</th>
+      <th scope="col">{{ _("Category") }}</th>
+      <th scope="col" class="amount">{{ _("Amount") }}</th>
+    </tr>
+  </thead>
+  <tbody id="expense-rows">
+    {% for row in view.rows %}
+    <tr{% if loop.first %} data-page-first{% endif %}>
+      <td><a href="{{ row.href }}">{{ row.date }}</a></td>
+      <td>{% if row.merchant %}{{ row.merchant }}{% else %}<span class="muted">{{ _("No merchant") }}</span>{% endif %}</td>
+      <td>{{ row.category }}</td>
+      <td class="amount">{{ row.amount }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% elif view.filtered %}
+<p>{{ _("No expenses match these filters.") }}</p>
+{% else %}
+<p>{{ _("No expenses yet. Send the bot an amount or a receipt photo to add one.") }}</p>
+{% endif %}
+
+<div id="load-more" class="load-more">
+  {% if view.next_href %}
+  <a class="button" href="{{ view.next_href }}"
+    hx-get="{{ view.next_href }}" hx-target="#expense-rows" hx-select="#expense-rows > tr"
+    hx-swap="beforeend" hx-select-oob="#load-more" hx-indicator="#loading"
+    data-focus-target="#expense-rows [data-page-first] a">{{ _("Load more") }}</a>
+  <span id="loading" class="htmx-indicator">{{ _("Loading…") }}</span>
+  {% endif %}
+</div>
+{% endblock %}
