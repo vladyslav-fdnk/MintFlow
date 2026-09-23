@@ -1,8 +1,8 @@
-# All earlier sprints (user-foundation through telegram-client, plus maintenance) are
-# complete. receipt-recognition is the active sprint: receipt photos in Telegram, background
-# recognition, and the shared review card (MVP sections 5 and 7). Its design
-# (docs/receipt_recognition_design.md) is approved; the provider must be free (R1).
-sprint: receipt-recognition
+# All earlier sprints are complete except RCPT-07, which waits for consented sample receipts
+# to run the Azure evaluation. web-client is the active sprint: the server-rendered Web Client
+# (Jinja2 and htmx) for sign-in, dashboard, history, expense editing, and settings (MVP sections
+# 3 and 6). Its design (docs/web_client_design.md) is approved.
+sprint: web-client
 
 tasks:
   - id: AUTH-03
@@ -414,3 +414,55 @@ tasks:
     human_approval: approved
     depends_on:
       - RCPT-02
+  - id: WEB-01
+    title: Web Foundation
+    file: docs/tasks/WEB-01-web-foundation.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+  - id: WEB-02
+    title: Sign-in and Sign-out Pages
+    file: docs/tasks/WEB-02-sign-in-and-sign-out.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - WEB-01
+  - id: WEB-03
+    title: Dashboard Page
+    file: docs/tasks/WEB-03-dashboard-page.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - WEB-01
+  - id: WEB-04
+    title: Expense History Page
+    file: docs/tasks/WEB-04-expense-history-page.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - WEB-01
+  - id: WEB-05
+    title: Expense Detail, Edit, Delete, and Restore
+    file: docs/tasks/WEB-05-expense-detail-edit-delete.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - WEB-04
+  - id: WEB-06
+    title: Settings Page
+    file: docs/tasks/WEB-06-settings-page.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - WEB-01
+  - id: WEB-07
+    title: Telegram-to-Web Loop and Accessibility Checklist
+    file: docs/tasks/WEB-07-telegram-to-web-loop.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - WEB-02
+      - WEB-03
+      - WEB-04
+      - WEB-05
+      - WEB-06
