@@ -32,6 +32,7 @@ from mintflow.telegram.capture_flow import (
     RECENT_ACTION,
     ManualCaptureFlow,
     draft_action,
+    telegram_accepts_link,
 )
 from mintflow.telegram.outgoing import CallbackAnswer, EditMessage, Outgoing, Reply
 from mintflow.telegram.receipt_intake import ReceiptUpload
@@ -141,7 +142,11 @@ class FakeHistory:
 
 class Harness:
     def __init__(
-        self, *, default_currency: CurrencyCode | None = EUR, timezone: str = "UTC"
+        self,
+        *,
+        default_currency: CurrencyCode | None = EUR,
+        timezone: str = "UTC",
+        web_origin: str = "https://app.mintflow.test",
     ) -> None:
         self.user = User.create(
             now=NOW, timezone=Timezone(timezone), default_currency=default_currency
@@ -158,7 +163,7 @@ class Harness:
             confirm=self.confirmer,
             history=self.history,
             receipts=self.receipts,
-            web_origin="https://app.mintflow.test",
+            web_origin=web_origin,
             clock=lambda: NOW,
         )
 
@@ -816,3 +821,56 @@ def test_a_late_result_waits_while_the_user_decides_about_another_photo() -> Non
     _send_photo(harness, "second-photo")
 
     assert _late_result(harness) == []
+
+
+# --- links Telegram accepts -------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("url", "accepted"),
+    [
+        ("https://app.mintflow.test", True),
+        ("https://mintflow.example.com/path", True),
+        ("http://localhost:8000", False),
+        ("http://127.0.0.1:8000", False),
+        ("http://[::1]:8000", False),
+        ("http://intranet:8000", False),
+        ("ftp://files.example.com", False),
+    ],
+)
+def test_only_links_telegram_accepts_become_buttons(url: str, accepted: bool) -> None:
+    assert telegram_accepts_link(url) is accepted
+
+
+def _url_buttons(outgoing: list[Outgoing]) -> list[str]:
+    return [
+        str(button.url)
+        for item in outgoing
+        if isinstance(item, (Reply, EditMessage)) and item.keyboard is not None
+        for row in item.keyboard
+        for button in row
+        if button.url is not None
+    ]
+
+
+@pytest.mark.parametrize(
+    ("origin", "links"),
+    [
+        ("https://app.mintflow.test", ["https://app.mintflow.test"]),
+        # Telegram refuses a whole message with a localhost button, leaving the card unchanged.
+        ("http://localhost:8000", []),
+    ],
+)
+def test_saving_offers_the_web_only_when_telegram_can_link_to_it(
+    origin: str, links: list[str]
+) -> None:
+    harness = Harness(web_origin=origin)
+    harness.to_review()
+
+    saved = harness.press("confirm")
+
+    assert _url_buttons(saved) == links
+    assert [card.text.startswith("Saved") for card in saved if isinstance(card, EditMessage)] == [
+        True
+    ]
+    assert _url_buttons(harness.command("/recent")) == links

@@ -14,7 +14,9 @@ draft id, so a button on an old card can never act on a different draft.
 from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from ipaddress import ip_address
 from typing import Final, Protocol
+from urllib.parse import urlsplit
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
@@ -317,7 +319,7 @@ class ManualCaptureFlow:
         page = self._history.list_history(
             owner_id=user.id, history_filter=ExpenseHistoryFilter(), limit=RECENT_LIMIT
         )
-        keyboard: InlineKeyboard = ((InlineButton("Open MintFlow", url=self._web_origin),),)
+        keyboard: InlineKeyboard | None = self._open_web_rows() or None
         if not page.items:
             return Reply(chat_id, messages.NO_RECENT, keyboard)
         names = {category.key: category.name for category in self._categories.list_active()}
@@ -695,8 +697,31 @@ class ManualCaptureFlow:
                 InlineButton("Add another", callback_data=ADD_ACTION),
                 InlineButton("Recent", callback_data=RECENT_ACTION),
             ),
-            (InlineButton("Open MintFlow", url=self._web_origin),),
+            *self._open_web_rows(),
         )
+
+    def _open_web_rows(self) -> InlineKeyboard:
+        """The "Open MintFlow" button, when Telegram will accept the Web origin as a link."""
+        if not telegram_accepts_link(self._web_origin):
+            return ()
+        return ((InlineButton("Open MintFlow", url=self._web_origin),),)
+
+
+def telegram_accepts_link(url: str) -> bool:
+    """Whether Telegram accepts ``url`` in a button: a named host, not localhost or an IP.
+
+    Telegram rejects the whole message (400) when one button has such a link, so a local
+    development origin like ``http://localhost:8000`` must not become a button.
+    """
+    parts = urlsplit(url)
+    host = parts.hostname or ""
+    if parts.scheme not in {"http", "https"} or host == "localhost" or "." not in host:
+        return False
+    try:
+        ip_address(host)
+    except ValueError:
+        return True
+    return False
 
 
 def _fields(draft: CaptureDraft) -> tuple[object, ...]:
