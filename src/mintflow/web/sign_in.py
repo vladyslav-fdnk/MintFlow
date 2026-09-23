@@ -7,9 +7,7 @@ account exists: a well-formed address always leads to the same "check your email
 address that is not an email at all gets a field error, which reveals nothing about accounts.
 """
 
-from dataclasses import dataclass
 from typing import Annotated, Final
-from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.responses import Response
@@ -26,6 +24,7 @@ from mintflow.http.authentication import (
     has_approved_login_origin,
 )
 from mintflow.web.formatting import _
+from mintflow.web.forms import read_form
 from mintflow.web.pages import SIGN_IN_PATH
 from mintflow.web.rendering import redirect, render
 
@@ -54,28 +53,9 @@ OptionalPrincipalDependency = Annotated[
 ]
 
 
-@dataclass(frozen=True, slots=True)
-class _SignInForm:
-    email: str
-
-
-async def _parse_form(request: Request) -> _SignInForm | None:
-    content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
-    if content_type != "application/x-www-form-urlencoded":
-        return None
-    body = bytearray()
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > MAX_SIGN_IN_BODY_BYTES:
-            return None
-        body.extend(chunk)
-    try:
-        fields = parse_qs(body.decode("utf-8"), keep_blank_values=True, strict_parsing=True)
-    except (UnicodeDecodeError, ValueError):
-        return None
-    emails = fields.get("email", [])
-    if set(fields) != {"email"} or len(emails) != 1:
-        return None
-    return _SignInForm(email=emails[0])
+async def _submitted_email(request: Request) -> str | None:
+    form = await read_form(request, fields={"email"}, max_bytes=MAX_SIGN_IN_BODY_BYTES)
+    return form.get("email") if form is not None else None
 
 
 def _form(*, email: str = "", error: str | None = None, status_code: int = 200) -> Response:
@@ -105,20 +85,20 @@ async def request_sign_in_link(
         request=request, approved_origin=runtime.link_builder.web_origin
     ):
         return render("error.html", {"status_code": 403}, status_code=403)
-    submitted = await _parse_form(request)
-    if submitted is None or len(submitted.email) > MAX_SUBMITTED_EMAIL_LENGTH:
+    email = await _submitted_email(request)
+    if email is None or len(email) > MAX_SUBMITTED_EMAIL_LENGTH:
         return _form(error=_("Enter your email address."), status_code=400)
     # The use case records the attempt and sends nothing for an invalid address.
     use_cases.request_magic_link.execute(
-        submitted_email=submitted.email,
+        submitted_email=email,
         normalized_network_source=network_source.value,
         return_target=SIGN_IN_RETURN_TARGET,
     )
     try:
-        normalize_email(submitted.email)
+        normalize_email(email)
     except InvalidEmailError:
         return _form(
-            email=submitted.email,
+            email=email,
             error=_("Enter an email address like name@example.com."),
             status_code=400,
         )

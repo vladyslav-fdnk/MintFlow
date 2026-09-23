@@ -388,3 +388,53 @@ td {
 .htmx-request.htmx-indicator {
   display: inline;
 }
+
+.details {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0 0 var(--space);
+}
+
+.details dt {
+  color: var(--muted);
+}
+
+.details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space);
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space);
+}
+
+.field textarea {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--muted);
+  border-radius: var(--radius);
+  font: inherit;
+}
+
+.field textarea[aria-invalid="true"],
+.field select[aria-invalid="true"] {
+  border: 2px solid var(--danger);
+}
+
+.button-secondary {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--muted);
+}
+
+.button-danger {
+  background: var(--danger);
+}

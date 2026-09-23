@@ -444,14 +444,14 @@ tasks:
   - id: WEB-05
     title: Expense Detail, Edit, Delete, and Restore
     file: docs/tasks/WEB-05-expense-detail-edit-delete.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - WEB-04
   - id: WEB-06
     title: Settings Page
     file: docs/tasks/WEB-06-settings-page.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - WEB-01

@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Expense") }}{% endblock %}
+{% block content %}
+<p><a href="/expenses">{{ _("Back to expenses") }}</a></p>
+<h1>{{ expense.merchant or _("Expense") }}</h1>
+<dl class="details">
+  <div><dt>{{ _("Amount") }}</dt><dd>{{ expense.amount }}</dd></div>
+  <div><dt>{{ _("Date") }}</dt><dd>{{ expense.date }}</dd></div>
+  <div><dt>{{ _("Merchant") }}</dt><dd>{% if expense.merchant %}{{ expense.merchant }}{% else %}<span class="muted">{{ _("None") }}</span>{% endif %}</dd></div>
+  <div><dt>{{ _("Category") }}</dt><dd>{{ expense.category }}</dd></div>
+  {% if expense.note %}<div><dt>{{ _("Note") }}</dt><dd>{{ expense.note }}</dd></div>{% endif %}
+  <div><dt>{{ _("Added from") }}</dt><dd>{{ expense.source }}</dd></div>
+  <div><dt>{{ _("Confirmed") }}</dt><dd>{{ expense.confirmed }}</dd></div>
+  {% if expense.changed %}<div><dt>{{ _("Last changed") }}</dt><dd>{{ expense.changed }}</dd></div>{% endif %}
+</dl>
+<p class="actions">
+  <a class="button" href="/expenses/{{ expense.id }}/edit">{{ _("Edit") }}</a>
+  <a class="button button-secondary" href="/expenses/{{ expense.id }}/delete">{{ _("Delete") }}</a>
+</p>
+{% endblock %}

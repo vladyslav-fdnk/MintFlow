@@ -1,6 +1,6 @@
 # WEB-06 — Settings Page
 
-Status: blocked
+Status: ready
 
 ## Goal
 

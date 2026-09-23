@@ -5,18 +5,20 @@ never a symbol that could be ambiguous. Separators follow the user's locale; an 
 locale falls back to English.
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Final
+from zoneinfo import ZoneInfo
 
 from babel import Locale as BabelLocale
 from babel import UnknownLocaleError
 from babel.dates import format_date as babel_format_date
+from babel.dates import format_datetime as babel_format_datetime
 from babel.dates import format_interval, format_skeleton
 from babel.numbers import format_decimal, format_percent
 
 from mintflow.domain.capture import CurrencyCode, Money
-from mintflow.domain.user import Locale
+from mintflow.domain.user import Locale, Timezone
 
 DEFAULT_LOCALE: Final = "en"
 # Keeps an amount and its currency code on one line.
@@ -52,6 +54,13 @@ def format_amount(minor_units: int, currency: CurrencyCode, locale: BabelLocale)
 
 def format_date(value: date, locale: BabelLocale) -> str:
     return babel_format_date(value, format="medium", locale=locale)
+
+
+def format_datetime(value: datetime, timezone: Timezone, locale: BabelLocale) -> str:
+    """A moment, shown in the user's timezone."""
+    return babel_format_datetime(
+        value, format="medium", tzinfo=ZoneInfo(timezone.value), locale=locale
+    )
 
 
 def format_short_date(value: date, locale: BabelLocale) -> str:

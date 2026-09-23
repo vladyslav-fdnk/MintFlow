@@ -84,6 +84,11 @@ def redirect(url: str) -> RedirectResponse:
     return RedirectResponse(url, status_code=303, headers=PAGE_HEADERS)
 
 
+def htmx_redirect(url: str) -> Response:
+    """After an htmx mutation: the browser navigates to ``url`` (the ``HX-Redirect`` header)."""
+    return Response(status_code=200, headers={**PAGE_HEADERS, "HX-Redirect": url})
+
+
 class WebStaticFiles(StaticFiles):
     """Static files with the common headers; versioned URLs are cached for a year."""
 

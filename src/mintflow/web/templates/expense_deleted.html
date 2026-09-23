@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Expense deleted") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Expense deleted") }}</h1>
+<p>{{ _("It no longer counts in your history or dashboard.") }}</p>
+<p class="actions">
+  <button type="button" class="button" hx-post="/expenses/{{ expense_id }}/restore">{{ _("Undo") }}</button>
+  <a href="/expenses">{{ _("Back to expenses") }}</a>
+</p>
+{% endblock %}

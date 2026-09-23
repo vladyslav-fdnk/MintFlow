@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Delete expense") }}{% endblock %}
+{% block content %}
+<h1>{{ _("Delete this expense?") }}</h1>
+<p>{{ expense.amount }} · {{ expense.date }}{% if expense.merchant %} · {{ expense.merchant }}{% endif %}</p>
+<p>{{ _("It will disappear from your history and dashboard. You can undo this right after.") }}</p>
+<p class="actions">
+  <button type="button" class="button button-danger" hx-post="/expenses/{{ expense.id }}/delete">{{ _("Delete expense") }}</button>
+  <a href="/expenses/{{ expense.id }}">{{ _("Keep it") }}</a>
+</p>
+{% endblock %}

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Edit expense") }}{% endblock %}
+{% macro field_error(name) %}
+{% if errors.get(name) %}<p id="{{ name }}-error" class="field-error">{{ errors[name] }}</p>{% endif %}
+{% endmacro %}
+{% macro invalid(name) %}{% if errors.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{% endmacro %}
+{% block content %}
+<p><a href="/expenses/{{ expense_id }}">{{ _("Back to the expense") }}</a></p>
+<h1>{{ _("Edit expense") }}</h1>
+<form id="edit-form" class="form" method="post" action="/expenses/{{ expense_id }}/edit"
+  hx-post="/expenses/{{ expense_id }}/edit" hx-target="#edit-form" hx-select="#edit-form"
+  hx-swap="outerHTML" data-warn-unsaved data-focus-first="#edit-form [aria-invalid], #edit-form .form-error">
+  {% if form_error %}<p class="notice notice-error form-error" role="alert" tabindex="-1">{{ form_error }}</p>{% endif %}
+  {% if errors %}<p class="notice notice-error" role="alert">{{ _("Please correct the highlighted fields.") }}</p>{% endif %}
+  {% for name in ["amount", "currency", "transaction_date", "merchant", "category_key", "note"] %}
+  <input type="hidden" name="{{ original_prefix ~ name }}" value="{{ original[name] }}">
+  {% endfor %}
+  <div class="field-row">
+    <div class="field">
+      <label for="amount">{{ _("Amount") }}</label>
+      <input id="amount" name="amount" inputmode="decimal" autocomplete="off" required value="{{ form.amount }}"{{ invalid("amount") }}>
+      {{ field_error("amount") }}
+    </div>
+    <div class="field">
+      <label for="currency">{{ _("Currency") }}</label>
+      <select id="currency" name="currency"{{ invalid("currency") }}>
+        {% for code in currencies %}
+        <option value="{{ code }}"{% if code == form.currency %} selected{% endif %}>{{ code }}</option>
+        {% endfor %}
+      </select>
+      {{ field_error("currency") }}
+    </div>
+  </div>
+  <div class="field">
+    <label for="transaction_date">{{ _("Date") }}</label>
+    <input id="transaction_date" name="transaction_date" type="date" required value="{{ form.transaction_date }}"{{ invalid("transaction_date") }}>
+    {{ field_error("transaction_date") }}
+  </div>
+  <div class="field">
+    <label for="merchant">{{ _("Merchant or description") }}</label>
+    <input id="merchant" name="merchant" maxlength="140" autocomplete="off" value="{{ form.merchant }}" aria-describedby="merchant-hint{% if errors.get('merchant') %} merchant-error{% endif %}"{% if errors.get("merchant") %} aria-invalid="true"{% endif %}>
+    <p id="merchant-hint" class="hint">{{ _("Optional. Leave empty to remove it.") }}</p>
+    {{ field_error("merchant") }}
+  </div>
+  <div class="field">
+    <label for="category_key">{{ _("Category") }}</label>
+    <select id="category_key" name="category_key"{{ invalid("category_key") }}>
+      {% for key, name in categories %}
+      <option value="{{ key }}"{% if key == form.category_key %} selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+    {{ field_error("category_key") }}
+  </div>
+  <div class="field">
+    <label for="note">{{ _("Note") }}</label>
+    <textarea id="note" name="note" rows="3" maxlength="2000"{{ invalid("note") }}>{{ form.note }}</textarea>
+    {{ field_error("note") }}
+  </div>
+  <p class="actions">
+    <button type="submit" class="button">{{ _("Save changes") }}</button>
+    <a href="/expenses/{{ expense_id }}">{{ _("Cancel") }}</a>
+  </p>
+</form>
+{% endblock %}
