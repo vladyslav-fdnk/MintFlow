@@ -1,8 +1,8 @@
-# The user-foundation (AUTH-03..AUTH-15), capture-foundation (CAPTURE-01..CAPTURE-10),
-# expense-management (EXPENSE-01..EXPENSE-07), and dashboard (DASH-01..DASH-04) sprints are
-# complete. maintenance is the active sprint: two small fixes left over from earlier sprints
-# (test isolation from the local environment, and an accurate invalid-query message).
-sprint: maintenance
+# The user-foundation, capture-foundation, expense-management, dashboard, and maintenance
+# sprints are complete. telegram-client is the active sprint: account linking and manual capture
+# in the Telegram Client (MVP section 5). Its design (docs/telegram_client_design.md) is approved.
+# Receipt capture and recognition are the next sprint.
+sprint: telegram-client
 
 tasks:
   - id: AUTH-03
@@ -270,3 +270,75 @@ tasks:
     status: done
     human_approval: approved
     depends_on: []
+
+  - id: TG-01
+    title: Telegram Settings and Bot API Client
+    file: docs/tasks/TG-01-telegram-bot-api-client.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: TG-02
+    title: Telegram Connection and Link Challenge Persistence
+    file: docs/tasks/TG-02-telegram-link-persistence.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+
+  - id: TG-03
+    title: Telegram Linking Use Cases
+    file: docs/tasks/TG-03-telegram-linking-use-cases.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-02
+
+  - id: TG-04
+    title: Telegram Linking Web Endpoints
+    file: docs/tasks/TG-04-telegram-linking-endpoints.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-01
+      - TG-03
+
+  - id: TG-05
+    title: Telegram Webhook, Deduplication, and Dispatcher
+    file: docs/tasks/TG-05-telegram-webhook-and-dispatcher.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-01
+      - TG-03
+
+  - id: TG-06
+    title: Telegram Manual Capture Flow
+    file: docs/tasks/TG-06-telegram-manual-capture-flow.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-05
+
+  - id: TG-07
+    title: Telegram Recent History and Draft Conflicts
+    file: docs/tasks/TG-07-telegram-history-and-draft-conflicts.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-06
+
+  - id: TG-08
+    title: Telegram Retention and Draft Expiry Command
+    file: docs/tasks/TG-08-telegram-retention-and-draft-expiry.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-06
+
+  - id: TG-09
+    title: Telegram Local Long-Polling Command
+    file: docs/tasks/TG-09-telegram-local-polling.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - TG-05
