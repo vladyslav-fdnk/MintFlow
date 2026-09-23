@@ -1,3 +1,10 @@
+from mintflow.application.analytics.aggregates import (
+    AnalyticsRepository,
+    CategoryTotal,
+    CurrencyTotal,
+    DailyTotal,
+    MerchantTotal,
+)
 from mintflow.application.analytics.periods import (
     MAX_DAILY_BUCKET_PERIOD_DAYS,
     MAX_PERIOD_DAYS,
@@ -12,6 +19,11 @@ from mintflow.application.analytics.periods import (
 )
 
 __all__ = [
+    "AnalyticsRepository",
+    "CategoryTotal",
+    "CurrencyTotal",
+    "DailyTotal",
+    "MerchantTotal",
     "MAX_DAILY_BUCKET_PERIOD_DAYS",
     "MAX_PERIOD_DAYS",
     "BucketGranularity",

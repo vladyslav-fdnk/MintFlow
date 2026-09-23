@@ -52,7 +52,7 @@ def _record_values(expense: Expense) -> dict[str, object]:
     }
 
 
-def _to_domain(record: ExpenseRecord) -> Expense:
+def expense_from_record(record: ExpenseRecord) -> Expense:
     return Expense(
         id=record.id,
         owner_id=record.owner_id,
@@ -119,13 +119,13 @@ class SqlAlchemyExpenseRepository:
                 ExpenseRecord.owner_id == owner_id,
             )
         )
-        return _to_domain(record) if record is not None else None
+        return expense_from_record(record) if record is not None else None
 
     def get_active(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         record = self._session.scalar(
             select_active_expenses(owner_id).where(ExpenseRecord.id == expense_id)
         )
-        return _to_domain(record) if record is not None else None
+        return expense_from_record(record) if record is not None else None
 
     def get_active_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         """Lock the owner's active Expense row for a caller-managed transaction.
@@ -137,7 +137,7 @@ class SqlAlchemyExpenseRepository:
         record = self._session.scalar(
             select_active_expenses(owner_id).where(ExpenseRecord.id == expense_id).with_for_update()
         )
-        return _to_domain(record) if record is not None else None
+        return expense_from_record(record) if record is not None else None
 
     def get_owned_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         """Lock an owned Expense in any deletion state, for delete and restore only.
@@ -150,7 +150,7 @@ class SqlAlchemyExpenseRepository:
             .where(ExpenseRecord.id == expense_id, ExpenseRecord.owner_id == owner_id)
             .with_for_update()
         )
-        return _to_domain(record) if record is not None else None
+        return expense_from_record(record) if record is not None else None
 
     def list_history(
         self,
@@ -203,7 +203,7 @@ class SqlAlchemyExpenseRepository:
         ).limit(limit + 1)
 
         records = self._session.scalars(statement).all()
-        items = tuple(_to_domain(record) for record in records[:limit])
+        items = tuple(expense_from_record(record) for record in records[:limit])
         next_position = ExpenseHistoryPosition.after(items[-1]) if len(records) > limit else None
         return ExpenseHistoryPage(items=items, next_position=next_position)
 
@@ -211,7 +211,7 @@ class SqlAlchemyExpenseRepository:
         record = self._session.scalar(
             select(ExpenseRecord).where(ExpenseRecord.capture_draft_id == capture_draft_id)
         )
-        return _to_domain(record) if record is not None else None
+        return expense_from_record(record) if record is not None else None
 
     def update(self, expense: Expense, *, commit: bool = True) -> None:
         """Persist a new Expense snapshot.

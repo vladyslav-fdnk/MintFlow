@@ -9,7 +9,7 @@ from mintflow.domain.capture import (
     Money,
     TransactionDate,
 )
-from mintflow.infrastructure.persistence.expenses import _to_domain, _to_record
+from mintflow.infrastructure.persistence.expenses import _to_record, expense_from_record
 
 NOW = datetime(2026, 8, 5, 12, 0, tzinfo=UTC)
 OWNER = uuid4()
@@ -37,7 +37,7 @@ def test_round_trips_a_fully_populated_expense() -> None:
         receipt_id=uuid4(),
     )
 
-    restored = _to_domain(_to_record(expense))
+    restored = expense_from_record(_to_record(expense))
 
     assert restored == expense
 
@@ -45,7 +45,7 @@ def test_round_trips_a_fully_populated_expense() -> None:
 def test_round_trips_a_minimally_populated_expense() -> None:
     expense = _expense()
 
-    restored = _to_domain(_to_record(expense))
+    restored = expense_from_record(_to_record(expense))
 
     assert restored == expense
     assert restored.merchant is None
@@ -56,7 +56,7 @@ def test_round_trips_a_minimally_populated_expense() -> None:
 def test_round_trips_a_deleted_expense() -> None:
     deleted = _expense().delete(now=NOW)
 
-    restored = _to_domain(_to_record(deleted))
+    restored = expense_from_record(_to_record(deleted))
 
     assert restored == deleted
     assert restored.deleted_at == NOW

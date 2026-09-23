@@ -1,3 +1,4 @@
+from mintflow.infrastructure.persistence.analytics import SqlAlchemyAnalyticsRepository
 from mintflow.infrastructure.persistence.authentication_audit import (
     SqlAlchemyAuthenticationAuditAppender,
 )
@@ -27,6 +28,7 @@ from mintflow.infrastructure.persistence.users import SqlAlchemyUserRepository
 from mintflow.infrastructure.persistence.web_sessions import SqlAlchemyWebSessionRepository
 
 __all__ = [
+    "SqlAlchemyAnalyticsRepository",
     "SqlAlchemyAuthenticationAuditAppender",
     "PostgreSQLAuthenticationRateLimiter",
     "PostgreSQLAuthenticationRetentionRepository",

@@ -237,7 +237,7 @@ tasks:
   - id: DASH-02
     title: Analytics read repository
     file: docs/tasks/DASH-02-analytics-read-repository.md
-    status: ready
+    status: review
     human_approval: approved
     depends_on: []
 

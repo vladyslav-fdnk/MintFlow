@@ -1,6 +1,6 @@
 # DASH-02 — Analytics Read Repository
 
-Status: ready
+Status: review
 
 ## Goal
 
