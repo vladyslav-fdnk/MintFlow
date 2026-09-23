@@ -384,7 +384,7 @@ tasks:
   - id: RCPT-05
     title: Receipt Worker
     file: docs/tasks/RCPT-05-receipt-worker.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - RCPT-02
@@ -394,7 +394,7 @@ tasks:
   - id: RCPT-06
     title: Recognition Delay Message and Manual Fallback
     file: docs/tasks/RCPT-06-recognition-delay-and-manual-fallback.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-05

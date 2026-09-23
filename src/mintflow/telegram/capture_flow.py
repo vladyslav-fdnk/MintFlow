@@ -162,7 +162,7 @@ class ManualCaptureFlow:
             return [Reply(chat_id, messages.USE_CATEGORY_BUTTONS, self._category_keyboard(draft))]
         return [
             Reply(chat_id, messages.DRAFT_IN_PROGRESS),
-            self._review_reply(chat_id, conversation, draft),
+            self.review_reply(chat_id, conversation, draft),
         ]
 
     def on_callback(
@@ -476,6 +476,12 @@ class ManualCaptureFlow:
                 currency_is_default=currency_is_default,
                 now=now,
             )
+        if draft.state is CaptureDraftState.COLLECTING and draft.receipt_id is not None:
+            # A receipt draft asks only for what recognition could not fill (design R6).
+            if next_when_collecting is AwaitingInput.MERCHANT and draft.merchant is not None:
+                next_when_collecting = AwaitingInput.CATEGORY
+            if next_when_collecting is AwaitingInput.CATEGORY and draft.category_key is not None:
+                draft = draft.mark_ready_for_review(caller_id=user.id, now=now)
         if draft.state is CaptureDraftState.COLLECTING:
             self._drafts.update(draft, commit=False)
             conversation = conversation.waiting_for(next_when_collecting, now=now)
@@ -494,7 +500,7 @@ class ManualCaptureFlow:
         conversation = conversation.waiting_for(AwaitingInput.NOTHING, now=self._clock())
         self._drafts.update(draft, commit=False)
         self._conversations.save(conversation)
-        card = self._review_reply(chat_id, conversation, draft)
+        card = self.review_reply(chat_id, conversation, draft)
         if message_id is None:
             return [card]
         return [EditMessage(chat_id, message_id, card.text, card.keyboard)]
@@ -569,18 +575,36 @@ class ManualCaptureFlow:
             return [Reply(chat_id, messages.ASK_CATEGORY, self._category_keyboard(draft))]
         if awaiting is AwaitingInput.DATE:
             return [Reply(chat_id, messages.ASK_DATE, _date_keyboard(draft))]
-        return [self._review_reply(chat_id, conversation, draft)]
+        return [self.review_reply(chat_id, conversation, draft)]
 
-    def _review_reply(
+    def review_reply(
         self, chat_id: int, conversation: TelegramConversation, draft: CaptureDraft
     ) -> Reply:
         names = {category.key: category.name for category in self._categories.list_active()}
+        from_receipt = DraftFieldSource.RECOGNITION
+        amount_note = (
+            messages.FROM_RECEIPT_NOTE
+            if draft.amount_source is from_receipt
+            else messages.DEFAULT_CURRENCY_NOTE
+            if conversation.currency_is_default
+            else None
+        )
+        date_note = (
+            messages.FROM_RECEIPT_NOTE
+            if draft.transaction_date_source is from_receipt
+            else messages.DEFAULT_NOTE
+            if draft.transaction_date_source is DraftFieldSource.DEFAULT
+            else None
+        )
         text = messages.review_card(
             merchant=draft.merchant.value if draft.merchant is not None else None,
+            merchant_note=(
+                messages.FROM_RECEIPT_NOTE if draft.merchant_source is from_receipt else None
+            ),
             date=format_date(draft.transaction_date.value) if draft.transaction_date else "—",
-            date_is_default=draft.transaction_date_source is DraftFieldSource.DEFAULT,
+            date_note=date_note,
             amount=format_money(draft.amount) if draft.amount is not None else "—",
-            currency_is_default=conversation.currency_is_default,
+            amount_note=amount_note,
             category=names.get(draft.category_key or "", draft.category_key or "—"),
         )
 

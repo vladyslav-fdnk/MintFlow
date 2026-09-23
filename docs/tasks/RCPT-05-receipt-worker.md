@@ -1,6 +1,6 @@
 # RCPT-05 — Receipt Worker
 
-Status: ready
+Status: done
 
 ## Goal
 

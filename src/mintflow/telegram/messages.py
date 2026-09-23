@@ -81,21 +81,32 @@ CONFIRM_FAILED: Final = (
 DRAFT_IN_PROGRESS: Final = "You already have an expense in progress:"
 
 
+FROM_RECEIPT_NOTE: Final = "(from receipt)"
+DEFAULT_NOTE: Final = "(default)"
+DEFAULT_CURRENCY_NOTE: Final = "(default currency)"
+
+
 def review_card(
     *,
     merchant: str | None,
+    merchant_note: str | None = None,
     date: str,
-    date_is_default: bool,
+    date_note: str | None = None,
     amount: str,
-    currency_is_default: bool,
+    amount_note: str | None = None,
     category: str,
 ) -> str:
+    """Recognized, defaulted, and typed values are told apart by their notes (MVP section 5)."""
+
+    def line(label: str, value: str, note: str | None) -> str:
+        return f"{label}: {value}{f' {note}' if note else ''}\n"
+
     return (
         "Please review your expense:\n\n"
-        f"Merchant: {merchant or 'Not specified'}\n"
-        f"Date: {date}{' (default)' if date_is_default else ''}\n"
-        f"Amount: {amount}{' (default currency)' if currency_is_default else ''}\n"
-        f"Category: {category}\n\n"
+        + line("Merchant", merchant or "Not specified", merchant_note)
+        + line("Date", date, date_note)
+        + line("Amount", amount, amount_note)
+        + f"Category: {category}\n\n"
         "Nothing is saved until you press Confirm."
     )
 
@@ -126,4 +137,13 @@ RECEIPT_UNSUPPORTED: Final = (
 RECEIPT_TOO_LARGE: Final = "That file is too large. Please send a photo of the receipt instead."
 RECEIPT_CONFLICT: Final = (
     "You already have an expense in progress. Continue it, or discard it and use this receipt?"
+)
+
+RECEIPT_NEEDS_AMOUNT: Final = (
+    "I read your receipt but couldn't find the total. How much did you spend? "
+    "For example 12.50 or 12.50 EUR."
+)
+RECEIPT_FAILED: Final = (
+    "I couldn't read this receipt. Let's enter it manually: how much did you spend? "
+    "For example 12.50 or 12.50 EUR."
 )

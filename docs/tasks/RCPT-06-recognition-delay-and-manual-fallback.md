@@ -1,6 +1,6 @@
 # RCPT-06 — Recognition Delay Message and Manual Fallback
 
-Status: blocked
+Status: ready
 
 ## Goal
 

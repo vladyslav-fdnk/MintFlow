@@ -170,6 +170,16 @@ class SqlAlchemyCaptureDraftRepository:
         )
         return _to_domain(record) if record is not None else None
 
+    def get_for_update_by_receipt(self, *, receipt_id: UUID) -> CaptureDraft | None:
+        """Lock the draft a receipt belongs to (one receipt, one draft), for the worker."""
+        record = self._session.scalar(
+            select(CaptureDraftRecord)
+            .where(CaptureDraftRecord.receipt_id == receipt_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return _to_domain(record) if record is not None else None
+
     def update(self, draft: CaptureDraft, *, commit: bool = True) -> None:
         """Persist a new draft snapshot.
 

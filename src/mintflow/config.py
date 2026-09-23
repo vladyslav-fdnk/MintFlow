@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     telegram_bot_username: str | None = None
     telegram_webhook_secret: SecretStr | None = None
+    receipt_recognizer: Literal["fake"] | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -72,6 +73,14 @@ class Settings(BaseSettings):
             raise ValueError(
                 "Telegram webhook secret must be 1-256 letters, digits, underscores, or hyphens"
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_receipt_recognizer(self) -> "Settings":
+        """The fake recognizer reads nothing; it exists for development and tests only."""
+
+        if self.receipt_recognizer == "fake" and self.environment not in {"development", "test"}:
+            raise ValueError("the fake receipt recognizer is allowed only in development or test")
         return self
 
     @property
