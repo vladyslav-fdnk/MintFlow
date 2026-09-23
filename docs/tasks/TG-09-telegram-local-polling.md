@@ -1,6 +1,6 @@
 # TG-09 — Telegram Local Long-Polling Command
 
-Status: ready
+Status: done
 
 ## Goal
 

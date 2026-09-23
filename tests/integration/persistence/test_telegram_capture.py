@@ -13,6 +13,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import hash_token
+from mintflow.commands.telegram_polling import poll
 from mintflow.config import Settings
 from mintflow.domain.user import UserStatus
 from mintflow.http.authentication import AUTHENTICATED_SESSION_COOKIE_NAME, AuthenticationRuntime
@@ -348,4 +349,37 @@ async def test_discard_and_start_new_is_one_atomic_change(
     )
     assert active == collecting
     assert _sent_texts(bot)[-1] == messages.ASK_AMOUNT
+    application.state.database_engine.dispose()
+
+
+def test_polling_uses_the_webhook_composition_including_deduplication(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user_id = _linked_user(db_session)
+    application, _webhook_bot = _application(migrated_database_url)
+    add = TelegramUpdate.model_validate(_text("/add"))
+    poll_bot = RecordingTelegramBotApi(pending_updates=[add, add])
+    engine = create_database_engine(migrated_database_url)
+    session_factory = create_session_factory(engine)
+
+    def handle(update: TelegramUpdate) -> None:
+        with session_factory() as session:
+            _handler_for(application, session, poll_bot).handle(update)
+
+    rounds = iter([True, False])
+    try:
+        poll(poll_bot, handle, should_continue=lambda: next(rounds))
+    finally:
+        engine.dispose()
+
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(CaptureDraftRecord)
+            .where(CaptureDraftRecord.owner_id == user_id)
+        )
+        == 1
+    )
+    assert _sent_texts(poll_bot) == [messages.ASK_AMOUNT]
     application.state.database_engine.dispose()

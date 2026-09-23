@@ -338,7 +338,7 @@ tasks:
   - id: TG-09
     title: Telegram Local Long-Polling Command
     file: docs/tasks/TG-09-telegram-local-polling.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - TG-05
