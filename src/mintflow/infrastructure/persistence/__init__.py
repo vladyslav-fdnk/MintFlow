@@ -25,6 +25,7 @@ from mintflow.infrastructure.persistence.login_challenges import (
     SqlAlchemyLoginChallengeStore,
 )
 from mintflow.infrastructure.persistence.telegram_links import SqlAlchemyTelegramLinkRepository
+from mintflow.infrastructure.persistence.telegram_updates import SqlAlchemyTelegramUpdateLedger
 from mintflow.infrastructure.persistence.users import SqlAlchemyUserRepository
 from mintflow.infrastructure.persistence.web_sessions import SqlAlchemyWebSessionRepository
 
@@ -40,6 +41,7 @@ __all__ = [
     "SqlAlchemyLoginChallengeConsumer",
     "SqlAlchemyLoginChallengeStore",
     "SqlAlchemyTelegramLinkRepository",
+    "SqlAlchemyTelegramUpdateLedger",
     "SqlAlchemyUserRepository",
     "SqlAlchemyWebSessionRepository",
     "create_database_engine",

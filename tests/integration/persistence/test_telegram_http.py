@@ -1,14 +1,21 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from threading import Barrier
 from uuid import UUID
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient, Response
 from pydantic import SecretStr
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
-from mintflow.application.authentication import hash_token
-from mintflow.application.telegram import ClaimTelegramLink
+from mintflow.application.authentication import AuthenticatedWebSession, hash_token
+from mintflow.application.telegram import (
+    ClaimTelegramLink,
+    IssueTelegramLinkChallenge,
+    ResolveTelegramUser,
+)
 from mintflow.config import Settings
 from mintflow.domain.user import UserStatus
 from mintflow.http.authentication import (
@@ -18,12 +25,20 @@ from mintflow.http.authentication import (
 )
 from mintflow.infrastructure.persistence import (
     SqlAlchemyTelegramLinkRepository,
+    SqlAlchemyTelegramUpdateLedger,
+    SqlAlchemyUserRepository,
     create_database_engine,
     create_session_factory,
 )
-from mintflow.infrastructure.persistence.models import UserRecord, WebSessionRecord
+from mintflow.infrastructure.persistence.models import (
+    AuthenticationAuditRecordModel,
+    TelegramProcessedUpdateRecord,
+    UserRecord,
+    WebSessionRecord,
+)
 from mintflow.main import create_app
-from mintflow.telegram import messages
+from mintflow.telegram import TelegramUpdate, messages
+from mintflow.telegram.handler import TelegramUpdateHandler
 from mintflow.telegram.runtime import TelegramRuntime
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
@@ -195,3 +210,143 @@ async def test_another_account_cannot_see_or_confirm_the_challenge(
     assert (await owner.request("GET", "/telegram/connection")).json()["connected"] is False
     assert bot.calls == []
     application.state.database_engine.dispose()
+
+
+def _start_update(
+    update_id: int, token: str, telegram_user_id: int = TELEGRAM_USER_ID
+) -> dict[str, object]:
+    return {
+        "update_id": update_id,
+        "message": {
+            "message_id": 1,
+            "date": 0,
+            "text": f"/start {token}",
+            "from": {
+                "id": telegram_user_id,
+                "is_bot": False,
+                "first_name": "Ada",
+                "username": "ada",
+            },
+            "chat": {"id": telegram_user_id, "type": "private"},
+        },
+    }
+
+
+async def _deliver(application: FastAPI, update: dict[str, object]) -> Response:
+    transport = ASGITransport(app=application, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="https://api.mintflow.test") as client:
+        return await client.post(
+            "/telegram/webhook",
+            json=update,
+            headers={"X-Telegram-Bot-Api-Secret-Token": "hook-secret"},
+        )
+
+
+@pytest.mark.anyio
+async def test_linking_with_the_claim_delivered_through_the_webhook(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    clock = Clock()
+    application, bot = _application(migrated_database_url, clock)
+    owner = Browser(application, "R" * 43)
+    _add_account(db_session, owner.secret)
+    created = await owner.request("POST", "/telegram/link-challenges")
+    token = created.json()["deep_link"].split("?start=", 1)[1]
+
+    delivered = await _deliver(application, _start_update(1001, token))
+    redelivered = await _deliver(application, _start_update(1001, token))
+    confirmed = await owner.request(
+        "POST", f"/telegram/link-challenges/{created.json()['challenge_id']}/confirm"
+    )
+
+    assert delivered.status_code == redelivered.status_code == 200
+    assert confirmed.status_code == 200
+    texts = [call.arguments["text"] for call in bot.calls_to("send_message")]
+    assert texts == [messages.LINK_CLAIMED, messages.LINKED]
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_unlinked_senders_are_refused_and_nothing_but_the_update_id_is_stored(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    clock = Clock()
+    application, bot = _application(migrated_database_url, clock)
+    update = _start_update(2002, "unused")
+    update["message"]["text"] = "12.50 coffee"  # type: ignore[index]
+
+    response = await _deliver(application, update)
+
+    assert response.status_code == 200
+    assert [call.arguments["text"] for call in bot.calls_to("send_message")] == [
+        messages.NOT_LINKED
+    ]
+    db_session.expire_all()
+    counts = db_session.execute(
+        text(
+            "SELECT (SELECT count(*) FROM telegram_processed_updates), "
+            "(SELECT count(*) FROM capture_drafts), "
+            "(SELECT count(*) FROM telegram_link_challenges)"
+        )
+    ).one()
+    assert tuple(counts) == (1, 0, 0)
+    application.state.database_engine.dispose()
+
+
+def test_concurrent_redelivery_does_the_work_exactly_once(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    clock = Clock()
+    owner_secret = "S" * 43
+    user_id = _add_account(db_session, owner_secret)
+    web_session_id = db_session.scalar(
+        select(WebSessionRecord.id).where(WebSessionRecord.user_id == user_id)
+    )
+    assert web_session_id is not None
+    issued = IssueTelegramLinkChallenge(
+        repository=SqlAlchemyTelegramLinkRepository(db_session),
+        bot_username="mintflow_test_bot",
+        clock=clock,
+    ).execute(session=AuthenticatedWebSession(session_id=web_session_id, user_id=user_id))
+    update = TelegramUpdate.model_validate(
+        _start_update(3003, issued.deep_link.split("?start=", 1)[1])
+    )
+    bots = [RecordingTelegramBotApi(), RecordingTelegramBotApi()]
+    barrier = Barrier(2)
+
+    def deliver(index: int) -> None:
+        engine = create_database_engine(migrated_database_url)
+        session = create_session_factory(engine)()
+        links = SqlAlchemyTelegramLinkRepository(session)
+        handler = TelegramUpdateHandler(
+            ledger=SqlAlchemyTelegramUpdateLedger(session),
+            resolve_user=ResolveTelegramUser(
+                repository=links, user_repository=SqlAlchemyUserRepository(session)
+            ),
+            claim_link=ClaimTelegramLink(repository=links, clock=clock),
+            bot_api=bots[index],
+            web_origin=ORIGIN,
+            clock=clock,
+        )
+        try:
+            barrier.wait(timeout=5)
+            handler.handle(update)
+        finally:
+            session.close()
+            engine.dispose()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        list(executor.map(deliver, range(2)))
+
+    replies = [call for bot in bots for call in bot.calls_to("send_message")]
+    assert [call.arguments["text"] for call in replies] == [messages.LINK_CLAIMED]
+    db_session.expire_all()
+    assert db_session.scalar(select(func.count()).select_from(TelegramProcessedUpdateRecord)) == 1
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(AuthenticationAuditRecordModel)
+            .where(AuthenticationAuditRecordModel.event_type == "telegram_link_claimed")
+        )
+        == 1
+    )

@@ -305,7 +305,7 @@ tasks:
   - id: TG-05
     title: Telegram Webhook, Deduplication, and Dispatcher
     file: docs/tasks/TG-05-telegram-webhook-and-dispatcher.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - TG-01
@@ -314,7 +314,7 @@ tasks:
   - id: TG-06
     title: Telegram Manual Capture Flow
     file: docs/tasks/TG-06-telegram-manual-capture-flow.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - TG-05
@@ -338,7 +338,7 @@ tasks:
   - id: TG-09
     title: Telegram Local Long-Polling Command
     file: docs/tasks/TG-09-telegram-local-polling.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - TG-05

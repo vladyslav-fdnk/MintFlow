@@ -467,3 +467,13 @@ class TelegramConnectionRecord(Base):
     telegram_display_name: Mapped[str | None] = mapped_column(String(128))
     linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     unlinked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TelegramProcessedUpdateRecord(Base):
+    """One row per Telegram update whose work has committed (docs/telegram_client_design.md, T4)."""
+
+    __tablename__ = "telegram_processed_updates"
+    __table_args__ = (Index("ix_telegram_processed_updates_processed_at", "processed_at"),)
+
+    update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -1,3 +1,4 @@
+import json
 import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
@@ -16,9 +17,9 @@ from mintflow.http.authentication import (
     AuthenticationRuntime,
     get_authenticate_web_session,
 )
-from mintflow.http.telegram import get_telegram_link_repository
+from mintflow.http.telegram import get_telegram_link_repository, get_telegram_update_handler
 from mintflow.main import create_app
-from mintflow.telegram import messages
+from mintflow.telegram import TelegramUpdate, messages
 from mintflow.telegram.runtime import TelegramRuntime
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
@@ -379,3 +380,100 @@ async def test_every_route_requires_authentication(
 
     assert response.status_code == 401
     assert harness.repository.calls == []
+
+
+class RecordingHandler:
+    def __init__(self) -> None:
+        self.updates: list[int] = []
+
+    def handle(self, update: TelegramUpdate) -> None:
+        self.updates.append(update.update_id)
+
+
+def _webhook_harness(
+    settings: Settings, *, telegram_enabled: bool = True
+) -> tuple[Harness, RecordingHandler]:
+    harness = Harness(settings, telegram_enabled=telegram_enabled)
+    handler = RecordingHandler()
+    harness.application.dependency_overrides[get_telegram_update_handler] = lambda: handler
+    return harness, handler
+
+
+async def _post_webhook(harness: Harness, *, secret: str | None, body: bytes) -> Response:
+    headers = {"Content-Type": "application/json"}
+    if secret is not None:
+        headers["X-Telegram-Bot-Api-Secret-Token"] = secret
+    transport = ASGITransport(app=harness.application)
+    async with AsyncClient(transport=transport, base_url="https://api.mintflow.test") as client:
+        return await client.post("/telegram/webhook", content=body, headers=headers)
+
+
+UPDATE = json.dumps(
+    {
+        "update_id": 77,
+        "message": {
+            "message_id": 1,
+            "date": 0,
+            "text": "/help",
+            "from": {"id": 5, "is_bot": False, "first_name": "A"},
+            "chat": {"id": 5, "type": "private"},
+        },
+    }
+).encode()
+
+
+@pytest.mark.anyio
+async def test_webhook_passes_verified_updates_to_the_handler_without_cookies_or_csrf(
+    settings: Settings,
+) -> None:
+    harness, handler = _webhook_harness(settings)
+
+    response = await _post_webhook(harness, secret="hook-secret", body=UPDATE)
+
+    assert response.status_code == 200
+    assert handler.updates == [77]
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("secret", [None, "", "wrong-secret", "hook-secret-but-longer"])
+async def test_webhook_rejects_a_missing_or_wrong_secret_before_handling(
+    settings: Settings, secret: str | None
+) -> None:
+    harness, handler = _webhook_harness(settings)
+
+    response = await _post_webhook(harness, secret=secret, body=UPDATE)
+
+    assert response.status_code == 401
+    assert handler.updates == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "body",
+    [
+        b"",
+        b"not json",
+        b"[]",
+        b'{"message": {}}',
+        b'{"update_id": 1, "x": "' + b"a" * 300_000 + b'"}',
+    ],
+)
+async def test_webhook_acknowledges_and_ignores_unusable_payloads(
+    settings: Settings, body: bytes
+) -> None:
+    harness, handler = _webhook_harness(settings)
+
+    response = await _post_webhook(harness, secret="hook-secret", body=body)
+
+    assert response.status_code == 200
+    assert handler.updates == []
+
+
+@pytest.mark.anyio
+async def test_webhook_is_404_when_telegram_is_not_configured(settings: Settings) -> None:
+    harness, handler = _webhook_harness(settings, telegram_enabled=False)
+
+    response = await _post_webhook(harness, secret="hook-secret", body=UPDATE)
+
+    assert response.status_code == 404
+    assert handler.updates == []

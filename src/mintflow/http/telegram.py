@@ -5,6 +5,7 @@ confirmation are scoped to the initiating Web session; any other session gets
 the same response as for an unknown challenge.
 """
 
+import hmac
 import logging
 from datetime import datetime
 from typing import Annotated, Final
@@ -15,10 +16,12 @@ from fastapi.responses import JSONResponse, Response
 
 from mintflow.application.authentication import AuthenticatedWebSession
 from mintflow.application.telegram import (
+    ClaimTelegramLink,
     ConfirmTelegramLink,
     GetTelegramConnection,
     GetTelegramLinkStatus,
     IssueTelegramLinkChallenge,
+    ResolveTelegramUser,
     TelegramConnection,
     UnlinkTelegram,
 )
@@ -29,11 +32,18 @@ from mintflow.http.authentication import (
     DatabaseSession,
     authentication_security_headers,
 )
-from mintflow.infrastructure.persistence import SqlAlchemyTelegramLinkRepository
-from mintflow.telegram import TelegramApiError, messages
+from mintflow.infrastructure.persistence import (
+    SqlAlchemyTelegramLinkRepository,
+    SqlAlchemyTelegramUpdateLedger,
+    SqlAlchemyUserRepository,
+)
+from mintflow.telegram import TelegramApiError, messages, parse_update
+from mintflow.telegram.handler import TelegramUpdateHandler
 from mintflow.telegram.runtime import TelegramRuntime
 
 GENERIC_TELEGRAM_NOT_FOUND_MESSAGE: Final = "Not found."
+TELEGRAM_SECRET_HEADER: Final = "X-Telegram-Bot-Api-Secret-Token"
+MAX_WEBHOOK_BODY_BYTES: Final = 256 * 1024
 GENERIC_TELEGRAM_LINK_FAILED_MESSAGE: Final = (
     "The Telegram account could not be connected. Please start again."
 )
@@ -176,3 +186,56 @@ async def delete_connection(
     """Unlink immediately. Unlinking when nothing is connected is also 204."""
     UnlinkTelegram(repository=repository, clock=runtime.clock).execute(user_id=principal.user_id)
     return Response(status_code=204, headers=authentication_security_headers())
+
+
+async def get_telegram_update_handler(
+    session: DatabaseSession, runtime: TelegramRuntimeDependency
+) -> TelegramUpdateHandler:
+    links = SqlAlchemyTelegramLinkRepository(session)
+    return TelegramUpdateHandler(
+        ledger=SqlAlchemyTelegramUpdateLedger(session),
+        resolve_user=ResolveTelegramUser(
+            repository=links, user_repository=SqlAlchemyUserRepository(session)
+        ),
+        claim_link=ClaimTelegramLink(repository=links, clock=runtime.clock),
+        bot_api=runtime.bot_api,
+        web_origin=runtime.web_origin,
+        clock=runtime.clock,
+    )
+
+
+TelegramUpdateHandlerDependency = Annotated[
+    TelegramUpdateHandler, Depends(get_telegram_update_handler)
+]
+
+
+async def verify_webhook_secret(request: Request, runtime: TelegramRuntimeDependency) -> None:
+    """Reject anything not sent by Telegram before the body is read (design T2)."""
+    presented = request.headers.get(TELEGRAM_SECRET_HEADER, "")
+    expected = runtime.webhook_secret.get_secret_value()
+    if not hmac.compare_digest(presented.encode(), expected.encode()):
+        raise HTTPException(status_code=401, detail="Unauthorized.")
+
+
+async def _read_bounded(request: Request) -> bytes | None:
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body) + len(chunk) > MAX_WEBHOOK_BODY_BYTES:
+            return None
+        body.extend(chunk)
+    return bytes(body)
+
+
+@router.post("/webhook", dependencies=[Depends(verify_webhook_secret)])
+async def webhook(request: Request, handler: TelegramUpdateHandlerDependency) -> Response:
+    """Always 200 for a verified request, so Telegram never redelivers committed work.
+
+    Unreadable or oversized payloads are acknowledged and ignored. An unexpected
+    failure while handling propagates as 500 with nothing committed, so Telegram's
+    redelivery retries it.
+    """
+    body = await _read_bounded(request)
+    update = parse_update(body) if body is not None else None
+    if update is not None:
+        handler.handle(update)
+    return Response(status_code=200)
