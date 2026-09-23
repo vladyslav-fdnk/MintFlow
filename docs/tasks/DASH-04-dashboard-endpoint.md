@@ -1,6 +1,6 @@
 # DASH-04 — Dashboard Endpoint
 
-Status: blocked
+Status: ready
 
 ## Goal
 

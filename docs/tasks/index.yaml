@@ -244,7 +244,7 @@ tasks:
   - id: DASH-03
     title: Build Dashboard use case
     file: docs/tasks/DASH-03-build-dashboard-use-case.md
-    status: review
+    status: done
     human_approval: approved
     depends_on:
       - DASH-01
@@ -253,7 +253,7 @@ tasks:
   - id: DASH-04
     title: Dashboard endpoint
     file: docs/tasks/DASH-04-dashboard-endpoint.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - DASH-03

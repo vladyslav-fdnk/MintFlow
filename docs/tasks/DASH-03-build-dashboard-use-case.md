@@ -1,6 +1,6 @@
 # DASH-03 — Build Dashboard Use Case
 
-Status: review
+Status: done
 
 ## Goal
 
