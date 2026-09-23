@@ -451,7 +451,7 @@ def successful_magic_link_response(
 
 
 def logout_response() -> JSONResponse:
-    """Map any logout outcome to the same generic result and expire the session cookie.
+    """Map any logout outcome to the same generic result and expire the session and CSRF cookies.
 
     The outcome is uniform regardless of whether a session was found and
     revoked, was already revoked or expired, or never existed, so the
@@ -467,6 +467,13 @@ def logout_response() -> JSONResponse:
         path="/",
         secure=True,
         httponly=True,
+        samesite="lax",
+    )
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
+        path="/",
+        secure=True,
+        httponly=False,
         samesite="lax",
     )
     return response

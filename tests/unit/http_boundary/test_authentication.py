@@ -515,7 +515,7 @@ async def test_csrf_dependency_rejects_every_invalid_combination_uniformly(
 def test_logout_response_expires_exact_session_cookie_and_is_generic() -> None:
     response = logout_response()
 
-    cookie = response.headers["set-cookie"]
+    cookie, csrf_cookie = response.headers.getlist("set-cookie")
     assert response.status_code == 200
     assert response.body == b'{"message":"Signed out."}'
     assert cookie.startswith(f"{AUTHENTICATED_SESSION_COOKIE_NAME}=")
@@ -525,5 +525,12 @@ def test_logout_response_expires_exact_session_cookie_and_is_generic() -> None:
     assert "SameSite=lax" in cookie
     assert "Path=/" in cookie
     assert "Domain=" not in cookie
+    assert csrf_cookie.startswith(f"{CSRF_COOKIE_NAME}=")
+    assert "Max-Age=0" in csrf_cookie or "01 Jan 1970" in csrf_cookie
+    assert "HttpOnly" not in csrf_cookie
+    assert "Secure" in csrf_cookie
+    assert "SameSite=lax" in csrf_cookie
+    assert "Path=/" in csrf_cookie
+    assert "Domain=" not in csrf_cookie
     assert response.headers["cache-control"] == "no-store"
     assert response.headers["referrer-policy"] == "no-referrer"

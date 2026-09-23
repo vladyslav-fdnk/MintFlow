@@ -90,7 +90,7 @@ tasks:
   - id: AUTH-14
     title: Logout endpoint
     file: docs/tasks/AUTH-14-logout-endpoint.md
-    status: review
+    status: done
     depends_on:
       - AUTH-12
       - AUTH-13

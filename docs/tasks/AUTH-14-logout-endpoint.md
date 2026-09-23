@@ -1,6 +1,6 @@
 # AUTH-14 — Logout Endpoint
 
-Status: review
+Status: done
 
 **Note:** implemented using `CsrfVerifiedSessionSecretDependency` (Origin + session-bound CSRF
 token check without requiring the presented session to still authenticate) rather than the full
