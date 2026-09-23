@@ -5,6 +5,7 @@ import pytest
 from fastapi import Request
 from pydantic import ValidationError
 
+from mintflow.application.capture import UNCHANGED, ExpenseEdit
 from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
@@ -17,6 +18,7 @@ from mintflow.domain.capture import (
 from mintflow.http.capture import (
     MAX_CAPTURE_REQUEST_BODY_BYTES,
     EditCaptureDraftRequest,
+    EditExpenseRequest,
     _expense_not_found,
     _malformed,
     _not_found,
@@ -24,6 +26,7 @@ from mintflow.http.capture import (
     _to_expense_response,
     _to_response,
     parse_edit_capture_draft_request,
+    parse_edit_expense_request,
 )
 
 OWNER = uuid4()
@@ -207,3 +210,75 @@ def test_to_expense_response_handles_no_merchant() -> None:
 
     assert response.merchant is None
     assert response.note is None
+
+
+def test_expense_edit_request_with_no_fields_changes_nothing() -> None:
+    assert EditExpenseRequest.model_validate_json(b"{}").to_edit() == ExpenseEdit()
+
+
+def test_expense_edit_request_maps_every_supplied_field_to_domain_values() -> None:
+    request = EditExpenseRequest.model_validate_json(
+        b'{"amount_minor_units": 1750, "currency": "EUR", "transaction_date": "2026-08-03",'
+        b' "merchant": "  Corner   Shop ", "category_key": "health", "note": "bread"}'
+    )
+
+    assert request.to_edit() == ExpenseEdit(
+        money=Money(minor_units=1750, currency=CurrencyCode("EUR")),
+        transaction_date=TransactionDate(date(2026, 8, 3)),
+        merchant=MerchantName("Corner Shop"),
+        category_key="health",
+        note="bread",
+    )
+
+
+def test_expense_edit_request_distinguishes_absent_from_null() -> None:
+    cleared = EditExpenseRequest.model_validate_json(b'{"merchant": null, "note": null}')
+    absent = EditExpenseRequest.model_validate_json(b'{"note": "kept"}')
+
+    assert cleared.to_edit() == ExpenseEdit(merchant=None, note=None)
+    assert absent.to_edit().merchant is UNCHANGED
+    assert absent.to_edit().note == "kept"
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(b'{"amount_minor_units": null, "currency": null}', id="null money"),
+        pytest.param(b'{"transaction_date": null}', id="null date"),
+        pytest.param(b'{"category_key": null}', id="null category"),
+        pytest.param(b'{"amount_minor_units": 100}', id="amount without currency"),
+        pytest.param(b'{"currency": "USD"}', id="currency without amount"),
+        pytest.param(b'{"amount_minor_units": -1, "currency": "USD"}', id="negative amount"),
+        pytest.param(b'{"merchant": ""}', id="empty merchant"),
+        pytest.param(b'{"note": "' + b"x" * 2001 + b'"}', id="note too long"),
+        pytest.param(b'{"source": "web_manual"}', id="unknown field"),
+        pytest.param(b'{"deleted_at": null}', id="unknown nullable field"),
+        pytest.param(b"[]", id="not an object"),
+    ],
+)
+def test_expense_edit_request_rejects_malformed_bodies(body: bytes) -> None:
+    with pytest.raises(ValidationError):
+        EditExpenseRequest.model_validate_json(body)
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        pytest.param(b'{"amount_minor_units": 100, "currency": "ZZZ"}', id="unsupported currency"),
+        pytest.param(b'{"merchant": "   "}', id="blank merchant"),
+        pytest.param(b'{"transaction_date": "1999-12-31"}', id="date out of range"),
+    ],
+)
+def test_expense_edit_request_invalid_domain_values_raise_value_error(body: bytes) -> None:
+    request = EditExpenseRequest.model_validate_json(body)
+
+    with pytest.raises(ValueError):
+        request.to_edit()
+
+
+@pytest.mark.anyio
+async def test_parse_expense_edit_request_rejects_oversized_bodies() -> None:
+    body = b'{"note": "' + b"x" * MAX_CAPTURE_REQUEST_BODY_BYTES + b'"}'
+
+    assert await parse_edit_expense_request(_request_with_body(body)) is None
+    assert await parse_edit_expense_request(_request_with_body(b"not json")) is None

@@ -23,6 +23,7 @@ from mintflow.http.authentication import (
 from mintflow.http.capture import CaptureRuntime
 from mintflow.infrastructure.persistence.models import (
     CaptureDraftRecord,
+    ExpenseChangeRecordModel,
     ExpenseRecord,
     UserRecord,
     WebSessionRecord,
@@ -380,5 +381,86 @@ async def test_concurrent_double_confirm_through_real_http_routes_creates_one_ex
         )
         == 1
     )
+
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_edit_confirmed_expense_end_to_end_records_the_change(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user = _add_user(db_session)
+    secret = "H" * 43
+    _add_session(db_session, user_id=user.id, secret=secret)
+    application = _application(migrated_database_url)
+
+    draft_id = (await _request(application, "POST", "/capture/drafts", secret=secret)).json()["id"]
+    await _request(
+        application,
+        "PATCH",
+        f"/capture/drafts/{draft_id}",
+        secret=secret,
+        json={
+            "amount_minor_units": 4200,
+            "currency": "USD",
+            "transaction_date": NOW.date().isoformat(),
+            "merchant": "Coffee Shop",
+            "note": "Team lunch",
+        },
+    )
+    await _request(application, "POST", f"/capture/drafts/{draft_id}/ready", secret=secret)
+    confirm = await _request(
+        application, "POST", f"/capture/drafts/{draft_id}/confirm", secret=secret
+    )
+    expense_id = confirm.json()["id"]
+
+    rejected_csrf = await _request(
+        application,
+        "PATCH",
+        f"/capture/expenses/{expense_id}",
+        secret=secret,
+        csrf=False,
+        json={"note": "sneaky"},
+    )
+    edited = await _request(
+        application,
+        "PATCH",
+        f"/capture/expenses/{expense_id}",
+        secret=secret,
+        json={
+            "amount_minor_units": 3900,
+            "currency": "USD",
+            "merchant": None,
+            "category_key": "health",
+        },
+    )
+    view = await _request(application, "GET", f"/capture/expenses/{expense_id}", secret=secret)
+
+    assert rejected_csrf.status_code == 403
+    assert edited.status_code == 200
+    assert view.json() == edited.json()
+    assert edited.json()["note"] == "Team lunch"
+    db_session.expire_all()
+    record = db_session.get(ExpenseRecord, UUID(expense_id))
+    assert record is not None
+    assert (record.amount_minor_units, record.merchant_name, record.category_key, record.note) == (
+        3900,
+        None,
+        "health",
+        "Team lunch",
+    )
+    changes = db_session.scalars(
+        select(ExpenseChangeRecordModel).where(
+            ExpenseChangeRecordModel.expense_id == UUID(expense_id)
+        )
+    ).all()
+    assert [(change.change_type, change.actor_user_id) for change in changes] == [
+        ("edited", user.id)
+    ]
+    assert changes[0].changes == {
+        "amount_minor_units": {"old": 4200, "new": 3900},
+        "merchant": {"old": "Coffee Shop", "new": None},
+        "category_key": {"old": "uncategorized", "new": "health"},
+    }
 
     application.state.database_engine.dispose()

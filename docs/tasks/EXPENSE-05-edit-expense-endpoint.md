@@ -1,6 +1,12 @@
 # EXPENSE-05 — Edit Expense Endpoint
 
-Status: ready
+Status: review
+
+**Note:** the In-scope text said an invalid value maps to "the same generic 422 as the draft
+PATCH", but the draft PATCH actually returns 422 only for a malformed body and 409 for a
+well-formed value the domain rejects. This endpoint mirrors that real behavior: malformed body,
+unknown field, null required field, or unpaired money → 422; non-positive amount, unsupported
+currency, blank merchant, unknown or inactive category, or date beyond tolerance → 409.
 
 ## Goal
 

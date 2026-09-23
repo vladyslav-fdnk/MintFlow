@@ -9,9 +9,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from mintflow.application.capture import (
+    UNCHANGED,
     CaptureDraftAccessDenied,
     CaptureDraftNotConfirmable,
     ConfirmCaptureDraft,
+    EditExpense,
+    ExpenseEdit,
+    ExpenseEditRejected,
+    ExpenseNotFound,
+    Unchanged,
 )
 from mintflow.domain.capture import (
     CaptureDraft,
@@ -32,6 +38,7 @@ from mintflow.http.authentication import (
 from mintflow.infrastructure.persistence import (
     SqlAlchemyCaptureDraftRepository,
     SqlAlchemyCategoryRepository,
+    SqlAlchemyExpenseChangeRecordAppender,
     SqlAlchemyExpenseRepository,
     SqlAlchemyUserRepository,
 )
@@ -118,6 +125,25 @@ async def get_confirm_capture_draft(
 ConfirmCaptureDraftDependency = Annotated[ConfirmCaptureDraft, Depends(get_confirm_capture_draft)]
 
 
+async def get_edit_expense(
+    session: DatabaseSession,
+    expense_repository: ExpenseRepositoryDependency,
+    category_repository: CategoryRepositoryDependency,
+    user_repository: UserRepositoryDependency,
+    runtime: CaptureRuntimeDependency,
+) -> EditExpense:
+    return EditExpense(
+        expense_repository=expense_repository,
+        change_records=SqlAlchemyExpenseChangeRecordAppender(session),
+        category_repository=category_repository,
+        user_repository=user_repository,
+        clock=runtime.clock,
+    )
+
+
+EditExpenseDependency = Annotated[EditExpense, Depends(get_edit_expense)]
+
+
 class EditCaptureDraftRequest(BaseModel):
     """All fields optional: a client sends only what changed."""
 
@@ -135,6 +161,62 @@ class EditCaptureDraftRequest(BaseModel):
         if (self.amount_minor_units is None) != (self.currency is None):
             raise ValueError("amount_minor_units and currency must be provided together")
         return self
+
+
+_CLEARABLE_EXPENSE_FIELDS = frozenset({"merchant", "note"})
+
+
+class EditExpenseRequest(BaseModel):
+    """Partial update of a confirmed Expense (design D4).
+
+    An absent field is unchanged. Explicit ``null`` clears ``merchant`` or
+    ``note`` and is rejected for every other field. Presence is read from
+    ``model_fields_set``, which is what distinguishes absent from ``null``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    amount_minor_units: int | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    transaction_date: date | None = None
+    merchant: str | None = Field(default=None, min_length=1, max_length=MerchantName.MAX_LENGTH)
+    category_key: str | None = Field(default=None, min_length=1, max_length=32)
+    note: str | None = Field(default=None, max_length=MAX_NOTE_LENGTH)
+
+    @model_validator(mode="after")
+    def _presence_rules(self) -> "EditExpenseRequest":
+        supplied = self.model_fields_set
+        for name in supplied - _CLEARABLE_EXPENSE_FIELDS:
+            if getattr(self, name) is None:
+                raise ValueError(f"{name} cannot be null")
+        if ("amount_minor_units" in supplied) != ("currency" in supplied):
+            raise ValueError("amount_minor_units and currency must be provided together")
+        return self
+
+    def to_edit(self) -> ExpenseEdit:
+        """Build the command from domain values; raises ValueError on an invalid value.
+
+        After ``_presence_rules``, a required field is non-null exactly when
+        it was supplied, so ``None`` there means "unchanged".
+        """
+        supplied = self.model_fields_set
+        money: Money | Unchanged = UNCHANGED
+        if self.amount_minor_units is not None and self.currency is not None:
+            money = Money(minor_units=self.amount_minor_units, currency=CurrencyCode(self.currency))
+        merchant: MerchantName | None | Unchanged = UNCHANGED
+        if "merchant" in supplied:
+            merchant = MerchantName(self.merchant) if self.merchant is not None else None
+        return ExpenseEdit(
+            money=money,
+            transaction_date=(
+                TransactionDate(self.transaction_date)
+                if self.transaction_date is not None
+                else UNCHANGED
+            ),
+            merchant=merchant,
+            category_key=self.category_key if self.category_key is not None else UNCHANGED,
+            note=self.note if "note" in supplied else UNCHANGED,
+        )
 
 
 class CategoryResponse(BaseModel):
@@ -286,6 +368,16 @@ async def parse_edit_capture_draft_request(request: Request) -> EditCaptureDraft
         return None
     try:
         return EditCaptureDraftRequest.model_validate_json(body)
+    except ValidationError:
+        return None
+
+
+async def parse_edit_expense_request(request: Request) -> EditExpenseRequest | None:
+    body = await _read_bounded_body(request)
+    if body is None:
+        return None
+    try:
+        return EditExpenseRequest.model_validate_json(body)
     except ValidationError:
         return None
 
@@ -456,4 +548,34 @@ async def view_expense(
     expense = expense_repository.get_active(expense_id=expense_id, owner_id=principal.user_id)
     if expense is None:
         raise _expense_not_found()
+    return _expense_response(expense)
+
+
+@router.patch("/expenses/{expense_id}")
+async def edit_expense(
+    expense_id: UUID,
+    request: Request,
+    principal: CsrfProtectedPrincipalDependency,
+    edit_use_case: EditExpenseDependency,
+) -> JSONResponse:
+    """Correct a confirmed Expense, mirroring the draft PATCH's status codes.
+
+    A malformed body is 422; a well-formed but unacceptable value is 409.
+    Missing, foreign, and soft-deleted Expenses share the view route's 404.
+    """
+    edit_request = await parse_edit_expense_request(request)
+    if edit_request is None:
+        raise _malformed()
+    try:
+        edit = edit_request.to_edit()
+    except ValueError:
+        raise _rejected() from None
+    try:
+        expense = edit_use_case.execute(
+            expense_id=expense_id, caller_id=principal.user_id, edit=edit
+        )
+    except ExpenseNotFound:
+        raise _expense_not_found() from None
+    except ExpenseEditRejected:
+        raise _rejected() from None
     return _expense_response(expense)

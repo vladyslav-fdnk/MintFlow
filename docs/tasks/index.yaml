@@ -206,7 +206,7 @@ tasks:
   - id: EXPENSE-05
     title: Edit Expense endpoint
     file: docs/tasks/EXPENSE-05-edit-expense-endpoint.md
-    status: ready
+    status: review
     human_approval: approved
     depends_on:
       - EXPENSE-04

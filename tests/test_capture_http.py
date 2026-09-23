@@ -7,13 +7,20 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from mintflow.application.authentication import AuthenticatedWebSession
-from mintflow.application.capture import ConfirmCaptureDraft
+from mintflow.application.capture import (
+    ConfirmCaptureDraft,
+    EditExpense,
+    ExpenseChangeRecord,
+    ExpenseEdit,
+)
 from mintflow.config import Settings
 from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
+    Category,
     CurrencyCode,
     Expense,
+    MerchantName,
     Money,
     TransactionDate,
 )
@@ -29,6 +36,7 @@ from mintflow.http.capture import (
     get_capture_draft_repository,
     get_capture_runtime,
     get_confirm_capture_draft,
+    get_edit_expense,
     get_expense_repository,
 )
 from mintflow.main import create_app
@@ -88,6 +96,27 @@ class FakeExpenseRepository:
         expense = self.get(expense_id=expense_id, owner_id=owner_id)
         return expense if expense is not None and expense.is_active else None
 
+    def get_active_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
+        return self.get_active(expense_id=expense_id, owner_id=owner_id)
+
+    def update(self, expense: Expense, *, commit: bool = True) -> None:
+        self.store[expense.id] = expense
+
+
+class FakeCategoryRepository:
+    def get_by_key(self, key: str) -> Category | None:
+        if key not in {"groceries", "health", "uncategorized"}:
+            return None
+        return Category(id=uuid4(), key=key, name=key.title(), is_active=True)
+
+
+class FakeChangeRecords:
+    def __init__(self) -> None:
+        self.records: list[ExpenseChangeRecord] = []
+
+    def append(self, record: ExpenseChangeRecord) -> None:
+        self.records.append(record)
+
 
 class FakeUserRepository:
     def __init__(self, user: User) -> None:
@@ -105,6 +134,15 @@ class RecordingConfirmCaptureDraft:
 
     def execute(self, *, draft_id: UUID, caller_id: UUID) -> Expense:
         self.calls.append((draft_id, caller_id))
+        raise AssertionError("the use case must not be invoked")
+
+
+class RecordingEditExpense:
+    def __init__(self) -> None:
+        self.calls: list[tuple[UUID, UUID, ExpenseEdit]] = []
+
+    def execute(self, *, expense_id: UUID, caller_id: UUID, edit: ExpenseEdit) -> Expense:
+        self.calls.append((expense_id, caller_id, edit))
         raise AssertionError("the use case must not be invoked")
 
 
@@ -593,3 +631,222 @@ async def test_cross_owner_confirm_and_view_match_not_found(settings: Settings) 
     assert confirm_response.status_code == 404
     assert view_response.status_code == unknown_view_response.status_code == 404
     assert view_response.json() == unknown_view_response.json()
+
+
+def _app_with_edit(
+    settings: Settings,
+) -> tuple[FastAPI, FakeExpenseRepository, FakeChangeRecords, Expense]:
+    """Wire a real EditExpense over fakes, with one Expense owned by the caller."""
+    application, _draft_repository, expense_repository, owner_id = _app_with_confirm(settings)
+    user = replace(User.create(now=NOW), id=owner_id)
+    change_records = FakeChangeRecords()
+    application.dependency_overrides[get_edit_expense] = lambda: EditExpense(
+        expense_repository=expense_repository,
+        change_records=change_records,
+        category_repository=FakeCategoryRepository(),
+        user_repository=FakeUserRepository(user),
+        clock=lambda: NOW + timedelta(minutes=5),
+    )
+    expense = Expense.create(
+        owner_id=owner_id,
+        money=Money(minor_units=1500, currency=CurrencyCode("USD")),
+        transaction_date=TransactionDate(NOW.date()),
+        category_key="groceries",
+        capture_draft_id=uuid4(),
+        merchant=MerchantName("Corner Shop"),
+        note="milk",
+        source=CaptureSource.WEB_MANUAL,
+        now=NOW,
+    )
+    expense_repository.store[expense.id] = expense
+    return application, expense_repository, change_records, expense
+
+
+@pytest.mark.anyio
+async def test_edit_expense_returns_the_updated_expense_and_view_agrees(
+    settings: Settings,
+) -> None:
+    application, _expenses, change_records, expense = _app_with_edit(settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.patch(
+            f"/capture/expenses/{expense.id}",
+            cookies=_cookies(),
+            headers=_csrf_headers(application, settings),
+            json={
+                "amount_minor_units": 1750,
+                "currency": "EUR",
+                "category_key": "health",
+                "merchant": None,
+            },
+        )
+        view = await client.get(f"/capture/expenses/{expense.id}", cookies=_cookies())
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["amount_minor_units"] == 1750
+    assert body["currency"] == "EUR"
+    assert body["category_key"] == "health"
+    assert body["merchant"] is None
+    assert body["note"] == "milk"  # absent: unchanged
+    assert body["transaction_date"] == NOW.date().isoformat()
+    assert body["modified_at"] == (NOW + timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+    assert response.headers["cache-control"] == "no-store"
+    assert view.json() == body
+    assert len(change_records.records) == 1
+
+
+@pytest.mark.anyio
+async def test_edit_expense_with_no_changes_returns_the_expense_unchanged(
+    settings: Settings,
+) -> None:
+    application, expenses, change_records, expense = _app_with_edit(settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.patch(
+            f"/capture/expenses/{expense.id}",
+            cookies=_cookies(),
+            headers=_csrf_headers(application, settings),
+            json={"note": "milk"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["modified_at"] == NOW.isoformat().replace("+00:00", "Z")
+    assert expenses.store[expense.id] == expense
+    assert change_records.records == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("body", "status_code"),
+    [
+        pytest.param({"note": None, "extra": 1}, 422, id="unknown field"),
+        pytest.param({"category_key": None}, 422, id="null required field"),
+        pytest.param({"amount_minor_units": 100}, 422, id="amount without currency"),
+        pytest.param({"note": "x" * 5000}, 422, id="oversized body"),
+        pytest.param({"amount_minor_units": 0, "currency": "USD"}, 409, id="zero amount"),
+        pytest.param({"amount_minor_units": 100, "currency": "ZZZ"}, 409, id="bad currency"),
+        pytest.param({"merchant": "   "}, 409, id="blank merchant"),
+        pytest.param({"category_key": "not_a_category"}, 409, id="unknown category"),
+        pytest.param({"transaction_date": "2026-08-20"}, 409, id="future date"),
+    ],
+)
+async def test_edit_expense_rejects_invalid_input_without_changing_or_echoing_it(
+    settings: Settings, body: dict[str, object], status_code: int
+) -> None:
+    application, expenses, change_records, expense = _app_with_edit(settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.patch(
+            f"/capture/expenses/{expense.id}",
+            cookies=_cookies(),
+            headers=_csrf_headers(application, settings),
+            json=body,
+        )
+
+    assert response.status_code == status_code
+    assert set(response.json()) == {"detail"}
+    for value in body.values():
+        if isinstance(value, str) and value.strip():
+            assert value not in response.text
+    assert expenses.store[expense.id] == expense
+    assert change_records.records == []
+
+
+@pytest.mark.anyio
+async def test_edit_expense_csrf_failure_leaves_state_unchanged_and_never_invokes_use_case(
+    settings: Settings,
+) -> None:
+    application, expenses, _change_records, expense = _app_with_edit(settings)
+    recorder = RecordingEditExpense()
+    application.dependency_overrides[get_edit_expense] = lambda: recorder
+    valid = _csrf_headers(application, settings)
+    invalid_cases = [
+        {},
+        {"Origin": valid["Origin"]},
+        {**valid, CSRF_HEADER_NAME: "wrong-token"},
+        {**valid, "Origin": "https://attacker.test"},
+    ]
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        responses = [
+            await client.patch(
+                f"/capture/expenses/{expense.id}",
+                cookies=_cookies(),
+                headers=headers,
+                json={"note": "changed"},
+            )
+            for headers in invalid_cases
+        ]
+
+    assert [response.status_code for response in responses] == [403] * len(invalid_cases)
+    assert recorder.calls == []
+    assert expenses.store[expense.id] == expense
+
+
+@pytest.mark.anyio
+async def test_edit_expense_foreign_deleted_and_unknown_match_not_found(
+    settings: Settings,
+) -> None:
+    application, expenses, change_records, expense = _app_with_edit(settings)
+    foreign = replace(expense, id=uuid4(), owner_id=uuid4())
+    deleted = replace(expense, id=uuid4(), capture_draft_id=uuid4()).delete(now=NOW)
+    expenses.store[foreign.id] = foreign
+    expenses.store[deleted.id] = deleted
+    csrf_headers = _csrf_headers(application, settings)
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        responses = [
+            await client.patch(
+                f"/capture/expenses/{expense_id}",
+                cookies=_cookies(),
+                headers=csrf_headers,
+                json={"note": "changed"},
+            )
+            for expense_id in (foreign.id, deleted.id, uuid4())
+        ]
+
+    assert [response.status_code for response in responses] == [404, 404, 404]
+    assert responses[0].json() == responses[1].json() == responses[2].json()
+    assert expenses.store[foreign.id] == foreign
+    assert expenses.store[deleted.id] == deleted
+    assert change_records.records == []
+
+
+@pytest.mark.anyio
+async def test_edit_expense_requires_authentication(settings: Settings) -> None:
+    application, _expenses, _change_records, expense = _app_with_edit(settings)
+    recorder = RecordingEditExpense()
+    application.dependency_overrides[get_edit_expense] = lambda: recorder
+    application.dependency_overrides[get_authenticate_web_session] = lambda: (
+        StubSessionAuthentication(None)
+    )
+
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url=settings.authentication_web_origin) as (
+        client
+    ):
+        response = await client.patch(
+            f"/capture/expenses/{expense.id}",
+            cookies=_cookies(),
+            headers=_csrf_headers(application, settings),
+            json={"note": "changed"},
+        )
+
+    assert response.status_code == 401
+    assert recorder.calls == []
