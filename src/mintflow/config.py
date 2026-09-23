@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     telegram_bot_token: SecretStr | None = None
     telegram_bot_username: str | None = None
     telegram_webhook_secret: SecretStr | None = None
-    receipt_recognizer: Literal["fake"] | None = None
+    receipt_recognizer: Literal["fake", "azure"] | None = None
+    azure_document_intelligence_endpoint: str | None = None
+    azure_document_intelligence_key: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -81,6 +83,14 @@ class Settings(BaseSettings):
 
         if self.receipt_recognizer == "fake" and self.environment not in {"development", "test"}:
             raise ValueError("the fake receipt recognizer is allowed only in development or test")
+        if self.receipt_recognizer == "azure":
+            endpoint = self.azure_document_intelligence_endpoint
+            if endpoint is None or self.azure_document_intelligence_key is None:
+                raise ValueError(
+                    "the azure receipt recognizer requires a Document Intelligence endpoint and key"
+                )
+            if not endpoint.startswith("https://"):
+                raise ValueError("the Document Intelligence endpoint must be an https URL")
         return self
 
     @property

@@ -49,6 +49,18 @@ Run:
 - final review of the complete task diff for ownership bypass, overwriting user input, receipt
   contents or secrets in logs, duplicate processing, and scope creep.
 
+## Progress
+
+- Provider chosen by the product owner: Azure AI Document Intelligence, prebuilt receipt, F0
+  (design R1).
+- Done: `AzureReceiptRecognizer` (REST via httpx, deadline 45 s, key sent only to the
+  configured host, no logging), `MINTFLOW_RECEIPT_RECOGNIZER=azure` with endpoint and key
+  settings, and unit tests on recorded-format responses.
+- Done: the evaluation script, `python -m mintflow.commands.evaluate_recognizer --samples DIR`,
+  using the configured recognizer and printing counts and file names only.
+- Remaining, needs the product owner: an Azure F0 resource with its endpoint and key in `.env`,
+  consented sample receipts outside the repository, and the evaluation run and its report.
+
 ## Completion conditions
 
 Do not commit.

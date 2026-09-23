@@ -56,6 +56,14 @@ improve models, which is not acceptable for receipts. The comparison counts, per
 correct, missing, and confidently wrong values; the fewest confidently wrong values wins, then
 coverage.
 
+Decision (2026-09-23, product owner): Azure AI Document Intelligence, prebuilt receipt model, on
+the free F0 tier — the most widely used managed option, with typed fields and confidences. It is
+called through its REST API with httpx (no SDK dependency). Currency is taken only from what the
+printed total shows, never from Azure's locale-based `currencyCode`. WebP is not supported by
+Azure and falls back to manual entry. Receipts are sent to Microsoft for analysis under Azure's
+data-processing terms. The evaluation on consented receipts confirms the choice before it is
+enabled for users.
+
 ### R2. Background processing uses a PostgreSQL work queue
 
 - The `receipts` table is the queue: a receipt waits in `queued`; a worker claims one with

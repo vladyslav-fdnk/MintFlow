@@ -3,6 +3,7 @@ from pydantic import SecretStr, ValidationError
 
 from mintflow.commands import receipt_worker
 from mintflow.config import Settings
+from mintflow.infrastructure.recognition.azure import AzureReceiptRecognizer
 from mintflow.infrastructure.recognition.fake import FakeReceiptRecognizer
 from mintflow.telegram.receipt_worker import ReceiptOutcome
 
@@ -57,3 +58,42 @@ def test_the_fake_recognizer_is_built_only_when_configured() -> None:
 def test_the_fake_recognizer_is_refused_outside_development(environment: str) -> None:
     with pytest.raises(ValidationError, match="fake receipt recognizer"):
         _settings(environment=environment, receipt_recognizer="fake")
+
+
+def test_the_azure_recognizer_is_built_from_its_endpoint_and_key() -> None:
+    recognizer = receipt_worker.build_recognizer(
+        _settings(
+            environment="production",
+            receipt_recognizer="azure",
+            azure_document_intelligence_endpoint="https://sample.cognitiveservices.azure.com",
+            azure_document_intelligence_key=SecretStr("key"),
+        )
+    )
+
+    assert isinstance(recognizer, AzureReceiptRecognizer)
+
+
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        pytest.param({}, "endpoint and key", id="nothing"),
+        pytest.param(
+            {"azure_document_intelligence_endpoint": "https://sample.azure.com"},
+            "endpoint and key",
+            id="no key",
+        ),
+        pytest.param(
+            {
+                "azure_document_intelligence_endpoint": "http://sample.azure.com",
+                "azure_document_intelligence_key": SecretStr("key"),
+            },
+            "https",
+            id="plain http",
+        ),
+    ],
+)
+def test_the_azure_recognizer_needs_an_https_endpoint_and_a_key(
+    overrides: dict[str, object], message: str
+) -> None:
+    with pytest.raises(ValidationError, match=message):
+        _settings(receipt_recognizer="azure", **overrides)

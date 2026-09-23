@@ -1,0 +1,59 @@
+{
+  "status": "succeeded",
+  "createdDateTime": "2026-09-23T09:00:00Z",
+  "lastUpdatedDateTime": "2026-09-23T09:00:03Z",
+  "analyzeResult": {
+    "apiVersion": "2024-11-30",
+    "modelId": "prebuilt-receipt",
+    "stringIndexType": "textElements",
+    "content": "SAMPLE MARKET\nReceipt 0001\n20.09.2026 14:02\nBread 2,50\nMilk 1,20\nSubtotal 10,50\nVAT 2,00\nTotal 12,50 EUR",
+    "pages": [{"pageNumber": 1, "angle": 0, "width": 1000, "height": 1400, "unit": "pixel"}],
+    "documents": [
+      {
+        "docType": "receipt.retailMeal",
+        "boundingRegions": [{"pageNumber": 1, "polygon": [0, 0, 1000, 0, 1000, 1400, 0, 1400]}],
+        "confidence": 0.98,
+        "spans": [{"offset": 0, "length": 104}],
+        "fields": {
+          "MerchantName": {
+            "type": "string",
+            "valueString": "Sample Market",
+            "content": "SAMPLE MARKET",
+            "confidence": 0.95
+          },
+          "TransactionDate": {
+            "type": "date",
+            "valueDate": "2026-09-20",
+            "content": "20.09.2026",
+            "confidence": 0.97
+          },
+          "TransactionTime": {
+            "type": "time",
+            "valueTime": "14:02:00",
+            "content": "14:02",
+            "confidence": 0.96
+          },
+          "Items": {"type": "array", "valueArray": []},
+          "Subtotal": {
+            "type": "currency",
+            "valueCurrency": {"amount": 10.5, "currencyCode": "EUR"},
+            "content": "10,50",
+            "confidence": 0.9
+          },
+          "TotalTax": {
+            "type": "currency",
+            "valueCurrency": {"amount": 2.0, "currencyCode": "EUR"},
+            "content": "2,00",
+            "confidence": 0.9
+          },
+          "Total": {
+            "type": "currency",
+            "valueCurrency": {"amount": 12.5, "currencyCode": "EUR"},
+            "content": "12,50 EUR",
+            "confidence": 0.96
+          }
+        }
+      }
+    ]
+  }
+}

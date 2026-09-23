@@ -1,3 +1,10 @@
+from mintflow.application.receipts.evaluation import (
+    EvaluationReport,
+    ExpectedValues,
+    FieldOutcome,
+    ScoredField,
+    score,
+)
 from mintflow.application.receipts.images import (
     ACCEPTED_RECEIPT_MEDIA_TYPES,
     MAX_RECEIPT_IMAGE_BYTES,
@@ -24,12 +31,17 @@ __all__ = [
     "CurrencyCandidate",
     "CurrencyEvidence",
     "DateCandidate",
+    "EvaluationReport",
+    "ExpectedValues",
+    "FieldOutcome",
     "MerchantCandidate",
     "ReceiptRecognizer",
     "RecognitionOutput",
     "RecognitionUnavailable",
+    "ScoredField",
     "SelectedValues",
     "TotalCandidate",
+    "score",
     "select_values",
     "sniff_media_type",
 ]

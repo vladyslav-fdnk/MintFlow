@@ -3,8 +3,7 @@
 Runs until interrupted, one receipt at a time; several workers may run at once
 because receipts are claimed with SKIP LOCKED. Each iteration also sends the
 "taking longer" message for receipts unread after 30 seconds. Needs Telegram and a receipt
-recognizer configured (MINTFLOW_RECEIPT_RECOGNIZER; only "fake" exists until a
-provider is chosen in RCPT-07).
+recognizer configured (MINTFLOW_RECEIPT_RECOGNIZER: "azure", or "fake" locally).
 """
 
 import argparse
@@ -32,6 +31,7 @@ from mintflow.infrastructure.persistence import (
     create_database_engine,
     create_session_factory,
 )
+from mintflow.infrastructure.recognition.azure import AzureReceiptRecognizer
 from mintflow.infrastructure.recognition.fake import FakeReceiptRecognizer
 from mintflow.logging import configure_logging
 from mintflow.telegram.capture_flow import ManualCaptureFlow
@@ -95,6 +95,14 @@ def build_receipt_worker(
 def build_recognizer(settings: Settings) -> ReceiptRecognizer | None:
     if settings.receipt_recognizer == "fake":
         return FakeReceiptRecognizer()
+    if settings.receipt_recognizer == "azure":
+        # The settings validator guarantees both values for "azure".
+        assert settings.azure_document_intelligence_endpoint is not None
+        assert settings.azure_document_intelligence_key is not None
+        return AzureReceiptRecognizer(
+            endpoint=settings.azure_document_intelligence_endpoint,
+            key=settings.azure_document_intelligence_key,
+        )
     return None
 
 
