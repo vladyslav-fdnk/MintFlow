@@ -230,21 +230,21 @@ tasks:
   - id: DASH-01
     title: Dashboard period rules
     file: docs/tasks/DASH-01-dashboard-period-rules.md
-    status: review
+    status: done
     human_approval: approved
     depends_on: []
 
   - id: DASH-02
     title: Analytics read repository
     file: docs/tasks/DASH-02-analytics-read-repository.md
-    status: review
+    status: done
     human_approval: approved
     depends_on: []
 
   - id: DASH-03
     title: Build Dashboard use case
     file: docs/tasks/DASH-03-build-dashboard-use-case.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - DASH-01

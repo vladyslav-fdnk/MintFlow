@@ -1,6 +1,6 @@
 # DASH-03 — Build Dashboard Use Case
 
-Status: blocked
+Status: ready
 
 ## Goal
 
