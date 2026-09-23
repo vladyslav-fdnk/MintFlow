@@ -1,3 +1,8 @@
+from mintflow.application.telegram.conversation import (
+    AwaitingInput,
+    TelegramConversation,
+    TelegramConversationRepository,
+)
 from mintflow.application.telegram.link_use_cases import (
     ClaimTelegramLink,
     ConfirmTelegramLink,
@@ -20,6 +25,9 @@ from mintflow.application.telegram.linking import (
 )
 
 __all__ = [
+    "AwaitingInput",
+    "TelegramConversation",
+    "TelegramConversationRepository",
     "MAX_TELEGRAM_DISPLAY_NAME_LENGTH",
     "TELEGRAM_LINK_CHALLENGE_LIFETIME",
     "ClaimTelegramLink",

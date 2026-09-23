@@ -13,8 +13,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, Response
+from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import AuthenticatedWebSession
+from mintflow.application.capture import ConfirmCaptureDraft
 from mintflow.application.telegram import (
     ClaimTelegramLink,
     ConfirmTelegramLink,
@@ -33,11 +35,16 @@ from mintflow.http.authentication import (
     authentication_security_headers,
 )
 from mintflow.infrastructure.persistence import (
+    SqlAlchemyCaptureDraftRepository,
+    SqlAlchemyCategoryRepository,
+    SqlAlchemyExpenseRepository,
+    SqlAlchemyTelegramConversationRepository,
     SqlAlchemyTelegramLinkRepository,
     SqlAlchemyTelegramUpdateLedger,
     SqlAlchemyUserRepository,
 )
 from mintflow.telegram import TelegramApiError, messages, parse_update
+from mintflow.telegram.capture_flow import ManualCaptureFlow
 from mintflow.telegram.handler import TelegramUpdateHandler
 from mintflow.telegram.runtime import TelegramRuntime
 
@@ -188,20 +195,41 @@ async def delete_connection(
     return Response(status_code=204, headers=authentication_security_headers())
 
 
-async def get_telegram_update_handler(
-    session: DatabaseSession, runtime: TelegramRuntimeDependency
+def build_telegram_update_handler(
+    session: Session, runtime: TelegramRuntime
 ) -> TelegramUpdateHandler:
+    """The production composition of the update handler on one database session."""
     links = SqlAlchemyTelegramLinkRepository(session)
+    drafts = SqlAlchemyCaptureDraftRepository(session)
+    users = SqlAlchemyUserRepository(session)
+    capture = ManualCaptureFlow(
+        conversations=SqlAlchemyTelegramConversationRepository(session),
+        drafts=drafts,
+        categories=SqlAlchemyCategoryRepository(session),
+        confirm=ConfirmCaptureDraft(
+            draft_repository=drafts,
+            expense_repository=SqlAlchemyExpenseRepository(session),
+            user_repository=users,
+            clock=runtime.clock,
+        ),
+        web_origin=runtime.web_origin,
+        clock=runtime.clock,
+    )
     return TelegramUpdateHandler(
         ledger=SqlAlchemyTelegramUpdateLedger(session),
-        resolve_user=ResolveTelegramUser(
-            repository=links, user_repository=SqlAlchemyUserRepository(session)
-        ),
+        resolve_user=ResolveTelegramUser(repository=links, user_repository=users),
         claim_link=ClaimTelegramLink(repository=links, clock=runtime.clock),
+        capture=capture,
         bot_api=runtime.bot_api,
         web_origin=runtime.web_origin,
         clock=runtime.clock,
     )
+
+
+async def get_telegram_update_handler(
+    session: DatabaseSession, runtime: TelegramRuntimeDependency
+) -> TelegramUpdateHandler:
+    return build_telegram_update_handler(session, runtime)
 
 
 TelegramUpdateHandlerDependency = Annotated[

@@ -6,6 +6,7 @@ import pytest
 from mintflow.domain.user import User
 from mintflow.telegram import TelegramUpdate, messages
 from mintflow.telegram.handler import TelegramUpdateHandler
+from mintflow.telegram.outgoing import CallbackAnswer, Outgoing, Reply
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
 NOW = datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
@@ -59,6 +60,25 @@ class FakeClaimer:
         return self.result
 
 
+class FakeCapture:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def on_command(self, user: User, chat_id: int, command: str) -> list[Outgoing] | None:
+        self.calls.append(("command", command))
+        return [Reply(chat_id, "capture command")] if command == "/add" else None
+
+    def on_text(self, user: User, chat_id: int, text: str) -> list[Outgoing]:
+        self.calls.append(("text", text))
+        return [Reply(chat_id, "capture text")]
+
+    def on_callback(
+        self, user: User, chat_id: int, message_id: int, callback_query_id: str, data: str
+    ) -> list[Outgoing] | None:
+        self.calls.append(("callback", data))
+        return [CallbackAnswer(callback_query_id)] if data.startswith("d:") else None
+
+
 class EventBot(RecordingTelegramBotApi):
     events: Events | None = None
 
@@ -74,12 +94,14 @@ class Harness:
         self.ledger = FakeLedger(self.events)
         self.resolver = FakeResolver(User.create(now=NOW) if linked else None)
         self.claimer = FakeClaimer(claim_result)
+        self.capture = FakeCapture()
         self.bot = EventBot()
         self.bot.events = self.events
         self.handler = TelegramUpdateHandler(
             ledger=self.ledger,
             resolve_user=self.resolver,
             claim_link=self.claimer,
+            capture=self.capture,
             bot_api=self.bot,
             web_origin=WEB_ORIGIN,
             clock=lambda: NOW,
@@ -184,12 +206,44 @@ def test_unlinked_users_are_refused_and_nothing_is_resolved_further(text: str) -
     assert harness.claimer.calls == []
 
 
-def test_linked_users_get_a_hint_for_input_not_yet_supported() -> None:
+def test_linked_free_text_goes_to_the_capture_flow() -> None:
     harness = Harness(linked=True)
 
-    harness.handler.handle(_message("something"))
+    harness.handler.handle(_message("12.50 coffee"))
 
-    assert harness.texts() == [messages.UNKNOWN_INPUT]
+    assert harness.capture.calls == [("text", "12.50 coffee")]
+    assert harness.texts() == ["capture text"]
+
+
+def test_linked_commands_go_to_the_capture_flow_first() -> None:
+    harness = Harness(linked=True)
+
+    harness.handler.handle(_message("/add@mintflow_bot", update_id=1))
+    harness.handler.handle(_message("/unknown", update_id=2))
+
+    assert harness.capture.calls == [("command", "/add"), ("command", "/unknown")]
+    assert harness.texts() == ["capture command", messages.UNKNOWN_INPUT]
+
+
+def test_linked_callbacks_go_to_the_capture_flow() -> None:
+    harness = Harness(linked=True)
+
+    harness.handler.handle(_callback("d:abc:confirm", update_id=3))
+    harness.handler.handle(_callback("something-else", update_id=4))
+
+    assert harness.capture.calls == [("callback", "d:abc:confirm"), ("callback", "something-else")]
+    answers = harness.bot.calls_to("answer_callback_query")
+    assert [answer.arguments["text"] for answer in answers] == [None, messages.UNKNOWN_INPUT]
+
+
+def test_unlinked_users_never_reach_the_capture_flow() -> None:
+    harness = Harness()
+
+    harness.handler.handle(_message("/add", update_id=1))
+    harness.handler.handle(_message("12.50", update_id=2))
+    harness.handler.handle(_callback("d:abc:confirm", update_id=3))
+
+    assert harness.capture.calls == []
 
 
 def test_unlinked_callbacks_are_answered_and_refused() -> None:

@@ -1,6 +1,6 @@
 # TG-06 — Telegram Manual Capture Flow
 
-Status: ready
+Status: done
 
 ## Goal
 

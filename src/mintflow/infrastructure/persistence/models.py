@@ -477,3 +477,31 @@ class TelegramProcessedUpdateRecord(Base):
 
     update_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=False)
     processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TelegramConversationRecord(Base):
+    """What the bot is waiting for from one linked user (docs/telegram_client_design.md, T5)."""
+
+    __tablename__ = "telegram_conversations"
+    __table_args__ = (
+        CheckConstraint(
+            "awaiting IN ('nothing', 'amount', 'currency', 'merchant', 'category', 'date')",
+            name="ck_telegram_conversations_awaiting",
+        ),
+        CheckConstraint(
+            "active_draft_id IS NOT NULL OR awaiting = 'nothing'",
+            name="ck_telegram_conversations_waiting_needs_draft",
+        ),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        primary_key=True,
+    )
+    active_draft_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("capture_drafts.id", ondelete="RESTRICT")
+    )
+    awaiting: Mapped[str] = mapped_column(String(16), nullable=False)
+    currency_is_default: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

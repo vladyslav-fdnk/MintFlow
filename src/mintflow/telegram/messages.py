@@ -49,3 +49,56 @@ def help_text(*, web_origin: str) -> str:
         "Nothing is saved until you press Confirm on the review card.\n\n"
         f"See your history and spending summaries at {web_origin}"
     )
+
+
+ASK_AMOUNT: Final = "How much did you spend? Send the amount, for example 12.50 or 12.50 EUR."
+INVALID_AMOUNT: Final = (
+    "That doesn't look like an amount. Send a number greater than zero, "
+    "for example 12.50 or 12.50 EUR. Refunds and income aren't supported."
+)
+ASK_AMOUNT_WITH_CURRENCY: Final = (
+    "Please include the currency, for example 12.50 EUR. "
+    "You can set a default currency in MintFlow settings on the web."
+)
+ASK_CURRENCY: Final = "Which currency? Send a code such as EUR, USD, or GBP."
+INVALID_CURRENCY: Final = "I don't know that currency. Send a code such as EUR, USD, or GBP."
+ASK_MERCHANT: Final = "Where did you spend it? Send a shop name or a short description."
+INVALID_MERCHANT: Final = "Please send a shop name or description of up to 140 characters."
+ASK_CATEGORY: Final = "Choose a category:"
+USE_CATEGORY_BUTTONS: Final = "Please choose a category with the buttons."
+ASK_DATE: Final = "When was it? Choose below or send a date such as 2026-09-23 or 23.09.2026."
+INVALID_DATE: Final = "That isn't a date I can read. Send it like 2026-09-23 or 23.09.2026."
+FUTURE_DATE: Final = (
+    "That date is too far in the future. Please send today's date or an earlier one."
+)
+NO_ACTIVE_DRAFT: Final = "There's no expense in progress. Send /add to record one."
+DRAFT_NOT_ACTIVE: Final = "This expense is no longer active."
+ALREADY_SAVED: Final = "This expense is already saved."
+DRAFT_CANCELLED: Final = "Cancelled. Nothing was saved."
+CONFIRM_FAILED: Final = (
+    "I couldn't save this expense. Please check the date and amount, then try again."
+)
+DRAFT_IN_PROGRESS: Final = "You already have an expense in progress:"
+
+
+def review_card(
+    *,
+    merchant: str | None,
+    date: str,
+    date_is_default: bool,
+    amount: str,
+    currency_is_default: bool,
+    category: str,
+) -> str:
+    return (
+        "Please review your expense:\n\n"
+        f"Merchant: {merchant or 'Not specified'}\n"
+        f"Date: {date}{' (default)' if date_is_default else ''}\n"
+        f"Amount: {amount}{' (default currency)' if currency_is_default else ''}\n"
+        f"Category: {category}\n\n"
+        "Nothing is saved until you press Confirm."
+    )
+
+
+def saved(*, amount: str) -> str:
+    return f"Saved: {amount}."

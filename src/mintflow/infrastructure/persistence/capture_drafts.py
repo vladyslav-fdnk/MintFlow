@@ -131,9 +131,12 @@ class SqlAlchemyCaptureDraftRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def create(self, draft: CaptureDraft) -> None:
+    def create(self, draft: CaptureDraft, *, commit: bool = True) -> None:
+        """Persist a new draft; ``commit=False`` joins the caller's transaction."""
         self._session.add(_to_record(draft))
-        self._session.commit()
+        self._session.flush()
+        if commit:
+            self._session.commit()
 
     def get(self, *, draft_id: UUID, owner_id: UUID) -> CaptureDraft | None:
         record = self._session.scalar(

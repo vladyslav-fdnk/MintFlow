@@ -17,7 +17,7 @@ from mintflow.application.telegram import (
     ResolveTelegramUser,
 )
 from mintflow.config import Settings
-from mintflow.domain.user import UserStatus
+from mintflow.domain.user import User, UserStatus
 from mintflow.http.authentication import (
     AUTHENTICATED_SESSION_COOKIE_NAME,
     CSRF_HEADER_NAME,
@@ -39,6 +39,7 @@ from mintflow.infrastructure.persistence.models import (
 from mintflow.main import create_app
 from mintflow.telegram import TelegramUpdate, messages
 from mintflow.telegram.handler import TelegramUpdateHandler
+from mintflow.telegram.outgoing import Outgoing
 from mintflow.telegram.runtime import TelegramRuntime
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
@@ -293,6 +294,21 @@ async def test_unlinked_senders_are_refused_and_nothing_but_the_update_id_is_sto
     application.state.database_engine.dispose()
 
 
+class UnusedCapture:
+    """/start never reaches the capture flow."""
+
+    def on_command(self, user: User, chat_id: int, command: str) -> list[Outgoing] | None:
+        raise AssertionError("unexpected capture command")
+
+    def on_text(self, user: User, chat_id: int, text: str) -> list[Outgoing]:
+        raise AssertionError("unexpected capture text")
+
+    def on_callback(
+        self, user: User, chat_id: int, message_id: int, callback_query_id: str, data: str
+    ) -> list[Outgoing] | None:
+        raise AssertionError("unexpected capture callback")
+
+
 def test_concurrent_redelivery_does_the_work_exactly_once(
     db_session: Session, migrated_database_url: str
 ) -> None:
@@ -324,6 +340,7 @@ def test_concurrent_redelivery_does_the_work_exactly_once(
                 repository=links, user_repository=SqlAlchemyUserRepository(session)
             ),
             claim_link=ClaimTelegramLink(repository=links, clock=clock),
+            capture=UnusedCapture(),
             bot_api=bots[index],
             web_origin=ORIGIN,
             clock=clock,

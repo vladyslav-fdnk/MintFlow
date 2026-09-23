@@ -1,6 +1,6 @@
 # TG-07 — Telegram Recent History and Draft Conflicts
 
-Status: blocked
+Status: ready
 
 ## Goal
 

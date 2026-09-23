@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import exists, select, update
+from sqlalchemy import delete, exists, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,7 @@ from mintflow.domain.user import UserStatus
 from mintflow.infrastructure.persistence.models import (
     AuthenticationAuditRecordModel,
     TelegramConnectionRecord,
+    TelegramConversationRecord,
     TelegramLinkChallengeRecord,
     UserRecord,
     WebSessionRecord,
@@ -267,6 +268,12 @@ class SqlAlchemyTelegramLinkRepository:
             )
             if connection_id is None:
                 return False
+            # The bot stops exposing anything for this user at once (design 6, "Unlinking").
+            self._session.execute(
+                delete(TelegramConversationRecord).where(
+                    TelegramConversationRecord.user_id == user_id
+                )
+            )
             self._audit(
                 event_type=AuthenticationAuditEventType.TELEGRAM_UNLINKED,
                 user_id=user_id,

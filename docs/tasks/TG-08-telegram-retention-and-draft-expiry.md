@@ -1,6 +1,6 @@
 # TG-08 — Telegram Retention and Draft Expiry Command
 
-Status: blocked
+Status: ready
 
 ## Goal
 
