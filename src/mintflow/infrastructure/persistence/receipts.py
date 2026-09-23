@@ -1,7 +1,8 @@
 """Receipt persistence: the work queue, image bytes, and recognition results (design R2, R3).
 
 Only ``claim_next`` commits, so other workers see the claim at once. Every other
-write joins the caller's transaction: the worker stores a result, finishes the
+write joins the caller's transaction (``claim_delay_notices`` included, so the
+caller commits the claim before sending anything): the worker stores a result, finishes the
 attempt, and updates the draft together.
 """
 
@@ -130,6 +131,35 @@ class SqlAlchemyReceiptRepository:
         except BaseException:
             self._session.rollback()
             raise
+
+    def claim_delay_notices(
+        self, *, now: datetime, received_before: datetime, limit: int = 20
+    ) -> list[tuple[UUID, UUID]]:
+        """Mark unfinished receipts older than ``received_before`` as notified, once each.
+
+        Returns ``(receipt_id, owner_id)`` pairs. Rows locked by another worker are skipped
+        and a receipt is never returned twice, so its delay message is sent at most once.
+        """
+        overdue = (
+            select(ReceiptRecord.id)
+            .where(
+                ReceiptRecord.state.in_((ReceiptState.QUEUED.value, ReceiptState.PROCESSING.value)),
+                ReceiptRecord.image_removed_at.is_(None),
+                ReceiptRecord.delay_notice_sent_at.is_(None),
+                ReceiptRecord.created_at <= received_before,
+            )
+            .order_by(ReceiptRecord.created_at, ReceiptRecord.id)
+            .with_for_update(skip_locked=True)
+            .limit(limit)
+            .scalar_subquery()
+        )
+        rows = self._session.execute(
+            update(ReceiptRecord)
+            .where(ReceiptRecord.id.in_(overdue))
+            .values(delay_notice_sent_at=now)
+            .returning(ReceiptRecord.id, ReceiptRecord.owner_id)
+        )
+        return [(row.id, row.owner_id) for row in rows]
 
     def save_finished(self, receipt: Receipt) -> bool:
         """Record a completed or failed attempt, only if it is still the current one."""

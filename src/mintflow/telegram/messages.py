@@ -130,6 +130,11 @@ RECEIPT_RECEIVED: Final = (
     "Got it! I'm reading your receipt. I'll show you what I found in a moment."
 )
 RECEIPT_STILL_READING: Final = "I'm still reading your receipt. I'll send the details shortly."
+RECEIPT_TAKING_LONGER: Final = (
+    "Reading this receipt is taking longer than usual. You can wait, or enter the expense "
+    "yourself; anything I find later only fills what you leave empty."
+)
+RECEIPT_ENTER_MANUALLY: Final = "Enter manually"
 RECEIPT_ALBUM: Final = "Please send one receipt at a time, as a single photo."
 RECEIPT_UNSUPPORTED: Final = (
     "I can only read receipt photos (JPEG, PNG, or WebP). Please send the receipt as a photo."

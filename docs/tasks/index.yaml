@@ -394,7 +394,7 @@ tasks:
   - id: RCPT-06
     title: Recognition Delay Message and Manual Fallback
     file: docs/tasks/RCPT-06-recognition-delay-and-manual-fallback.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - RCPT-05

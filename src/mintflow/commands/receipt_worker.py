@@ -1,7 +1,8 @@
 """Process queued receipts: ``python -m mintflow.commands.receipt_worker``.
 
 Runs until interrupted, one receipt at a time; several workers may run at once
-because receipts are claimed with SKIP LOCKED. Needs Telegram and a receipt
+because receipts are claimed with SKIP LOCKED. Each iteration also sends the
+"taking longer" message for receipts unread after 30 seconds. Needs Telegram and a receipt
 recognizer configured (MINTFLOW_RECEIPT_RECOGNIZER; only "fake" exists until a
 provider is chosen in RCPT-07).
 """

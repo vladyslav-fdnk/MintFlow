@@ -18,13 +18,17 @@ from mintflow.domain.capture import (
     CurrencyCode,
     DraftFieldSource,
     Expense,
+    MerchantName,
     Money,
     Receipt,
+    RecognitionResult,
+    TransactionDate,
 )
 from mintflow.domain.user import Timezone, User
 from mintflow.telegram import messages
 from mintflow.telegram.capture_flow import (
     ADD_ACTION,
+    MANUAL_ACTION,
     RECENT_ACTION,
     ManualCaptureFlow,
     draft_action,
@@ -634,3 +638,181 @@ def test_add_after_a_held_photo_discards_to_a_manual_draft() -> None:
     assert _texts(replies) == [messages.ASK_AMOUNT]
     assert harness.receipts.created == []
     assert harness.draft.source is CaptureSource.TELEGRAM_MANUAL
+
+
+# --- RCPT-06: "Enter manually" and late results ------------------------------------------------
+
+RECEIPT_TOTAL = Money(minor_units=1250, currency=EUR)
+
+
+def _late_result(
+    harness: Harness,
+    *,
+    total: Money | None = RECEIPT_TOTAL,
+    merchant: str | None = "Receipt Shop",
+    day: date | None = date(2026, 9, 20),
+) -> list[Outgoing]:
+    """What the worker does when a result arrives for a draft the user continued manually."""
+    before = harness.draft
+    [(receipt, _file_id)] = harness.receipts.created
+    result = RecognitionResult.for_attempt(
+        receipt=receipt,
+        attempt_id=uuid4(),
+        merchant=MerchantName(merchant) if merchant is not None else None,
+        transaction_date=TransactionDate(day) if day is not None else None,
+        total=total,
+        now=NOW,
+    )
+    after = before.apply_recognition(
+        result=result, fallback_category_key=UNCATEGORIZED_KEY, now=NOW
+    )
+    harness.drafts.update(after, commit=False)
+    return harness.flow.after_late_result(harness.user, CHAT, harness.conversation, before, after)
+
+
+def _entering_manually() -> Harness:
+    harness = Harness()
+    _send_photo(harness)
+    assert _texts(harness.press(MANUAL_ACTION)) == [messages.ASK_AMOUNT]
+    return harness
+
+
+def test_the_delay_notice_offers_to_enter_manually() -> None:
+    harness = Harness()
+    _send_photo(harness)
+
+    notice = harness.flow.delay_notice(CHAT, harness.draft)
+
+    assert notice.text == messages.RECEIPT_TAKING_LONGER
+    assert notice.keyboard is not None
+    [[button]] = notice.keyboard
+    assert button.text == messages.RECEIPT_ENTER_MANUALLY
+    assert button.callback_data == draft_action(harness.draft.id, MANUAL_ACTION)
+    assert len(button.callback_data.encode()) <= 64
+
+
+def test_enter_manually_stops_waiting_and_asks_for_the_amount() -> None:
+    harness = _entering_manually()
+
+    assert harness.draft.state is CaptureDraftState.COLLECTING
+    assert harness.conversation.awaiting is AwaitingInput.AMOUNT
+    assert _texts(harness.text("8.40")) == [messages.ASK_MERCHANT]
+
+
+def test_enter_manually_after_the_result_arrived_shows_where_the_draft_is() -> None:
+    harness = Harness()
+    _send_photo(harness)
+    [(receipt, _file_id)] = harness.receipts.created
+    result = RecognitionResult.for_attempt(
+        receipt=receipt,
+        attempt_id=uuid4(),
+        merchant=None,
+        transaction_date=None,
+        total=RECEIPT_TOTAL,
+        now=NOW,
+    )
+    ready = harness.draft.apply_recognition(
+        result=result, fallback_category_key=UNCATEGORIZED_KEY, now=NOW
+    )
+    harness.drafts.update(ready)
+
+    replies = harness.press(MANUAL_ACTION)
+
+    assert "Amount: 12.50 EUR (from receipt)" in _last_card(replies).text
+    assert harness.draft == ready
+
+
+def test_a_late_result_answers_the_amount_question_with_a_review_card() -> None:
+    harness = _entering_manually()
+
+    card = _last_card(_late_result(harness)).text
+
+    assert "Amount: 12.50 EUR (from receipt)" in card
+    assert "Merchant: Receipt Shop (from receipt)" in card
+    assert harness.draft.state is CaptureDraftState.READY_FOR_REVIEW
+    assert harness.conversation.awaiting is AwaitingInput.NOTHING
+
+
+def test_a_late_result_without_a_total_keeps_asking_for_the_amount() -> None:
+    harness = _entering_manually()
+
+    assert _late_result(harness, total=None) == []
+    assert harness.conversation.awaiting is AwaitingInput.AMOUNT
+
+    # Merchant and date came from the receipt, so the amount is the only question.
+    card = _last_card(harness.text("8.40")).text
+    assert "Amount: 8.40 EUR (default currency)" in card
+    assert "Merchant: Receipt Shop (from receipt)" in card
+
+
+def test_a_late_result_while_the_user_answers_the_merchant_keeps_their_amount() -> None:
+    harness = _entering_manually()
+    harness.text("8.40")
+
+    assert _late_result(harness) == []
+    assert harness.conversation.awaiting is AwaitingInput.MERCHANT
+
+    card = _last_card(harness.text("Corner Shop")).text
+    assert "Amount: 8.40 EUR (default currency)" in card
+    assert "Merchant: Corner Shop" in card and "Receipt Shop" not in card
+    assert "Date: 20 Sep 2026 (from receipt)" in card
+
+
+def test_a_late_result_while_the_user_picks_a_category_keeps_their_choice() -> None:
+    harness = _entering_manually()
+    harness.text("8.40")
+    harness.press("skip")
+    assert harness.conversation.awaiting is AwaitingInput.CATEGORY
+
+    assert _late_result(harness) == []
+
+    card = _last_card(harness.press("cat:groceries")).text
+    assert "Category: Groceries" in card
+    assert "Merchant: Receipt Shop (from receipt)" in card
+
+
+def test_a_late_result_on_the_review_card_sends_an_updated_card() -> None:
+    harness = _entering_manually()
+    harness.text("8.40")
+    harness.press("skip")
+    harness.press("cat:groceries")
+
+    card = _last_card(_late_result(harness)).text
+
+    assert "Amount: 8.40 EUR (default currency)" in card
+    assert "Category: Groceries" in card
+    assert "Date: 20 Sep 2026 (from receipt)" in card
+    assert "Merchant: Receipt Shop (from receipt)" in card
+    assert harness.draft.amount == Money(minor_units=840, currency=EUR)
+
+
+def test_a_late_result_during_an_edit_waits_for_the_users_answer() -> None:
+    harness = _entering_manually()
+    harness.text("8.40")
+    harness.text("Corner Shop")
+    harness.press("cat:groceries")
+    harness.press("edit:date")
+
+    assert _late_result(harness) == []
+    assert harness.conversation.awaiting is AwaitingInput.DATE
+
+    card = _last_card(harness.text("21.09.2026")).text
+    assert "Date: 21 Sep 2026" in card and "(from receipt)" not in card
+
+
+def test_a_late_result_that_changes_nothing_sends_nothing() -> None:
+    harness = _entering_manually()
+    harness.text("8.40")
+    harness.text("Corner Shop")
+    harness.press("cat:groceries")
+    harness.press("edit:date")
+    harness.text("21.09.2026")
+
+    assert _late_result(harness) == []
+
+
+def test_a_late_result_waits_while_the_user_decides_about_another_photo() -> None:
+    harness = _entering_manually()
+    _send_photo(harness, "second-photo")
+
+    assert _late_result(harness) == []

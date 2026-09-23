@@ -60,6 +60,7 @@ _DRAFT_ACTION_PREFIX: Final = "d"
 ADD_ACTION: Final = "add"
 RECENT_ACTION: Final = "recent"
 RECENT_LIMIT: Final = 10
+MANUAL_ACTION: Final = "manual"
 
 
 class DraftRepository(Protocol):
@@ -189,6 +190,57 @@ class ManualCaptureFlow:
             return [CallbackAnswer(callback_query_id, answer)]
         replies = self._on_draft_action(user, chat_id, message_id, conversation, draft, action)
         return [CallbackAnswer(callback_query_id), *replies]
+
+    def delay_notice(self, chat_id: int, draft: CaptureDraft) -> Reply:
+        """Recognition is slow: offer to continue without it (design R7)."""
+        keyboard: InlineKeyboard = (
+            (
+                InlineButton(
+                    messages.RECEIPT_ENTER_MANUALLY,
+                    callback_data=draft_action(draft.id, MANUAL_ACTION),
+                ),
+            ),
+        )
+        return Reply(chat_id, messages.RECEIPT_TAKING_LONGER, keyboard)
+
+    def after_late_result(
+        self,
+        user: User,
+        chat_id: int,
+        conversation: TelegramConversation,
+        before: CaptureDraft,
+        draft: CaptureDraft,
+    ) -> list[Outgoing]:
+        """What to show after a result filled a draft the user already continued manually.
+
+        ``draft`` is ``before`` with the result applied; the caller has saved it. The user
+        sees the updated review card when they are looking at one, or when the receipt
+        answered the amount question they were being asked. While they are answering any
+        other question nothing is sent; their next answer leads to the updated values.
+        """
+        if (
+            conversation.active_draft_id != draft.id
+            or conversation.pending_receipt_file_id is not None
+            or _fields(before) == _fields(draft)
+        ):
+            return []
+        awaiting = conversation.awaiting
+        if draft.state is CaptureDraftState.READY_FOR_REVIEW and awaiting is AwaitingInput.NOTHING:
+            return [self.review_reply(chat_id, conversation, draft)]
+        if (
+            draft.state is CaptureDraftState.COLLECTING
+            and awaiting is AwaitingInput.AMOUNT
+            and draft.amount is not None
+        ):
+            return self._advance(
+                user,
+                chat_id,
+                conversation,
+                draft,
+                next_when_collecting=AwaitingInput.MERCHANT,
+                currency_is_default=False,
+            )
+        return []
 
     # --- flow steps --------------------------------------------------------------------------
 
@@ -442,6 +494,14 @@ class ManualCaptureFlow:
             return self._confirm_draft(user, chat_id, message_id, conversation, draft)
         if action == "cancel":
             return [EditMessage(chat_id, message_id, self._cancel(user, conversation, draft))]
+        if action == MANUAL_ACTION:
+            if draft.state is CaptureDraftState.AWAITING_RECOGNITION:
+                # Nothing was recognized yet, so the amount is the first missing field.
+                draft = draft.continue_manually(caller_id=user.id, now=now)
+                self._drafts.update(draft, commit=False)
+                conversation = conversation.waiting_for(AwaitingInput.AMOUNT, now=now)
+                self._conversations.save(conversation)
+            return self._prompt_for(chat_id, conversation, draft)
         if action == "continue":
             if conversation.pending_receipt_file_id is not None:
                 conversation = conversation.with_pending_receipt(None, now=now)
@@ -637,6 +697,10 @@ class ManualCaptureFlow:
             ),
             (InlineButton("Open MintFlow", url=self._web_origin),),
         )
+
+
+def _fields(draft: CaptureDraft) -> tuple[object, ...]:
+    return (draft.amount, draft.transaction_date, draft.merchant, draft.category_key)
 
 
 def _conflict_keyboard(

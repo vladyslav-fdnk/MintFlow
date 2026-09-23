@@ -562,6 +562,8 @@ class ReceiptRecord(Base):
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     telegram_file_id: Mapped[str | None] = mapped_column(String(256))
     image_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # When the "taking longer" message was claimed; set at most once (design R7).
+    delay_notice_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 

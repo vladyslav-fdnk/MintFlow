@@ -7,13 +7,19 @@ and moves the user's conversation on. Only after that commit does the user get
 the review card or a question. A stale attempt (another worker took over after
 the lease expired) changes nothing and sends nothing.
 
+A receipt still unread 30 seconds after it arrived gets one "taking longer"
+message with an "Enter manually" button (R7). The worker looks for such receipts
+before each claim and about once a second while a recognizer is running. A
+result that arrives after the user continued manually fills only untouched
+fields; the flow decides whether to show the updated review card.
+
 Locks are taken in the same order as the capture flow: conversation, then draft.
 Logs carry outcome categories and durations only, never receipt contents.
 """
 
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeout
 from dataclasses import dataclass
@@ -47,9 +53,13 @@ from mintflow.infrastructure.persistence import StoredImage
 from mintflow.telegram import messages
 from mintflow.telegram.bot_api import TelegramApiError, TelegramBotApi
 from mintflow.telegram.capture_flow import ManualCaptureFlow
+from mintflow.telegram.outgoing import Outgoing, Reply
 
 RECEIPT_LEASE: Final = timedelta(minutes=2)
 RECOGNITION_TIMEOUT_SECONDS: Final = 60.0
+DELAY_NOTICE_AFTER: Final = timedelta(seconds=30)
+# How often a running recognition is interrupted to look for receipts that need a delay notice.
+WAIT_SLICE_SECONDS: Final = 1.0
 
 logger = logging.getLogger("mintflow.telegram.receipt_worker")
 
@@ -58,6 +68,8 @@ class ReceiptOutcome(StrEnum):
     READY_FOR_REVIEW = "ready_for_review"
     NEEDS_AMOUNT = "needs_amount"
     FAILED = "failed"
+    # The user had already continued manually; the result filled only untouched fields.
+    LATE_RESULT = "late_result"
     DRAFT_CLOSED = "draft_closed"
     STALE = "stale"
 
@@ -66,6 +78,10 @@ class ReceiptRepository(Protocol):
     def claim_next(self, *, now: datetime, lease: timedelta) -> Receipt | None: ...
 
     def telegram_file_id(self, *, receipt_id: UUID) -> str | None: ...
+
+    def claim_delay_notices(
+        self, *, now: datetime, received_before: datetime
+    ) -> list[tuple[UUID, UUID]]: ...
 
     def save_finished(self, receipt: Receipt) -> bool: ...
 
@@ -126,6 +142,7 @@ class ReceiptWorker:
         flow: ManualCaptureFlow,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         recognition_timeout_seconds: float = RECOGNITION_TIMEOUT_SECONDS,
+        wait_slice_seconds: float = WAIT_SLICE_SECONDS,
     ) -> None:
         self._receipts = receipts
         self._images = images
@@ -139,9 +156,11 @@ class ReceiptWorker:
         self._flow = flow
         self._clock = clock
         self._timeout = recognition_timeout_seconds
+        self._wait_slice = wait_slice_seconds
 
     def process_next(self) -> ReceiptOutcome | None:
         """Process one receipt; None when the queue is empty."""
+        self.send_delay_notices()
         receipt = self._receipts.claim_next(now=self._clock(), lease=RECEIPT_LEASE)
         if receipt is None or receipt.attempt_id is None:
             return None
@@ -158,6 +177,38 @@ class ReceiptWorker:
             int((time.monotonic() - started) * 1000),
         )
         return outcome
+
+    def send_delay_notices(self) -> int:
+        """Send the "taking longer" message for overdue receipts; returns how many were sent.
+
+        The claim is committed before anything is sent, so a receipt never gets the message
+        twice, even if sending fails. It is sent only while the receipt's draft is the
+        user's active draft and still waiting for recognition.
+        """
+        now = self._clock()
+        notices: list[Reply] = []
+        try:
+            claimed = self._receipts.claim_delay_notices(
+                now=now, received_before=now - DELAY_NOTICE_AFTER
+            )
+            for receipt_id, owner_id in claimed:
+                conversation = self._conversations.lock(user_id=owner_id, now=now)
+                draft = self._drafts.get_for_update_by_receipt(receipt_id=receipt_id)
+                if (
+                    draft is None
+                    or draft.state is not CaptureDraftState.AWAITING_RECOGNITION
+                    or conversation.active_draft_id != draft.id
+                ):
+                    continue
+                chat_id = self._chats.chat_for(user_id=owner_id)
+                if chat_id is not None:
+                    notices.append(self._flow.delay_notice(chat_id, draft))
+            self._transaction.commit()
+        except BaseException:
+            self._transaction.rollback()
+            raise
+        self._send(notices)
+        return len(notices)
 
     # --- steps -------------------------------------------------------------------------------
 
@@ -179,9 +230,16 @@ class ReceiptWorker:
         if media_type is None:
             raise _Unreadable
         # Keep the image even if recognition fails, per the retention policy (design R4).
-        self._images.put(
-            receipt_id=receipt.id, media_type=media_type, content=content, now=self._clock()
-        )
+        # Committed now: delay notices commit while recognition runs, and a worker that takes
+        # over after the lease expires should not download the file again.
+        try:
+            self._images.put(
+                receipt_id=receipt.id, media_type=media_type, content=content, now=self._clock()
+            )
+            self._transaction.commit()
+        except BaseException:
+            self._transaction.rollback()
+            raise
         return _Image(media_type, content)
 
     def _recognize(self, image: _Image) -> RecognitionOutput | None:
@@ -189,9 +247,20 @@ class ReceiptWorker:
         future = executor.submit(
             self._recognizer.recognize, image=image.content, media_type=image.media_type
         )
+        deadline = time.monotonic() + self._timeout
         try:
-            return future.result(timeout=self._timeout)
-        except (FutureTimeout, RecognitionUnavailable):
+            while True:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return None
+                try:
+                    return future.result(timeout=min(remaining, self._wait_slice))
+                except FutureTimeout:
+                    if future.done():
+                        # The recognizer itself raised TimeoutError (the same class since 3.11).
+                        raise
+                    self._send_delay_notices_while_waiting()
+        except RecognitionUnavailable:
             return None
         except Exception as error:
             # A faulty adapter must not stop the worker; the receipt falls back to manual entry.
@@ -200,6 +269,13 @@ class ReceiptWorker:
         finally:
             # Never wait for a hung recognizer; its eventual result is simply dropped.
             executor.shutdown(wait=False, cancel_futures=True)
+
+    def _send_delay_notices_while_waiting(self) -> None:
+        try:
+            self.send_delay_notices()
+        except Exception as error:
+            # The receipt being recognized must not fail because a notice could not be sent.
+            logger.error("receipt_delay_notices_failed error=%s", type(error).__name__)
 
     def _finish(
         self, receipt: Receipt, attempt_id: UUID, *, output: RecognitionOutput | None
@@ -239,6 +315,7 @@ class ReceiptWorker:
                 return ReceiptOutcome.DRAFT_CLOSED
 
             was_waiting = draft.state is CaptureDraftState.AWAITING_RECOGNITION
+            before = draft
             if result is not None:
                 draft = draft.apply_recognition(
                     result=result, fallback_category_key=UNCATEGORIZED_KEY, now=now
@@ -247,8 +324,16 @@ class ReceiptWorker:
                 draft = draft.continue_manually(caller_id=draft.owner_id, now=now)
             self._drafts.update(draft, commit=False)
             is_active = conversation.active_draft_id == draft.id
+            late_replies: list[Outgoing] = []
             if result is None:
                 outcome = ReceiptOutcome.FAILED
+            elif not was_waiting:
+                outcome = ReceiptOutcome.LATE_RESULT
+                chat_id = self._chats.chat_for(user_id=receipt.owner_id) if user else None
+                if user is not None and chat_id is not None:
+                    late_replies = self._flow.after_late_result(
+                        user, chat_id, conversation, before, draft
+                    )
             elif draft.state is CaptureDraftState.READY_FOR_REVIEW:
                 outcome = ReceiptOutcome.READY_FOR_REVIEW
             else:
@@ -263,6 +348,7 @@ class ReceiptWorker:
 
         if is_active and was_waiting:
             self._notify(receipt.owner_id, outcome, conversation, draft)
+        self._send(late_replies)
         return outcome
 
     def _notify(
@@ -287,3 +373,18 @@ class ReceiptWorker:
             logger.warning(
                 "receipt_notification_failed method=%s code=%s", error.method, error.error_code
             )
+
+    def _send(self, replies: Sequence[Outgoing]) -> None:
+        for reply in replies:
+            if not isinstance(reply, Reply):
+                continue
+            try:
+                self._bot_api.send_message(
+                    chat_id=reply.chat_id, text=reply.text, keyboard=reply.keyboard
+                )
+            except TelegramApiError as error:
+                logger.warning(
+                    "receipt_notification_failed method=%s code=%s",
+                    error.method,
+                    error.error_code,
+                )

@@ -367,3 +367,121 @@ async def test_the_conversation_waits_for_the_amount_after_a_failure(world: Worl
 
     world.session.expire_all()
     assert world.session.scalar(select(TelegramConversationRecord.awaiting)) == "amount"
+
+
+# --- RCPT-06: delay message, "Enter manually", and late results ------------------------------
+
+
+def _age_receipt(world: World, age: timedelta) -> None:
+    world.session.execute(update(ReceiptRecord).values(created_at=NOW - age))
+    world.session.commit()
+
+
+@pytest.mark.anyio
+async def test_the_delay_message_is_sent_once_after_thirty_seconds(world: World) -> None:
+    await world.send_photo()
+    worker = world.worker()
+
+    _age_receipt(world, timedelta(seconds=29))
+    assert worker.send_delay_notices() == 0
+
+    _age_receipt(world, timedelta(seconds=30))
+    assert worker.send_delay_notices() == 1
+    assert world.texts()[-1] == messages.RECEIPT_TAKING_LONGER
+    assert world.button(messages.RECEIPT_ENTER_MANUALLY).endswith(":manual")
+
+    assert worker.send_delay_notices() == 0
+    assert world.worker().send_delay_notices() == 0
+    assert world.texts().count(messages.RECEIPT_TAKING_LONGER) == 1
+
+
+@pytest.mark.anyio
+async def test_no_delay_message_for_a_cancelled_or_finished_receipt(world: World) -> None:
+    await world.send_photo()
+    await world.deliver({"text": "/cancel"})
+    await world.send_photo()
+    world.worker().process_next()  # the first receipt: its draft was cancelled
+    world.worker().process_next()  # the second: recognized
+    _age_receipt(world, timedelta(minutes=5))
+
+    assert world.worker().send_delay_notices() == 0
+    assert messages.RECEIPT_TAKING_LONGER not in world.texts()
+
+
+@pytest.mark.anyio
+async def test_the_delay_message_is_sent_while_a_slow_recognizer_runs(world: World) -> None:
+    clock = [NOW]
+
+    class Slow(FakeReceiptRecognizer):
+        def recognize(self, *, image: bytes, media_type: str) -> RecognitionOutput:
+            clock[0] = NOW + timedelta(seconds=31)
+            time.sleep(0.3)
+            return FULL
+
+    await world.send_photo()
+    worker = world.worker(recognizer=Slow(), clock=lambda: clock[0], wait_slice=0.02)
+
+    assert worker.process_next() is ReceiptOutcome.READY_FOR_REVIEW
+
+    texts = world.texts()
+    assert texts[-2] == messages.RECEIPT_TAKING_LONGER
+    assert "Merchant: Corner Shop (from receipt)" in texts[-1]
+
+
+@pytest.mark.anyio
+async def test_a_late_result_fills_only_what_the_user_left_untouched(world: World) -> None:
+    await world.send_photo()
+    _age_receipt(world, timedelta(seconds=31))
+    world.worker().send_delay_notices()
+
+    await world.press(messages.RECEIPT_ENTER_MANUALLY)
+    assert world.texts()[-1] == messages.ASK_AMOUNT
+    await world.deliver({"text": "8.40"})
+    assert world.texts()[-1] == messages.ASK_MERCHANT
+    await world.press("Skip")
+    await world.press("Groceries")
+    assert "Date: 23 Sep 2026 (default)" in world.texts()[-1]
+
+    assert world.worker().process_next() is ReceiptOutcome.LATE_RESULT
+
+    card = world.texts()[-1]
+    assert "Amount: 8.40 EUR (default currency)" in card
+    assert "Category: Groceries" in card
+    assert "Date: 20 Sep 2026 (from receipt)" in card
+    assert "Merchant: Corner Shop (from receipt)" in card
+    await world.press("Confirm")
+    world.session.expire_all()
+    expense = world.session.scalars(select(ExpenseRecord)).one()
+    assert (expense.amount_minor_units, expense.category_key, expense.transaction_date) == (
+        840,
+        "groceries",
+        date(2026, 9, 20),
+    )
+
+
+@pytest.mark.anyio
+async def test_a_late_result_answers_the_pending_amount_question(world: World) -> None:
+    await world.send_photo()
+    _age_receipt(world, timedelta(seconds=31))
+    world.worker().send_delay_notices()
+    await world.press(messages.RECEIPT_ENTER_MANUALLY)
+
+    assert world.worker().process_next() is ReceiptOutcome.LATE_RESULT
+
+    assert "Amount: 12.50 EUR (from receipt)" in world.texts()[-1]
+    assert world.draft_state() == "ready_for_review"
+    world.session.expire_all()
+    assert world.session.scalar(select(TelegramConversationRecord.awaiting)) == "nothing"
+
+
+@pytest.mark.anyio
+async def test_a_recognizer_raising_timeout_error_fails_at_once(world: World) -> None:
+    class Raising(FakeReceiptRecognizer):
+        def recognize(self, *, image: bytes, media_type: str) -> RecognitionOutput:
+            raise TimeoutError
+
+    await world.send_photo()
+    started = time.monotonic()
+
+    assert world.worker(recognizer=Raising()).process_next() is ReceiptOutcome.FAILED
+    assert time.monotonic() - started < 5
