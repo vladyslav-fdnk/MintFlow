@@ -317,3 +317,15 @@ class ExpenseRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+# Serves the keyset history listing: one owner's active Expenses in
+# (transaction_date, created_at, id) descending order.
+Index(
+    "ix_expenses_active_history",
+    ExpenseRecord.owner_id,
+    ExpenseRecord.transaction_date.desc(),
+    ExpenseRecord.created_at.desc(),
+    ExpenseRecord.id.desc(),
+    postgresql_where=ExpenseRecord.deleted_at.is_(None),
+)

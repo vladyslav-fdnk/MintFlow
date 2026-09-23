@@ -80,9 +80,13 @@ class FakeExpenseRepository:
 
     def get(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
         expense = self.store.get(expense_id)
-        if expense is None or expense.owner_id != owner_id or not expense.is_active:
+        if expense is None or expense.owner_id != owner_id:
             return None
         return expense
+
+    def get_active(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
+        expense = self.get(expense_id=expense_id, owner_id=owner_id)
+        return expense if expense is not None and expense.is_active else None
 
 
 class FakeUserRepository:

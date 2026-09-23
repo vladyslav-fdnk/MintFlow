@@ -453,9 +453,7 @@ async def view_expense(
     principal: AuthenticatedPrincipalDependency,
     expense_repository: ExpenseRepositoryDependency,
 ) -> JSONResponse:
-    expense = expense_repository.get(expense_id=expense_id, owner_id=principal.user_id)
-    if expense is None or not expense.is_active:
-        # A soft-deleted Expense is excluded on principle (invariant 26),
-        # even though no deletion path exists yet this sprint.
+    expense = expense_repository.get_active(expense_id=expense_id, owner_id=principal.user_id)
+    if expense is None:
         raise _expense_not_found()
     return _expense_response(expense)

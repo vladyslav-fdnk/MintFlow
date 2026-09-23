@@ -176,7 +176,7 @@ tasks:
   - id: EXPENSE-01
     title: Active-record rule and history listing query
     file: docs/tasks/EXPENSE-01-history-listing-query.md
-    status: ready
+    status: review
     human_approval: approved
     depends_on: []
 

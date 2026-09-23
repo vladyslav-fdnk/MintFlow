@@ -1,6 +1,6 @@
 # EXPENSE-01 — Active-Record Rule and History Listing Query
 
-Status: ready
+Status: review
 
 ## Goal
 
