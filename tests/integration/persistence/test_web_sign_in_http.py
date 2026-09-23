@@ -70,10 +70,14 @@ async def test_sign_in_visit_a_page_and_sign_out(
             str(field.attrs["name"]): str(field.attrs["value"])
             for field in parse_html(confirmation.text).find_all("input", type="hidden")
         }
+        # The Origin a browser sends with this form depends on the page's referrer policy
+        # (Fetch standard): under no-referrer it would be "null" and sign-in would fail.
+        policy = confirmation.headers["referrer-policy"]
+        browser_origin = "null" if policy == "no-referrer" else ORIGIN
         signed_in = await client.post(
             "/auth/magic-link",
             content="&".join(f"{name}={quote_plus(value)}" for name, value in fields.items()),
-            headers=FORM,
+            headers={**FORM, "Origin": browser_origin},
         )
         assert (signed_in.status_code, signed_in.headers["location"]) == (303, "/dashboard")
         session_cookie = client.cookies[AUTHENTICATED_SESSION_COOKIE_NAME]

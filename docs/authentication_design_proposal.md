@@ -209,6 +209,13 @@ and redirect immediately to a clean URL after completion. Do not mutate authenti
 the token. A later enhancement may move the token to a URL fragment and exchange it with first-party
 JavaScript, but that complexity is not required for MVP.
 
+Amended 2026-09-24 (found in the first browser run of the Web Client): the magic-link
+confirmation page uses `Referrer-Policy: strict-origin` instead of `no-referrer`. Under
+`no-referrer`, browsers send `Origin: null` with the page's form POST (Fetch standard), so the
+required first-party Origin check rejected every real sign-in. `strict-origin` still keeps the
+token out of every Referer (only the bare origin is ever sent); all other authentication
+responses keep `no-referrer`.
+
 Return targets must be server-selected identifiers or validated relative paths. Never accept an
 arbitrary absolute redirect URL.
 

@@ -83,7 +83,8 @@ async def test_scanner_like_repeated_requests_do_not_authenticate(
     assert response.status_code == 200
     assert "set-cookie" not in response.headers
     assert response.headers["cache-control"] == "no-store"
-    assert response.headers["referrer-policy"] == "no-referrer"
+    # Referers carry the bare origin only, never the token in the page's URL.
+    assert response.headers["referrer-policy"] == "strict-origin"
 
 
 @pytest.mark.anyio
@@ -223,3 +224,23 @@ async def _request(settings: Settings, method: str, path: str) -> Response:
     transport = ASGITransport(app=application)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.request(method, path)
+
+
+# Browsers set Origin on a form POST from the page's referrer policy (Fetch standard, "append a
+# request Origin header"): under no-referrer it is the literal "null".
+_FORM_POST_ORIGIN_BY_POLICY = {
+    "no-referrer": "null",
+    "strict-origin": "https://app.mintflow.test",
+    "same-origin": "https://app.mintflow.test",
+}
+
+
+@pytest.mark.anyio
+async def test_the_confirmation_page_lets_the_browser_send_a_real_origin(
+    settings: Settings,
+) -> None:
+    """The Origin a browser would send from this page must pass the consumption's check."""
+    page = await _request(settings, "GET", PATH)
+    policy = page.headers["referrer-policy"]
+
+    assert _FORM_POST_ORIGIN_BY_POLICY[policy] == settings.authentication_web_origin

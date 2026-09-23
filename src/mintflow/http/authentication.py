@@ -57,6 +57,7 @@ GENERIC_UNAUTHENTICATED_MESSAGE = "Authentication required."
 CSRF_COOKIE_NAME = "__Host-mintflow_csrf"
 CSRF_HEADER_NAME = "X-CSRF-Token"
 GENERIC_CSRF_REJECTED_MESSAGE = "The request could not be verified."
+CONFIRMATION_PAGE_REFERRER_POLICY = "strict-origin"
 GENERIC_LOGOUT_RESULT_MESSAGE = "Signed out."
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -392,7 +393,13 @@ def magic_link_confirmation_response(*, token: str, return_target: str) -> HTMLR
         f'<input type="hidden" name="token" value="{safe_token}">'
         f'<input type="hidden" name="return_target" value="{safe_return_target}">'
         '<button type="submit">Continue</button></form></main></body></html>',
-        headers=authentication_security_headers(),
+        headers={
+            **authentication_security_headers(),
+            # Not no-referrer: under that policy browsers send "Origin: null" with the form's
+            # POST, which the consumption's Origin check must reject. strict-origin still keeps
+            # the token out of every Referer (only the bare origin is ever sent).
+            "Referrer-Policy": CONFIRMATION_PAGE_REFERRER_POLICY,
+        },
     )
 
 
