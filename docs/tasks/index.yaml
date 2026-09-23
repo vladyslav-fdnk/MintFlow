@@ -206,7 +206,7 @@ tasks:
   - id: EXPENSE-05
     title: Edit Expense endpoint
     file: docs/tasks/EXPENSE-05-edit-expense-endpoint.md
-    status: review
+    status: done
     human_approval: approved
     depends_on:
       - EXPENSE-04
@@ -214,7 +214,15 @@ tasks:
   - id: EXPENSE-06
     title: Delete and restore Expense
     file: docs/tasks/EXPENSE-06-delete-and-restore.md
-    status: review
+    status: done
     human_approval: approved
     depends_on:
       - EXPENSE-03
+
+  - id: EXPENSE-07
+    title: Reject re-confirming a draft whose Expense was deleted
+    file: docs/tasks/EXPENSE-07-reject-reconfirming-a-deleted-expense.md
+    status: ready
+    human_approval: approved
+    depends_on:
+      - EXPENSE-06

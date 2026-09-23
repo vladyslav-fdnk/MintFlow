@@ -128,3 +128,4 @@ as the Expense itself. Nothing in the record is a secret.
 | EXPENSE-04 | Edit Expense use case: lock, validate, diff, record | EXPENSE-03 |
 | EXPENSE-05 | `PATCH /capture/expenses/{id}` endpoint | EXPENSE-04 |
 | EXPENSE-06 | Delete and restore use cases and endpoints | EXPENSE-03 |
+| EXPENSE-07 | Reject re-confirming a draft whose Expense was deleted | EXPENSE-06 |

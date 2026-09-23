@@ -1,6 +1,6 @@
 # EXPENSE-06 — Delete and Restore Expense
 
-Status: review
+Status: done
 
 ## Goal
 

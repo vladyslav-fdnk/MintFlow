@@ -1,6 +1,6 @@
 # EXPENSE-05 — Edit Expense Endpoint
 
-Status: review
+Status: done
 
 **Note:** the In-scope text said an invalid value maps to "the same generic 422 as the draft
 PATCH", but the draft PATCH actually returns 422 only for a malformed body and 409 for a
