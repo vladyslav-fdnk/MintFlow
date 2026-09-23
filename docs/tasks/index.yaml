@@ -260,7 +260,7 @@ tasks:
   - id: MAINT-01
     title: Isolate tests from the local environment
     file: docs/tasks/MAINT-01-isolate-tests-from-local-environment.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
 

@@ -1,7 +1,28 @@
+import os
+
 import pytest
 from pydantic import SecretStr
 
 from mintflow.config import Settings
+
+_SETTINGS_ENV_PREFIX = "MINTFLOW_"
+_TEST_ONLY_ENV_PREFIX = "MINTFLOW_TEST_"
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings_from_the_local_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a developer's .env file and exported MINTFLOW_* variables out of every test.
+
+    Settings reads both by default, so without this the suite depends on the
+    machine it runs on. MINTFLOW_TEST_* variables are kept: they configure the
+    tests themselves (for example the PostgreSQL integration database) and are
+    not Settings fields.
+    """
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in list(os.environ):
+        upper = name.upper()
+        if upper.startswith(_SETTINGS_ENV_PREFIX) and not upper.startswith(_TEST_ONLY_ENV_PREFIX):
+            monkeypatch.delenv(name)
 
 
 @pytest.fixture

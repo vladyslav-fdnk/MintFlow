@@ -1,6 +1,6 @@
 # MAINT-01 — Isolate Tests from the Local Environment
 
-Status: ready
+Status: done
 
 ## Goal
 
