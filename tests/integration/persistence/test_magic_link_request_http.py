@@ -176,7 +176,7 @@ async def test_provider_failure_consumes_email_capacity_and_emits_safe_evidence(
     settings: Settings,
     migrated_database_url: str,
     db_session: Session,
-    caplog: pytest.LogCaptureFixture,
+    app_logs: pytest.LogCaptureFixture,
 ) -> None:
     sender = RecordingEmailSender(fail=True)
     application = _application(
@@ -185,7 +185,7 @@ async def test_provider_failure_consumes_email_capacity_and_emits_safe_evidence(
     raw_email = "provider-failure@example.com"
     raw_ip = "203.0.113.20"
 
-    with caplog.at_level(logging.DEBUG):
+    with app_logs.at_level(logging.DEBUG):
         responses = [
             await _request(
                 application,
@@ -213,7 +213,7 @@ async def test_provider_failure_consumes_email_capacity_and_emits_safe_evidence(
     persisted_operational_values = " ".join(
         repr(value) for record in [email_bucket, *audit_records] for value in vars(record).values()
     )
-    captured = caplog.text
+    captured = app_logs.text
     forbidden_values = [
         raw_email,
         raw_ip,

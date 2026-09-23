@@ -134,7 +134,7 @@ async def test_endpoint_authenticates_multiple_sessions_without_mutation(
 async def test_endpoint_rejects_all_invalid_session_states_uniformly_and_without_leakage(
     db_session: Session,
     migrated_database_url: str,
-    caplog: pytest.LogCaptureFixture,
+    app_logs: pytest.LogCaptureFixture,
 ) -> None:
     active_user = _add_user(db_session)
     inactive_user = _add_user(db_session, active=False)
@@ -159,13 +159,13 @@ async def test_endpoint_rejects_all_invalid_session_states_uniformly_and_without
         str(valid.id),
     ]
 
-    with caplog.at_level(logging.ERROR):
+    with app_logs.at_level(logging.ERROR):
         responses = [await _get(application, candidate) for candidate in candidates]
 
     assert {(response.status_code, response.text) for response in responses} == {
         (401, '{"detail":"Authentication required."}')
     }
-    captured = "\n".join(response.text for response in responses) + caplog.text
+    captured = "\n".join(response.text for response in responses) + app_logs.text
     for secret in ("C" * 43, "D" * 43, "E" * 43, "F" * 43, "G" * 43):
         assert secret not in captured
         assert hash_token(secret).hex() not in captured

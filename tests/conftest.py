@@ -1,8 +1,11 @@
+import logging
 import os
+from collections.abc import Iterator
 
 import pytest
 from pydantic import SecretStr
 
+import mintflow.main
 from mintflow.config import Settings
 
 _SETTINGS_ENV_PREFIX = "MINTFLOW_"
@@ -48,3 +51,36 @@ def anyio_backend() -> str:
     """Run async tests on the application's asyncio backend."""
 
     return "asyncio"
+
+
+@pytest.fixture
+def app_logs(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[pytest.LogCaptureFixture]:
+    """caplog that still sees every record after ``create_app`` configures logging.
+
+    ``configure_logging`` runs ``basicConfig(force=True)``, which detaches caplog's root
+    handler, and test settings use CRITICAL, which would silence the records anyway.
+    Assertions that a secret is absent from the logs are only meaningful with both
+    undone, so this re-attaches the handler and lowers the levels to DEBUG after the
+    application configures logging, and restores the levels afterwards.
+    """
+    root = logging.getLogger()
+    project = logging.getLogger("mintflow")
+    saved_levels = (root.level, project.level)
+    configure = mintflow.main.configure_logging
+
+    def configure_and_capture(level: str) -> None:
+        configure(level)
+        root.addHandler(caplog.handler)
+        root.setLevel(logging.DEBUG)
+        project.setLevel(logging.DEBUG)
+
+    monkeypatch.setattr(mintflow.main, "configure_logging", configure_and_capture)
+    caplog.set_level(logging.DEBUG)
+    try:
+        yield caplog
+    finally:
+        root.removeHandler(caplog.handler)
+        root.setLevel(saved_levels[0])
+        project.setLevel(saved_levels[1])

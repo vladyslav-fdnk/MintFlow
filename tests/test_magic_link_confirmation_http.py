@@ -88,20 +88,20 @@ async def test_scanner_like_repeated_requests_do_not_authenticate(
 
 @pytest.mark.anyio
 async def test_token_and_complete_query_url_are_absent_from_logs(
-    settings: Settings, caplog: pytest.LogCaptureFixture
+    settings: Settings, app_logs: pytest.LogCaptureFixture
 ) -> None:
     application = create_app(settings)
     access_logger = logging.getLogger(UVICORN_ACCESS_LOGGER_NAME)
 
-    with caplog.at_level(logging.DEBUG):
+    with app_logs.at_level(logging.DEBUG):
         transport = ASGITransport(app=application)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get(PATH)
         access_logger.info('127.0.0.1 - "GET %s HTTP/1.1" 200', PATH)
 
     assert response.status_code == 200
-    assert TOKEN not in caplog.text
-    assert PATH not in caplog.text
+    assert TOKEN not in app_logs.text
+    assert PATH not in app_logs.text
 
 
 @pytest.mark.anyio
@@ -193,14 +193,14 @@ async def test_invalid_consumption_has_generic_failure_and_no_cookie(settings: S
 
 @pytest.mark.anyio
 async def test_application_failure_emits_no_cookie_or_secret_logs(
-    settings: Settings, caplog: pytest.LogCaptureFixture
+    settings: Settings, app_logs: pytest.LogCaptureFixture
 ) -> None:
     existing_cookie = "existing-browser-secret"
     application = create_app(settings)
     application.dependency_overrides[get_consume_magic_link] = lambda: FailingMagicLinkConsumption()
     transport = ASGITransport(app=application, raise_app_exceptions=False)
 
-    with caplog.at_level(logging.DEBUG):
+    with app_logs.at_level(logging.DEBUG):
         async with AsyncClient(
             transport=transport,
             base_url="https://app.mintflow.test",
@@ -214,8 +214,8 @@ async def test_application_failure_emits_no_cookie_or_secret_logs(
 
     assert response.status_code == 500
     assert "set-cookie" not in response.headers
-    assert TOKEN not in caplog.text
-    assert existing_cookie not in caplog.text
+    assert TOKEN not in app_logs.text
+    assert existing_cookie not in app_logs.text
 
 
 async def _request(settings: Settings, method: str, path: str) -> Response:

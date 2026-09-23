@@ -1,6 +1,6 @@
 # MAINT-03 — Make Log Assertions in Tests Effective
 
-Status: ready
+Status: done
 
 ## Goal
 

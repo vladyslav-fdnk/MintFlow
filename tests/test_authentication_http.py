@@ -251,7 +251,7 @@ async def test_csrf_protected_route_rejects_unauthenticated_request_before_csrf_
 @pytest.mark.anyio
 async def test_csrf_token_and_secret_are_absent_from_rejection_logs_and_responses(
     settings: Settings,
-    caplog: pytest.LogCaptureFixture,
+    app_logs: pytest.LogCaptureFixture,
 ) -> None:
     application = create_app(settings)
     authenticated = AuthenticatedWebSession(session_id=uuid4(), user_id=uuid4())
@@ -264,7 +264,7 @@ async def test_csrf_token_and_secret_are_absent_from_rejection_logs_and_response
     wrong_token = "wrong-csrf-token-value"
 
     transport = ASGITransport(app=application)
-    with caplog.at_level(logging.ERROR):
+    with app_logs.at_level(logging.DEBUG):
         async with AsyncClient(
             transport=transport, base_url=settings.authentication_web_origin
         ) as client:
@@ -278,7 +278,7 @@ async def test_csrf_token_and_secret_are_absent_from_rejection_logs_and_response
             )
 
     assert response.status_code == 403
-    captured = response.text + caplog.text
+    captured = response.text + app_logs.text
     assert wrong_token not in captured
     assert session_secret not in captured
 
@@ -383,7 +383,7 @@ async def test_forwarding_headers_do_not_change_http_network_source(settings: Se
 
 @pytest.mark.anyio
 async def test_unexpected_exception_response_and_logs_do_not_disclose_secrets(
-    settings: Settings, caplog: pytest.LogCaptureFixture
+    settings: Settings, app_logs: pytest.LogCaptureFixture
 ) -> None:
     application = create_app(settings)
     sensitive_values = [
@@ -398,7 +398,7 @@ async def test_unexpected_exception_response_and_logs_do_not_disclose_secrets(
     async def unexpected() -> None:
         raise RuntimeError("authentication request failed")
 
-    with caplog.at_level(logging.ERROR):
+    with app_logs.at_level(logging.DEBUG):
         transport = ASGITransport(app=application, raise_app_exceptions=False)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get(
@@ -410,7 +410,7 @@ async def test_unexpected_exception_response_and_logs_do_not_disclose_secrets(
                 },
             )
 
-    captured = response.text + caplog.text
+    captured = response.text + app_logs.text
     assert response.status_code == 500
     for sensitive_value in sensitive_values:
         assert sensitive_value not in captured
@@ -615,7 +615,7 @@ async def test_logout_rejects_invalid_csrf_or_origin_without_revoking(
 @pytest.mark.anyio
 async def test_logout_secret_and_token_are_absent_from_logs_and_responses(
     settings: Settings,
-    caplog: pytest.LogCaptureFixture,
+    app_logs: pytest.LogCaptureFixture,
 ) -> None:
     application = create_app(settings)
     logout_use_case = RecordingLogoutWebSession()
@@ -624,7 +624,7 @@ async def test_logout_secret_and_token_are_absent_from_logs_and_responses(
     wrong_token = "wrong-csrf-token-value"
 
     transport = ASGITransport(app=application)
-    with caplog.at_level(logging.ERROR):
+    with app_logs.at_level(logging.DEBUG):
         async with AsyncClient(
             transport=transport, base_url=settings.authentication_web_origin
         ) as client:
@@ -638,6 +638,6 @@ async def test_logout_secret_and_token_are_absent_from_logs_and_responses(
             )
 
     assert response.status_code == 403
-    captured = response.text + caplog.text
+    captured = response.text + app_logs.text
     assert wrong_token not in captured
     assert session_secret not in captured

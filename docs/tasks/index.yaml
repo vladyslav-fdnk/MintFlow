@@ -346,6 +346,6 @@ tasks:
   - id: MAINT-03
     title: Make log assertions in tests effective
     file: docs/tasks/MAINT-03-effective-log-assertions.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []

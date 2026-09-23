@@ -1,5 +1,4 @@
 import json
-import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -241,7 +240,7 @@ async def test_confirm_links_and_the_bot_says_connected(settings: Settings) -> N
 
 @pytest.mark.anyio
 async def test_a_failed_bot_acknowledgement_does_not_undo_the_link(
-    settings: Settings, caplog: pytest.LogCaptureFixture
+    settings: Settings, app_logs: pytest.LogCaptureFixture
 ) -> None:
     harness = Harness(settings)
     harness.bot.fail_methods.add("send_message")
@@ -249,24 +248,16 @@ async def test_a_failed_bot_acknowledgement_does_not_undo_the_link(
         "POST", "/telegram/link-challenges", headers=harness.csrf_headers()
     )
 
-    # create_app reconfigures root logging, which detaches caplog's root handler;
-    # attach it to the route's logger directly so the assertions below are real.
-    route_logger = logging.getLogger("mintflow.http.telegram")
-    route_logger.addHandler(caplog.handler)
-    try:
-        with caplog.at_level(logging.WARNING, logger="mintflow.http.telegram"):
-            response = await harness.request(
-                "POST",
-                f"/telegram/link-challenges/{created.json()['challenge_id']}/confirm",
-                headers=harness.csrf_headers(),
-            )
-    finally:
-        route_logger.removeHandler(caplog.handler)
+    response = await harness.request(
+        "POST",
+        f"/telegram/link-challenges/{created.json()['challenge_id']}/confirm",
+        headers=harness.csrf_headers(),
+    )
 
     assert response.status_code == 200
     assert harness.repository.connections
-    assert "telegram_link_ack_failed" in caplog.text
-    assert messages.LINKED not in caplog.text
+    assert "telegram_link_ack_failed" in app_logs.text
+    assert messages.LINKED not in app_logs.text
 
 
 @pytest.mark.anyio
