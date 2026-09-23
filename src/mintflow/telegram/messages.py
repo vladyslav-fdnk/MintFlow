@@ -102,3 +102,14 @@ def review_card(
 
 def saved(*, amount: str) -> str:
     return f"Saved: {amount}."
+
+
+DRAFT_CONFLICT: Final = (
+    "You already have an expense in progress. Continue it, or discard it and start a new one?"
+)
+NO_RECENT: Final = "You haven't saved any expenses yet. Send /add to record one."
+RECENT_HEADER: Final = "Your latest expenses:"
+
+
+def recent_line(*, date: str, merchant: str | None, amount: str, category: str) -> str:
+    return f"{date} · {merchant or 'No merchant'} · {amount} · {category}"

@@ -21,6 +21,8 @@ from zoneinfo import ZoneInfo
 from mintflow.application.capture import (
     CaptureDraftAccessDenied,
     CaptureDraftNotConfirmable,
+    ExpenseHistoryFilter,
+    ExpenseHistoryPage,
     is_within_future_tolerance,
 )
 from mintflow.application.telegram import (
@@ -54,6 +56,8 @@ from mintflow.telegram.parsing import (
 
 _DRAFT_ACTION_PREFIX: Final = "d"
 ADD_ACTION: Final = "add"
+RECENT_ACTION: Final = "recent"
+RECENT_LIMIT: Final = 10
 
 
 class DraftRepository(Protocol):
@@ -66,6 +70,12 @@ class DraftRepository(Protocol):
 
 class CategoryRepository(Protocol):
     def list_active(self) -> list[Category]: ...
+
+
+class ExpenseHistory(Protocol):
+    def list_history(
+        self, *, owner_id: UUID, history_filter: ExpenseHistoryFilter, limit: int
+    ) -> ExpenseHistoryPage: ...
 
 
 class DraftConfirmer(Protocol):
@@ -96,6 +106,7 @@ class ManualCaptureFlow:
         drafts: DraftRepository,
         categories: CategoryRepository,
         confirm: DraftConfirmer,
+        history: ExpenseHistory,
         web_origin: str,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
@@ -103,15 +114,18 @@ class ManualCaptureFlow:
         self._drafts = drafts
         self._categories = categories
         self._confirm = confirm
+        self._history = history
         self._web_origin = web_origin
         self._clock = clock
 
     # --- entry points ------------------------------------------------------------------------
 
     def on_command(self, user: User, chat_id: int, command: str) -> list[Outgoing] | None:
-        """``/add`` and ``/cancel``; None for commands this flow does not own."""
+        """``/add``, ``/cancel``, and ``/recent``; None for commands this flow does not own."""
         if command == "/add":
             return self._start(user, chat_id)
+        if command == "/recent":
+            return [self._recent(user, chat_id)]
         if command == "/cancel":
             conversation = self._lock(user)
             draft = self._active_draft(user, conversation)
@@ -147,6 +161,8 @@ class ManualCaptureFlow:
         """Buttons; None when the data is not this flow's."""
         if data == ADD_ACTION:
             return [CallbackAnswer(callback_query_id), *self._start(user, chat_id)]
+        if data == RECENT_ACTION:
+            return [CallbackAnswer(callback_query_id), self._recent(user, chat_id)]
         parsed = _parse_draft_action(data)
         if parsed is None:
             return None
@@ -170,10 +186,12 @@ class ManualCaptureFlow:
         conversation = self._lock(user)
         existing = self._active_draft(user, conversation)
         if existing is not None:
-            return [
-                Reply(chat_id, messages.DRAFT_IN_PROGRESS),
-                *self._prompt_for(chat_id, conversation, existing),
-            ]
+            return [Reply(chat_id, messages.DRAFT_CONFLICT, _conflict_keyboard(existing))]
+        return self._create_draft(user, chat_id, conversation)
+
+    def _create_draft(
+        self, user: User, chat_id: int, conversation: TelegramConversation
+    ) -> list[Outgoing]:
         now = self._clock()
         today = now.astimezone(_zone(user)).date()
         draft = CaptureDraft.start(owner_id=user.id, source=CaptureSource.TELEGRAM_MANUAL, now=now)
@@ -190,6 +208,26 @@ class ManualCaptureFlow:
             )
         )
         return [Reply(chat_id, messages.ASK_AMOUNT)]
+
+    def _recent(self, user: User, chat_id: int) -> Reply:
+        """The latest confirmed, non-deleted Expenses; informational only (MVP section 5)."""
+        page = self._history.list_history(
+            owner_id=user.id, history_filter=ExpenseHistoryFilter(), limit=RECENT_LIMIT
+        )
+        keyboard: InlineKeyboard = ((InlineButton("Open MintFlow", url=self._web_origin),),)
+        if not page.items:
+            return Reply(chat_id, messages.NO_RECENT, keyboard)
+        names = {category.key: category.name for category in self._categories.list_active()}
+        lines = [
+            messages.recent_line(
+                date=format_date(expense.transaction_date.value),
+                merchant=expense.merchant.value if expense.merchant is not None else None,
+                amount=format_money(expense.money),
+                category=names.get(expense.category_key, expense.category_key),
+            )
+            for expense in page.items
+        ]
+        return Reply(chat_id, "\n".join([messages.RECENT_HEADER, *lines]), keyboard)
 
     def _on_amount(
         self,
@@ -353,6 +391,12 @@ class ManualCaptureFlow:
             return self._confirm_draft(user, chat_id, message_id, conversation, draft)
         if action == "cancel":
             return [EditMessage(chat_id, message_id, self._cancel(user, conversation, draft))]
+        if action == "continue":
+            return self._prompt_for(chat_id, conversation, draft)
+        if action == "discard":
+            # Cancel the old draft and start the new one in the same transaction.
+            self._cancel(user, conversation, draft)
+            return self._create_draft(user, chat_id, conversation.finished(now=now))
         return []
 
     def _advance(
@@ -502,9 +546,19 @@ class ManualCaptureFlow:
 
     def _after_save_keyboard(self) -> InlineKeyboard:
         return (
-            (InlineButton("Add another", callback_data=ADD_ACTION),),
+            (
+                InlineButton("Add another", callback_data=ADD_ACTION),
+                InlineButton("Recent", callback_data=RECENT_ACTION),
+            ),
             (InlineButton("Open MintFlow", url=self._web_origin),),
         )
+
+
+def _conflict_keyboard(draft: CaptureDraft) -> InlineKeyboard:
+    return (
+        (InlineButton("Continue", callback_data=draft_action(draft.id, "continue")),),
+        (InlineButton("Discard and start new", callback_data=draft_action(draft.id, "discard")),),
+    )
 
 
 def _date_keyboard(draft: CaptureDraft) -> InlineKeyboard:

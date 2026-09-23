@@ -3,7 +3,11 @@ from uuid import UUID, uuid4
 
 import pytest
 
-from mintflow.application.capture import CaptureDraftNotConfirmable
+from mintflow.application.capture import (
+    CaptureDraftNotConfirmable,
+    ExpenseHistoryFilter,
+    ExpenseHistoryPage,
+)
 from mintflow.application.telegram import AwaitingInput, TelegramConversation
 from mintflow.domain.capture import (
     UNCATEGORIZED_KEY,
@@ -18,7 +22,12 @@ from mintflow.domain.capture import (
 )
 from mintflow.domain.user import Timezone, User
 from mintflow.telegram import messages
-from mintflow.telegram.capture_flow import ADD_ACTION, ManualCaptureFlow, draft_action
+from mintflow.telegram.capture_flow import (
+    ADD_ACTION,
+    RECENT_ACTION,
+    ManualCaptureFlow,
+    draft_action,
+)
 from mintflow.telegram.outgoing import CallbackAnswer, EditMessage, Outgoing, Reply
 
 NOW = datetime(2026, 9, 23, 9, 0, tzinfo=UTC)
@@ -97,6 +106,25 @@ class FakeConfirm:
         return expense
 
 
+class FakeHistory:
+    """Newest first, like the real query; only this user's confirmed Expenses."""
+
+    def __init__(self, confirmer: FakeConfirm) -> None:
+        self.confirmer = confirmer
+        self.limits: list[int] = []
+
+    def list_history(
+        self, *, owner_id: UUID, history_filter: ExpenseHistoryFilter, limit: int
+    ) -> ExpenseHistoryPage:
+        self.limits.append(limit)
+        items = sorted(
+            (e for e in self.confirmer.expenses.values() if e.owner_id == owner_id and e.is_active),
+            key=lambda e: (e.transaction_date.value, e.created_at, e.id),
+            reverse=True,
+        )
+        return ExpenseHistoryPage(items=tuple(items[:limit]), next_position=None)
+
+
 class Harness:
     def __init__(
         self, *, default_currency: CurrencyCode | None = EUR, timezone: str = "UTC"
@@ -107,11 +135,13 @@ class Harness:
         self.conversations = FakeConversations()
         self.drafts = FakeDrafts()
         self.confirmer = FakeConfirm(self.drafts)
+        self.history = FakeHistory(self.confirmer)
         self.flow = ManualCaptureFlow(
             conversations=self.conversations,
             drafts=self.drafts,
             categories=FakeCategories(),
             confirm=self.confirmer,
+            history=self.history,
             web_origin="https://app.mintflow.test",
             clock=lambda: NOW,
         )
@@ -126,7 +156,11 @@ class Harness:
         return self.flow.on_text(self.user, CHAT, text)
 
     def press(self, action: str, *, draft_id: UUID | None = None) -> list[Outgoing]:
-        data = action if action == ADD_ACTION else draft_action(draft_id or self.draft.id, action)
+        data = (
+            action
+            if action in (ADD_ACTION, RECENT_ACTION)
+            else draft_action(draft_id or self.draft.id, action)
+        )
         result = self.flow.on_callback(self.user, CHAT, CARD, "cb", data)
         assert result is not None
         return result
@@ -364,16 +398,109 @@ def test_text_without_a_draft_points_to_add() -> None:
     assert _texts(harness.text("12.50")) == [messages.NO_ACTIVE_DRAFT]
 
 
-def test_add_while_a_draft_is_active_repeats_the_current_step() -> None:
+def test_add_while_a_draft_is_active_offers_continue_or_discard() -> None:
     harness = Harness()
     harness.command("/add")
     first = harness.draft.id
 
     replies = harness.command("/add")
 
-    assert _texts(replies) == [messages.DRAFT_IN_PROGRESS, messages.ASK_AMOUNT]
+    [reply] = replies
+    assert isinstance(reply, Reply) and reply.text == messages.DRAFT_CONFLICT
+    assert reply.keyboard is not None
+    labels = [button.text for row in reply.keyboard for button in row]
+    assert labels == ["Continue", "Discard and start new"]
     assert harness.draft.id == first
     assert len(harness.drafts.rows) == 1
+
+
+def test_continue_repeats_the_current_step() -> None:
+    harness = Harness()
+    harness.command("/add")
+    harness.text("5")
+    harness.command("/add")
+
+    assert _texts(harness.press("continue")) == [messages.ASK_MERCHANT]
+
+
+def test_discard_cancels_the_old_draft_and_starts_a_new_one() -> None:
+    harness = Harness()
+    harness.to_review()
+    old = harness.draft.id
+    harness.command("/add")
+
+    replies = harness.press("discard")
+
+    assert _texts(replies) == [messages.ASK_AMOUNT]
+    assert harness.drafts.rows[old].state is CaptureDraftState.CANCELLED
+    assert harness.draft.id != old
+    assert harness.draft.state is CaptureDraftState.COLLECTING
+    assert harness.conversation.awaiting is AwaitingInput.AMOUNT
+    assert all(commit is False for commit in harness.drafts.commits)
+
+
+def test_add_another_button_also_respects_an_active_draft() -> None:
+    harness = Harness()
+    harness.command("/add")
+
+    replies = harness.press(ADD_ACTION)
+
+    assert _texts(replies) == [messages.DRAFT_CONFLICT]
+
+
+def _save(harness: Harness, amount: str, merchant: str | None, category: str) -> None:
+    harness.command("/add")
+    harness.text(amount)
+    if merchant is None:
+        harness.press("skip")
+    else:
+        harness.text(merchant)
+    harness.press(f"cat:{category}")
+    harness.press("confirm")
+
+
+def test_recent_lists_the_latest_ten_saved_expenses() -> None:
+    harness = Harness()
+    for index in range(12):
+        _save(harness, f"{index + 1}", f"Shop {index}", "groceries")
+
+    [reply] = harness.command("/recent")
+
+    assert isinstance(reply, Reply)
+    lines = reply.text.split("\n")
+    assert lines[0] == messages.RECENT_HEADER
+    assert len(lines) == 11
+    assert harness.history.limits == [10]
+    assert reply.keyboard is not None
+    assert reply.keyboard[0][0].url == "https://app.mintflow.test"
+
+
+def test_recent_line_shows_date_merchant_amount_currency_and_category() -> None:
+    harness = Harness()
+    _save(harness, "1500 JPY", None, "transport")
+
+    [reply] = harness.command("/recent")
+
+    assert isinstance(reply, Reply)
+    assert reply.text.split("\n")[1] == "23 Sep 2026 · No merchant · 1,500 JPY · Transport"
+
+
+def test_recent_with_no_expenses_points_to_add() -> None:
+    harness = Harness()
+
+    [reply] = harness.command("/recent")
+
+    assert isinstance(reply, Reply) and reply.text == messages.NO_RECENT
+
+
+def test_recent_button_after_saving() -> None:
+    harness = Harness()
+    _save(harness, "3", "Kiosk", "groceries")
+
+    replies = harness.press(RECENT_ACTION)
+
+    assert replies[0] == CallbackAnswer("cb")
+    assert "Kiosk" in _texts(replies)[0]
 
 
 def test_add_another_button_starts_a_new_draft_after_saving() -> None:
@@ -397,5 +524,5 @@ def test_callback_data_fits_telegrams_limit() -> None:
 def test_unknown_commands_are_not_this_flows() -> None:
     harness = Harness()
 
-    assert harness.flow.on_command(harness.user, CHAT, "/recent") is None
+    assert harness.flow.on_command(harness.user, CHAT, "/settings") is None
     assert harness.flow.on_callback(harness.user, CHAT, CARD, "cb", "other") is None

@@ -277,3 +277,75 @@ async def test_unlinking_clears_the_conversation_and_stops_capture(
     assert db_session.scalar(select(func.count()).select_from(TelegramConversationRecord)) == 0
     assert _sent_texts(bot)[-1] == messages.NOT_LINKED
     application.state.database_engine.dispose()
+
+
+async def _save_through_bot(
+    application: FastAPI, bot: RecordingTelegramBotApi, amount: str, merchant: str
+) -> None:
+    await _deliver(application, _text("/add"))
+    await _deliver(application, _text(amount))
+    await _deliver(application, _text(merchant))
+    await _deliver(application, _press(_button(bot, "Groceries")))
+    await _deliver(application, _press(_button(bot, "Confirm")))
+
+
+@pytest.mark.anyio
+async def test_recent_excludes_deleted_expenses(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    # Owner scoping of the same query is covered by the EXPENSE-01 history tests.
+    _linked_user(db_session)
+    application, bot = _application(migrated_database_url)
+    await _save_through_bot(application, bot, "4", "Kept Shop")
+    await _save_through_bot(application, bot, "9", "Deleted Shop")
+    db_session.expire_all()
+    deleted_id = db_session.scalar(
+        select(ExpenseRecord.id).where(ExpenseRecord.merchant_name == "Deleted Shop")
+    )
+    db_session.execute(
+        update(ExpenseRecord).where(ExpenseRecord.id == deleted_id).values(deleted_at=NOW)
+    )
+    db_session.commit()
+
+    await _deliver(application, _text("/recent"))
+
+    reply = _sent_texts(bot)[-1]
+    assert reply.splitlines() == [
+        messages.RECENT_HEADER,
+        "23 Sep 2026 · Kept Shop · 4.00 EUR · Groceries",
+    ]
+    application.state.database_engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_discard_and_start_new_is_one_atomic_change(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user_id = _linked_user(db_session)
+    application, bot = _application(migrated_database_url)
+    await _deliver(application, _text("/add"))
+    await _deliver(application, _text("7"))
+    await _deliver(application, _text("/add"))
+
+    await _deliver(application, _press(_button(bot, "Discard and start new")))
+
+    db_session.expire_all()
+    states = sorted(
+        db_session.scalars(
+            select(CaptureDraftRecord.state).where(CaptureDraftRecord.owner_id == user_id)
+        ).all()
+    )
+    assert states == ["cancelled", "collecting"]
+    active = db_session.scalar(
+        select(TelegramConversationRecord.active_draft_id).where(
+            TelegramConversationRecord.user_id == user_id
+        )
+    )
+    collecting = db_session.scalar(
+        select(CaptureDraftRecord.id).where(
+            CaptureDraftRecord.owner_id == user_id, CaptureDraftRecord.state == "collecting"
+        )
+    )
+    assert active == collecting
+    assert _sent_texts(bot)[-1] == messages.ASK_AMOUNT
+    application.state.database_engine.dispose()

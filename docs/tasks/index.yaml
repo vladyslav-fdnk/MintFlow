@@ -322,7 +322,7 @@ tasks:
   - id: TG-07
     title: Telegram Recent History and Draft Conflicts
     file: docs/tasks/TG-07-telegram-history-and-draft-conflicts.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - TG-06

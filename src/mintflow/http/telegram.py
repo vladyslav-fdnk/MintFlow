@@ -201,6 +201,7 @@ def build_telegram_update_handler(
     """The production composition of the update handler on one database session."""
     links = SqlAlchemyTelegramLinkRepository(session)
     drafts = SqlAlchemyCaptureDraftRepository(session)
+    expenses = SqlAlchemyExpenseRepository(session)
     users = SqlAlchemyUserRepository(session)
     capture = ManualCaptureFlow(
         conversations=SqlAlchemyTelegramConversationRepository(session),
@@ -208,10 +209,11 @@ def build_telegram_update_handler(
         categories=SqlAlchemyCategoryRepository(session),
         confirm=ConfirmCaptureDraft(
             draft_repository=drafts,
-            expense_repository=SqlAlchemyExpenseRepository(session),
+            expense_repository=expenses,
             user_repository=users,
             clock=runtime.clock,
         ),
+        history=expenses,
         web_origin=runtime.web_origin,
         clock=runtime.clock,
     )
