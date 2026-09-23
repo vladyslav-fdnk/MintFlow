@@ -198,7 +198,7 @@ tasks:
   - id: EXPENSE-04
     title: Edit Expense use case
     file: docs/tasks/EXPENSE-04-edit-expense-use-case.md
-    status: blocked
+    status: review
     human_approval: approved
     depends_on:
       - EXPENSE-03

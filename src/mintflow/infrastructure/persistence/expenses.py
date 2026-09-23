@@ -127,6 +127,18 @@ class SqlAlchemyExpenseRepository:
         )
         return _to_domain(record) if record is not None else None
 
+    def get_active_for_update(self, *, expense_id: UUID, owner_id: UUID) -> Expense | None:
+        """Lock the owner's active Expense row for a caller-managed transaction.
+
+        Does not commit: the caller locks, decides, writes the Expense and
+        its change record, and commits once, as ``get_for_update`` does for
+        drafts.
+        """
+        record = self._session.scalar(
+            select_active_expenses(owner_id).where(ExpenseRecord.id == expense_id).with_for_update()
+        )
+        return _to_domain(record) if record is not None else None
+
     def list_history(
         self,
         *,
@@ -188,10 +200,16 @@ class SqlAlchemyExpenseRepository:
         )
         return _to_domain(record) if record is not None else None
 
-    def update(self, expense: Expense) -> None:
+    def update(self, expense: Expense, *, commit: bool = True) -> None:
+        """Persist a new Expense snapshot.
+
+        ``commit=False`` lets a caller compose this with other writes, such
+        as a change record, inside one transaction it commits itself.
+        """
         self._session.execute(
             update(ExpenseRecord)
             .where(ExpenseRecord.id == expense.id)
             .values(**_record_values(expense))
         )
-        self._session.commit()
+        if commit:
+            self._session.commit()

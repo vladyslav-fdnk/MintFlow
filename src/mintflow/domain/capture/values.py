@@ -3,9 +3,9 @@ from dataclasses import dataclass
 from datetime import date
 from typing import ClassVar, Final
 
-# A sanity bound only -- not the "today or the next local day" confirmation
-# rule, which depends on the User's timezone and clock and belongs to the
-# confirmation use case (CAPTURE-08), not this value object.
+# A sanity bound only -- not the "today or the next local day" rule, which
+# depends on the User's timezone and clock and belongs to the application
+# layer (mintflow.application.capture.transaction_dates), not this value object.
 _MIN_YEAR: Final[int] = 2000
 _MAX_YEAR: Final[int] = 2100
 

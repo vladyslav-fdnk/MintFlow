@@ -1,9 +1,9 @@
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
-from zoneinfo import ZoneInfo
 
+from mintflow.application.capture.transaction_dates import is_within_future_tolerance
 from mintflow.domain.capture import UNCATEGORIZED_KEY, CaptureDraft, CaptureDraftState, Expense
 from mintflow.domain.user import User
 
@@ -79,8 +79,7 @@ class ConfirmCaptureDraft:
         user = self._user_repository.get(caller_id)
         if user is None:
             raise CaptureDraftAccessDenied("owner not found")
-        local_today = now.astimezone(ZoneInfo(user.timezone.value)).date()
-        if transaction_date.value > local_today + timedelta(days=1):
+        if not is_within_future_tolerance(transaction_date, now=now, timezone=user.timezone):
             raise CaptureDraftNotConfirmable("transaction date is more than one day in the future")
 
         category_key = draft.category_key if draft.category_key is not None else UNCATEGORIZED_KEY
