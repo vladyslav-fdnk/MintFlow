@@ -342,3 +342,10 @@ tasks:
     human_approval: approved
     depends_on:
       - TG-05
+
+  - id: MAINT-03
+    title: Make log assertions in tests effective
+    file: docs/tasks/MAINT-03-effective-log-assertions.md
+    status: ready
+    human_approval: approved
+    depends_on: []
