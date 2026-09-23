@@ -281,14 +281,14 @@ tasks:
   - id: TG-02
     title: Telegram Connection and Link Challenge Persistence
     file: docs/tasks/TG-02-telegram-link-persistence.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
 
   - id: TG-03
     title: Telegram Linking Use Cases
     file: docs/tasks/TG-03-telegram-linking-use-cases.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - TG-02

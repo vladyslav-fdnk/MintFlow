@@ -45,7 +45,8 @@ def engine(migrated_database_url: str) -> Iterator[Engine]:
             text(
                 "TRUNCATE TABLE authentication_audit_records, "
                 "authentication_rate_limit_buckets, web_sessions, "
-                "login_challenges, email_identities, expense_change_records, expenses, "
+                "login_challenges, email_identities, telegram_link_challenges, "
+                "telegram_connections, expense_change_records, expenses, "
                 "capture_drafts, users"
             )
         )

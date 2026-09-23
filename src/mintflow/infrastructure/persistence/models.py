@@ -8,12 +8,14 @@ from sqlalchemy import (
     Date,
     DateTime,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     LargeBinary,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
@@ -142,6 +144,9 @@ class WebSessionRecord(Base):
             name="ck_web_sessions_revoked_at_not_before_issued_at",
         ),
         UniqueConstraint("secret_hash", name="uq_web_sessions_secret_hash"),
+        # Target of the composite foreign key that binds a Telegram link challenge to a
+        # session of the same User.
+        UniqueConstraint("id", "user_id", name="uq_web_sessions_id_user_id"),
         Index("ix_web_sessions_expires_at", "expires_at"),
         Index("ix_web_sessions_revoked_at", "revoked_at"),
     )
@@ -163,7 +168,8 @@ class AuthenticationAuditRecordModel(Base):
     __table_args__ = (
         CheckConstraint(
             "event_type IN ('login_challenge_requested', 'login_succeeded', 'login_failed', "
-            "'current_session_revoked', 'all_sessions_revoked')",
+            "'current_session_revoked', 'all_sessions_revoked', 'telegram_link_claimed', "
+            "'telegram_linked', 'telegram_unlinked')",
             name="ck_auth_audit_records_event_type",
         ),
         CheckConstraint(
@@ -364,3 +370,100 @@ class ExpenseChangeRecordModel(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     change_type: Mapped[str] = mapped_column(String(16), nullable=False)
     changes: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
+
+
+class TelegramLinkChallengeRecord(Base):
+    """Two-step Telegram link ceremony state (authentication_persistence_design.md, 2.6)."""
+
+    __tablename__ = "telegram_link_challenges"
+    __table_args__ = (
+        CheckConstraint(
+            "octet_length(token_hash) = 32", name="ck_telegram_link_challenges_token_hash_length"
+        ),
+        CheckConstraint("expires_at > issued_at", name="ck_telegram_link_challenges_expiry"),
+        CheckConstraint(
+            "expires_at <= issued_at + INTERVAL '5 minutes'",
+            name="ck_telegram_link_challenges_max_lifetime",
+        ),
+        CheckConstraint(
+            "(claimed_at IS NULL) = (claimed_telegram_user_id IS NULL)",
+            name="ck_telegram_link_challenges_complete_claim",
+        ),
+        CheckConstraint(
+            "claimed_at IS NULL OR claimed_at >= issued_at",
+            name="ck_telegram_link_challenges_claimed_after_issue",
+        ),
+        CheckConstraint(
+            "claimed_telegram_display_name IS NULL OR claimed_at IS NOT NULL",
+            name="ck_telegram_link_challenges_display_name_needs_claim",
+        ),
+        CheckConstraint(
+            "confirmed_at IS NULL OR (claimed_at IS NOT NULL AND confirmed_at >= claimed_at)",
+            name="ck_telegram_link_challenges_confirmation_needs_claim",
+        ),
+        UniqueConstraint("token_hash", name="uq_telegram_link_challenges_token_hash"),
+        # The initiating session must belong to the initiating User. Deleting a session
+        # removes its challenges: a challenge cannot outlive the only session that may
+        # confirm it, and session retention must never be blocked by one.
+        ForeignKeyConstraint(
+            ["initiating_web_session_id", "initiating_user_id"],
+            ["web_sessions.id", "web_sessions.user_id"],
+            name="fk_telegram_link_challenges_session_user",
+            ondelete="CASCADE",
+        ),
+        Index("ix_telegram_link_challenges_expires_at", "expires_at"),
+        Index("ix_telegram_link_challenges_initiating_user_id", "initiating_user_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary(32), nullable=False)
+    initiating_user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    initiating_web_session_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), nullable=False
+    )
+    issued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    claimed_telegram_user_id: Mapped[int | None] = mapped_column(BigInteger)
+    claimed_telegram_display_name: Mapped[str | None] = mapped_column(String(128))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TelegramConnectionRecord(Base):
+    """The active-or-recently-unlinked Telegram connection of a User (design 2.5)."""
+
+    __tablename__ = "telegram_connections"
+    __table_args__ = (
+        CheckConstraint(
+            "unlinked_at IS NULL OR unlinked_at >= linked_at",
+            name="ck_telegram_connections_unlinked_after_linked",
+        ),
+        Index(
+            "uq_telegram_connections_active_user_id",
+            "user_id",
+            unique=True,
+            postgresql_where=text("unlinked_at IS NULL"),
+        ),
+        Index(
+            "uq_telegram_connections_active_telegram_user_id",
+            "telegram_user_id",
+            unique=True,
+            postgresql_where=text("unlinked_at IS NULL"),
+        ),
+        Index("ix_telegram_connections_unlinked_at", "unlinked_at"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    telegram_display_name: Mapped[str | None] = mapped_column(String(128))
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    unlinked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

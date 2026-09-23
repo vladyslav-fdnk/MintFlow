@@ -13,6 +13,9 @@ class AuthenticationAuditEventType(StrEnum):
     LOGIN_FAILED = "login_failed"
     CURRENT_SESSION_REVOKED = "current_session_revoked"
     ALL_SESSIONS_REVOKED = "all_sessions_revoked"
+    TELEGRAM_LINK_CLAIMED = "telegram_link_claimed"
+    TELEGRAM_LINKED = "telegram_linked"
+    TELEGRAM_UNLINKED = "telegram_unlinked"
 
 
 class AuthenticationAuditOutcome(StrEnum):

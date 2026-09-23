@@ -1,6 +1,6 @@
 # TG-02 — Telegram Connection and Link Challenge Persistence
 
-Status: ready
+Status: done
 
 ## Goal
 
