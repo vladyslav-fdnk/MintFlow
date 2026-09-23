@@ -368,7 +368,7 @@ tasks:
   - id: RCPT-03
     title: Recognition Boundary and Candidate Selection
     file: docs/tasks/RCPT-03-recognition-boundary.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - RCPT-01
@@ -402,7 +402,7 @@ tasks:
   - id: RCPT-07
     title: Recognition Provider Adapter
     file: docs/tasks/RCPT-07-recognition-provider-adapter.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-03

@@ -1,6 +1,6 @@
 # RCPT-07 — Recognition Provider Adapter
 
-Status: blocked
+Status: ready
 
 ## Goal
 

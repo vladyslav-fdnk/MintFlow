@@ -1,6 +1,6 @@
 # RCPT-03 — Recognition Boundary and Candidate Selection
 
-Status: ready
+Status: done
 
 ## Goal
 
