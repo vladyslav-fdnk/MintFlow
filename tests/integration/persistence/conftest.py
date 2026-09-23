@@ -48,6 +48,7 @@ def engine(migrated_database_url: str) -> Iterator[Engine]:
                 "login_challenges, email_identities, telegram_link_challenges, "
                 "telegram_processed_updates, telegram_conversations, "
                 "telegram_connections, expense_change_records, expenses, "
+                "recognition_results, receipt_images, receipts, "
                 "capture_drafts, users"
             )
         )

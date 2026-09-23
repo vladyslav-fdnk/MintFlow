@@ -255,6 +255,11 @@ class CaptureDraftRecord(Base):
             "category_key_source IN ('recognition', 'user', 'default')",
             name="ck_capture_drafts_category_key_source",
         ),
+        CheckConstraint(
+            "(source = 'telegram_receipt') = (receipt_id IS NOT NULL)",
+            name="ck_capture_drafts_receipt_matches_source",
+        ),
+        UniqueConstraint("receipt_id", name="uq_capture_drafts_receipt_id"),
         Index("ix_capture_drafts_owner_id", "owner_id"),
     )
 
@@ -284,6 +289,13 @@ class CaptureDraftRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    receipt_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("receipts.id", ondelete="RESTRICT")
+    )
+    recognition_result_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("recognition_results.id", ondelete="SET NULL"),
+    )
 
 
 class ExpenseRecord(Base):
@@ -320,7 +332,9 @@ class ExpenseRecord(Base):
         ForeignKey("capture_drafts.id", ondelete="RESTRICT"),
         nullable=False,
     )
-    receipt_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    receipt_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("receipts.id", ondelete="RESTRICT")
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -505,3 +519,105 @@ class TelegramConversationRecord(Base):
     awaiting: Mapped[str] = mapped_column(String(16), nullable=False)
     currency_is_default: Mapped[bool] = mapped_column(Boolean, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+MAX_RECEIPT_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+class ReceiptRecord(Base):
+    """A receipt and its processing lifecycle; the table is also the work queue (design R2)."""
+
+    __tablename__ = "receipts"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('queued', 'processing', 'recognized', 'recognition_failed')",
+            name="ck_receipts_state",
+        ),
+        CheckConstraint(
+            "(state = 'queued') = (attempt_id IS NULL)", name="ck_receipts_attempt_after_queue"
+        ),
+        CheckConstraint(
+            "(state = 'processing') = (lease_expires_at IS NOT NULL)",
+            name="ck_receipts_lease_while_processing",
+        ),
+        Index(
+            "ix_receipts_claimable",
+            "created_at",
+            postgresql_where=text("state IN ('queued', 'processing') AND image_removed_at IS NULL"),
+        ),
+        Index("ix_receipts_owner_id", "owner_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    owner_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    state: Mapped[str] = mapped_column(String(32), nullable=False)
+    attempt_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    telegram_file_id: Mapped[str | None] = mapped_column(String(256))
+    image_removed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    modified_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ReceiptImageRecord(Base):
+    """Image bytes, kept apart so no receipt or draft query ever loads them (design R3)."""
+
+    __tablename__ = "receipt_images"
+    __table_args__ = (
+        CheckConstraint(
+            "media_type IN ('image/jpeg', 'image/png', 'image/webp')",
+            name="ck_receipt_images_media_type",
+        ),
+        CheckConstraint(
+            f"octet_length(content) BETWEEN 1 AND {MAX_RECEIPT_IMAGE_BYTES}",
+            name="ck_receipt_images_size",
+        ),
+    )
+
+    receipt_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("receipts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    media_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    content: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    stored_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class RecognitionResultRecord(Base):
+    """The values selected from one recognition attempt (domain RecognitionResult)."""
+
+    __tablename__ = "recognition_results"
+    __table_args__ = (
+        CheckConstraint(
+            "(total_minor_units IS NULL) = (total_currency IS NULL)",
+            name="ck_recognition_results_total_fields_together",
+        ),
+        CheckConstraint(
+            "total_minor_units IS NULL OR total_minor_units > 0",
+            name="ck_recognition_results_total_positive",
+        ),
+        UniqueConstraint("receipt_id", "attempt_id", name="uq_recognition_results_attempt"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    receipt_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("receipts.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    attempt_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), nullable=False)
+    owner_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    merchant_name: Mapped[str | None] = mapped_column(String(140))
+    transaction_date: Mapped[date | None] = mapped_column(Date)
+    total_minor_units: Mapped[int | None] = mapped_column(BigInteger)
+    total_currency: Mapped[str | None] = mapped_column(String(3))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

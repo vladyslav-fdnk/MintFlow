@@ -360,7 +360,7 @@ tasks:
   - id: RCPT-02
     title: Receipt Persistence
     file: docs/tasks/RCPT-02-receipt-persistence.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - RCPT-01
@@ -376,7 +376,7 @@ tasks:
   - id: RCPT-04
     title: Telegram Receipt Intake
     file: docs/tasks/RCPT-04-telegram-receipt-intake.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-02
@@ -410,7 +410,7 @@ tasks:
   - id: RCPT-08
     title: Receipt Image and Recognition Retention
     file: docs/tasks/RCPT-08-receipt-retention.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - RCPT-02

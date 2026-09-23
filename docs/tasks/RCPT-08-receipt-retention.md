@@ -1,6 +1,6 @@
 # RCPT-08 — Receipt Image and Recognition Retention
 
-Status: blocked
+Status: ready
 
 ## Goal
 

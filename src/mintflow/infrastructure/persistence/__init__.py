@@ -24,6 +24,11 @@ from mintflow.infrastructure.persistence.login_challenges import (
     SqlAlchemyLoginChallengeConsumer,
     SqlAlchemyLoginChallengeStore,
 )
+from mintflow.infrastructure.persistence.receipts import (
+    SqlAlchemyReceiptImageStore,
+    SqlAlchemyReceiptRepository,
+    StoredImage,
+)
 from mintflow.infrastructure.persistence.telegram_conversations import (
     SqlAlchemyTelegramConversationRepository,
 )
@@ -43,11 +48,14 @@ __all__ = [
     "SqlAlchemyExpenseRepository",
     "SqlAlchemyLoginChallengeConsumer",
     "SqlAlchemyLoginChallengeStore",
+    "SqlAlchemyReceiptImageStore",
+    "SqlAlchemyReceiptRepository",
     "SqlAlchemyTelegramConversationRepository",
     "SqlAlchemyTelegramLinkRepository",
     "SqlAlchemyTelegramUpdateLedger",
     "SqlAlchemyUserRepository",
     "SqlAlchemyWebSessionRepository",
+    "StoredImage",
     "create_database_engine",
     "create_session_factory",
 ]

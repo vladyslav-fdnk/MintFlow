@@ -1,6 +1,6 @@
 # RCPT-02 — Receipt Persistence
 
-Status: ready
+Status: done
 
 ## Goal
 

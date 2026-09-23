@@ -47,6 +47,8 @@ def _to_record(draft: CaptureDraft) -> CaptureDraftRecord:
         created_at=draft.created_at,
         modified_at=draft.modified_at,
         confirmed_at=draft.confirmed_at,
+        receipt_id=draft.receipt_id,
+        recognition_result_id=draft.recognition_result_id,
     )
 
 
@@ -79,6 +81,7 @@ def _record_values(draft: CaptureDraft) -> dict[str, object]:
         "expense_id": draft.expense_id,
         "modified_at": draft.modified_at,
         "confirmed_at": draft.confirmed_at,
+        "recognition_result_id": draft.recognition_result_id,
     }
 
 
@@ -124,6 +127,8 @@ def _to_domain(record: CaptureDraftRecord) -> CaptureDraft:
         created_at=record.created_at,
         modified_at=record.modified_at,
         confirmed_at=record.confirmed_at,
+        receipt_id=record.receipt_id,
+        recognition_result_id=record.recognition_result_id,
     )
 
 
