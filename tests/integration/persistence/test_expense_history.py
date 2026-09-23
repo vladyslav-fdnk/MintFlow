@@ -322,7 +322,11 @@ def test_active_history_index_exists_and_can_serve_the_listing(db_session: Sessi
     assert "(owner_id, transaction_date DESC, created_at DESC, id DESC)" in definition
     assert "WHERE (deleted_at IS NULL)" in definition
 
-    db_session.execute(text("SET LOCAL enable_seqscan = off"))
+    # Steer the planner away from every alternative (sequential scan, bitmap scan on
+    # ix_expenses_owner_id, explicit sort) so the assertion depends on the index being
+    # able to serve the ordered listing, not on table statistics at that moment.
+    for setting in ("enable_seqscan", "enable_bitmapscan", "enable_sort"):
+        db_session.execute(text(f"SET LOCAL {setting} = off"))
     plan = "\n".join(
         db_session.scalars(
             text(
