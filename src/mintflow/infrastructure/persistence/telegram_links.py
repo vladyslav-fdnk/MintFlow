@@ -5,6 +5,8 @@ statement or a row lock plus the partial unique indexes, never by a pre-check
 alone. Raw link tokens never reach this module; only their SHA-256 hashes do.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from uuid import UUID, uuid4
 
@@ -56,8 +58,22 @@ _ACTIVE_USERS = select(UserRecord.id).where(UserRecord.status == UserStatus.ACTI
 
 
 class SqlAlchemyTelegramLinkRepository:
+    """Writes commit on success and roll back on failure; reads join whatever transaction
+    the shared request session already has open, so the repository composes with the other
+    repositories on that session.
+    """
+
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    @contextmanager
+    def _write(self) -> Iterator[None]:
+        try:
+            yield
+            self._session.commit()
+        except BaseException:
+            self._session.rollback()
+            raise
 
     def _audit(
         self,
@@ -94,10 +110,11 @@ class SqlAlchemyTelegramLinkRepository:
             issued_at=issued_at,
             expires_at=expires_at,
         )
-        with self._session.begin():
+        with self._write():
             self._session.add(record)
             self._session.flush()
-            return _challenge(record)
+            challenge = _challenge(record)
+        return challenge
 
     def claim(
         self,
@@ -117,7 +134,7 @@ class SqlAlchemyTelegramLinkRepository:
             TelegramConnectionRecord.telegram_user_id == telegram_user_id,
             TelegramConnectionRecord.unlinked_at.is_(None),
         )
-        with self._session.begin():
+        with self._write():
             record = self._session.scalar(
                 update(TelegramLinkChallengeRecord)
                 .where(
@@ -149,14 +166,13 @@ class SqlAlchemyTelegramLinkRepository:
         self, *, challenge_id: UUID, web_session_id: UUID
     ) -> TelegramLinkChallenge | None:
         """A challenge as seen by its initiating session only; None for anyone else."""
-        with self._session.begin():
-            record = self._session.scalar(
-                select(TelegramLinkChallengeRecord).where(
-                    TelegramLinkChallengeRecord.id == challenge_id,
-                    TelegramLinkChallengeRecord.initiating_web_session_id == web_session_id,
-                )
+        record = self._session.scalar(
+            select(TelegramLinkChallengeRecord).where(
+                TelegramLinkChallengeRecord.id == challenge_id,
+                TelegramLinkChallengeRecord.initiating_web_session_id == web_session_id,
             )
-            return _challenge(record) if record is not None else None
+        )
+        return _challenge(record) if record is not None else None
 
     def confirm(
         self, *, challenge_id: UUID, web_session_id: UUID, now: datetime
@@ -167,7 +183,7 @@ class SqlAlchemyTelegramLinkRepository:
         unrevoked, unexpired, and its User active. A conflict with either partial
         unique index rolls back both the connection and the confirmation.
         """
-        with self._session.begin():
+        with self._write():
             challenge = self._session.scalar(
                 select(TelegramLinkChallengeRecord)
                 .where(
@@ -218,30 +234,28 @@ class SqlAlchemyTelegramLinkRepository:
             return _connection(connection)
 
     def active_connection_for_user(self, *, user_id: UUID) -> TelegramConnection | None:
-        with self._session.begin():
-            record = self._session.scalar(
-                select(TelegramConnectionRecord).where(
-                    TelegramConnectionRecord.user_id == user_id,
-                    TelegramConnectionRecord.unlinked_at.is_(None),
-                )
+        record = self._session.scalar(
+            select(TelegramConnectionRecord).where(
+                TelegramConnectionRecord.user_id == user_id,
+                TelegramConnectionRecord.unlinked_at.is_(None),
             )
-            return _connection(record) if record is not None else None
+        )
+        return _connection(record) if record is not None else None
 
     def active_connection_for_telegram_user(
         self, *, telegram_user_id: int
     ) -> TelegramConnection | None:
-        with self._session.begin():
-            record = self._session.scalar(
-                select(TelegramConnectionRecord).where(
-                    TelegramConnectionRecord.telegram_user_id == telegram_user_id,
-                    TelegramConnectionRecord.unlinked_at.is_(None),
-                )
+        record = self._session.scalar(
+            select(TelegramConnectionRecord).where(
+                TelegramConnectionRecord.telegram_user_id == telegram_user_id,
+                TelegramConnectionRecord.unlinked_at.is_(None),
             )
-            return _connection(record) if record is not None else None
+        )
+        return _connection(record) if record is not None else None
 
     def unlink(self, *, user_id: UUID, now: datetime) -> bool:
         """Deactivate the User's active connection (design 5.8); False when there is none."""
-        with self._session.begin():
+        with self._write():
             connection_id = self._session.scalar(
                 update(TelegramConnectionRecord)
                 .where(

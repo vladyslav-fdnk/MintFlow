@@ -1,6 +1,6 @@
 # TG-03 — Telegram Linking Use Cases
 
-Status: ready
+Status: done
 
 ## Goal
 

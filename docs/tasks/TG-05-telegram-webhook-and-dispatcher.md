@@ -1,6 +1,6 @@
 # TG-05 — Telegram Webhook, Deduplication, and Dispatcher
 
-Status: blocked
+Status: ready
 
 ## Goal
 

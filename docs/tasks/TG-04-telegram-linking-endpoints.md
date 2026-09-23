@@ -1,6 +1,6 @@
 # TG-04 — Telegram Linking Web Endpoints
 
-Status: blocked
+Status: ready
 
 ## Goal
 

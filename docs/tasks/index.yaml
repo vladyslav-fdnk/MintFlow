@@ -288,7 +288,7 @@ tasks:
   - id: TG-03
     title: Telegram Linking Use Cases
     file: docs/tasks/TG-03-telegram-linking-use-cases.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - TG-02
@@ -296,7 +296,7 @@ tasks:
   - id: TG-04
     title: Telegram Linking Web Endpoints
     file: docs/tasks/TG-04-telegram-linking-endpoints.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - TG-01
@@ -305,7 +305,7 @@ tasks:
   - id: TG-05
     title: Telegram Webhook, Deduplication, and Dispatcher
     file: docs/tasks/TG-05-telegram-webhook-and-dispatcher.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - TG-01
