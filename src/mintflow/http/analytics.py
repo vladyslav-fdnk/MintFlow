@@ -23,13 +23,12 @@ from mintflow.http.authentication import (
     DatabaseSession,
     authentication_security_headers,
 )
-from mintflow.http.capture import CaptureRuntimeDependency
+from mintflow.http.capture import CaptureRuntimeDependency, invalid_query
 from mintflow.infrastructure.persistence import (
     SqlAlchemyAnalyticsRepository,
     SqlAlchemyUserRepository,
 )
 
-GENERIC_INVALID_QUERY_MESSAGE: Final = "The request is invalid."
 _DASHBOARD_QUERY_PARAMETERS: Final = frozenset({"date_from", "date_to", "currency"})
 _ISO_DATE_PATTERN: Final = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
@@ -196,14 +195,6 @@ def dashboard_json(dashboard: Dashboard) -> Json:
     }
 
 
-def _invalid_query() -> HTTPException:
-    return HTTPException(
-        status_code=422,
-        detail=GENERIC_INVALID_QUERY_MESSAGE,
-        headers=authentication_security_headers(),
-    )
-
-
 def _unauthenticated_user() -> HTTPException:
     return HTTPException(
         status_code=401,
@@ -221,7 +212,7 @@ async def dashboard(
     """The whole dashboard for one period and currency in one consistent response (D1)."""
     query = parse_dashboard_query(request)
     if query is None:
-        raise _invalid_query()
+        raise invalid_query()
     try:
         result = build_dashboard.execute(
             caller_id=principal.user_id, period=query.period, currency=query.currency

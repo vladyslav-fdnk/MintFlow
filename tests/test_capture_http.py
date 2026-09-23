@@ -510,6 +510,7 @@ async def test_malformed_edit_bodies_return_422(
         )
 
     assert response.status_code == 422
+    assert response.json() == {"detail": "The request body is invalid."}
     assert repository.update_calls == []
 
 
@@ -1162,7 +1163,7 @@ async def test_list_expenses_rejects_invalid_parameters_without_echoing_them(
         response = await client.get("/capture/expenses", params=params, cookies=_cookies())
 
     assert response.status_code == 422
-    assert response.json() == {"detail": "The request body is invalid."}
+    assert response.json() == {"detail": "The request is invalid."}
     for value in params.values():
         assert value not in response.text
 

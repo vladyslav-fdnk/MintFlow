@@ -59,6 +59,7 @@ MAX_HISTORY_FILTER_VALUES = 32
 GENERIC_DRAFT_NOT_FOUND_MESSAGE = "Draft not found."
 GENERIC_DRAFT_REJECTED_MESSAGE = "The request could not be applied."
 GENERIC_MALFORMED_BODY_MESSAGE = "The request body is invalid."
+GENERIC_INVALID_QUERY_MESSAGE = "The request is invalid."
 GENERIC_EXPENSE_NOT_FOUND_MESSAGE = "Expense not found."
 
 router = APIRouter(prefix="/capture", tags=["capture"])
@@ -454,6 +455,15 @@ def _rejected() -> HTTPException:
     )
 
 
+def invalid_query() -> HTTPException:
+    """Generic 422 for invalid query parameters; never echoes the submitted values."""
+    return HTTPException(
+        status_code=422,
+        detail=GENERIC_INVALID_QUERY_MESSAGE,
+        headers=authentication_security_headers(),
+    )
+
+
 def _malformed() -> HTTPException:
     return HTTPException(
         status_code=422,
@@ -661,7 +671,7 @@ async def list_expenses(
     """
     query = parse_expense_history_query(request)
     if query is None:
-        raise _malformed()
+        raise invalid_query()
     page = expense_repository.list_history(
         owner_id=principal.user_id,
         history_filter=query.history_filter,

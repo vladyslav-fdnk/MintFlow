@@ -267,6 +267,6 @@ tasks:
   - id: MAINT-02
     title: Accurate generic message for invalid query parameters
     file: docs/tasks/MAINT-02-generic-invalid-query-message.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []

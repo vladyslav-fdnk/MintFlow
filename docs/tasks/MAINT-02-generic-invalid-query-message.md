@@ -1,6 +1,6 @@
 # MAINT-02 — Accurate Generic Message for Invalid Query Parameters
 
-Status: ready
+Status: done
 
 ## Goal
 
