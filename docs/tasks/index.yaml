@@ -330,7 +330,7 @@ tasks:
   - id: TG-08
     title: Telegram Retention and Draft Expiry Command
     file: docs/tasks/TG-08-telegram-retention-and-draft-expiry.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - TG-06
