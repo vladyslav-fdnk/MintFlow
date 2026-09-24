@@ -1,7 +1,8 @@
 {% extends "base.html" %}
+{% import "_brand.html" as brand %}
 {% block title %}{{ _("Expenses") }}{% endblock %}
 {% block content %}
-<h1>{{ _("Expenses") }}</h1>
+{{ brand.page_title("expenses", _("Expenses")) }}
 
 <form class="filters" method="get" action="/expenses">
   <fieldset>

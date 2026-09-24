@@ -6,19 +6,10 @@
 <div id="dashboard" class="dashboard" tabindex="-1" aria-labelledby="period-title">
 
   <div class="hero">
-    <h1>{{ _("Dashboard") }}</h1>
+    {{ brand.page_title("dashboard", _("Dashboard")) }}
     <p id="period-title" class="hero-period">{{ view.period }}{% if view.currency %}<span class="hero-currency"> · {{ view.currency }}</span>{% endif %}</p>
-    {% if detail %}
-    <p class="answer">{{ _("You spent") }} <strong>{{ detail.total }}</strong></p>
-    <p class="answer-meta">{{ detail.count }}{% if detail.comparison %}<span class="answer-comparison">{{ detail.comparison }}</span>{% endif %}</p>
-    {% elif view.selection_required %}
-    <p class="answer-meta">{{ _("Choose a currency to see its details.") }}</p>
-    {% elif not onboarding and not view.unconverted_note %}
-    <p class="answer-meta">{{ _("No expenses in this period.") }}</p>
-    {% endif %}
-    {% if detail and view.rates_note %}<p class="rates-note">{{ view.rates_note }}</p>{% endif %}
-    {% if view.unconverted_note %}<p class="rates-note">{{ view.unconverted_note }}</p>{% endif %}
   </div>
+
 
   {% if invalid_filters %}
   <p class="notice notice-error" role="alert">{{ _("Those filters are not valid, so this month is shown. Choose both dates, at most 366 days apart.") }}</p>
@@ -38,130 +29,166 @@
   </section>
   {% endif %}
 
+
+  <div class="top-row">
+    <div class="top-main">
+      {% if detail or view.selection_required or view.unconverted_note or not onboarding %}
+      <section class="card overview" aria-labelledby="period-title">
+        {% if detail %}
+        <p class="answer">{{ _("You spent") }} <strong>{{ detail.total }}</strong></p>
+        <p class="answer-meta"><span>{{ detail.count }}</span>{% if detail.comparison %}<span class="answer-comparison comparison-{{ detail.comparison_direction }}"><span class="comparison-arrow" aria-hidden="true">{% if detail.comparison_direction == "up" %}▲{% elif detail.comparison_direction == "down" %}▼{% else %}={% endif %}</span> {{ detail.comparison }}</span>{% endif %}</p>
+        {% elif view.selection_required %}
+        <p class="answer-meta">{{ _("Choose a currency to see its details.") }}</p>
+        {% elif not view.unconverted_note %}
+        <p class="answer-meta">{{ _("No expenses in this period.") }}</p>
+        {% endif %}
+          {% if view.show_currency_choice %}
+          <div class="currency-choice">
+            <h3 id="currencies-title">{{ _("Totals by currency") }}</h3>
+            <ul class="currency-totals" aria-labelledby="currencies-title">
+              {% if view.converted_href %}
+              <li><a class="chip" href="{{ view.converted_href }}"{% if view.converted %} aria-current="true"{% endif %}>{{ view.all_label }}</a></li>
+              {% endif %}
+              {% for line in view.currencies %}
+              <li><a class="chip" href="{{ line.href }}"{% if line.selected %} aria-current="true"{% endif %}>{{ line.total }}</a> <span class="muted">{{ line.count }}{% if line.no_rate %} · {{ _("no exchange rate") }}{% endif %}</span></li>
+              {% endfor %}
+            </ul>
+            {% if view.needs_default_currency %}
+            <p class="hint">{{ _("To see all spending in one currency, choose a default currency in") }} <a href="/settings">{{ _("Settings") }}</a>.</p>
+            {% elif view.rates_missing %}
+            <p class="hint">{{ _("Exchange rates are not available yet, so each currency is shown on its own.") }}</p>
+            {% elif not view.converted %}
+            <p class="hint">{{ _("This view shows one currency without conversion.") }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
+        {% if detail and view.rates_note %}
+        <details class="rates-note">
+          <summary>{{ view.rates_note }}</summary>
+          <p>{{ view.rates_detail }}</p>
+        </details>
+        {% endif %}
+        {% if view.unconverted_note %}<p class="rates-warning">{{ view.unconverted_note }}</p>{% endif %}
+      </section>
+      {% endif %}
+      {% if detail %}
+      {% if detail.largest_category or detail.largest_expense %}
+      <section class="card" aria-labelledby="insights-title">
+        <h2 id="insights-title">{{ _("Insights") }}</h2>
+        <ul class="insights">
+          {% if detail.largest_category %}<li>{{ brand.mark(22, "mark-insight-1") }}<span>{{ detail.largest_category }}</span></li>{% endif %}
+          {% if detail.largest_expense %}<li>{{ brand.mark(22, "mark-insight-2") }}<a href="{{ detail.largest_expense_href }}">{{ detail.largest_expense }}</a></li>{% endif %}
+        </ul>
+      </section>
+      {% endif %}
+      {% endif %}
+    </div>
+    <section class="card controls toolbar" aria-labelledby="controls-title">
+      <h2 id="controls-title">{{ _("Period and currency") }}</h2>
+      {% if view.presets %}
+      <div class="presets" role="group" aria-label="{{ _('Quick periods') }}">
+        {% for preset in view.presets %}
+        <a class="chip" href="{{ preset.href }}" hx-get="{{ preset.href }}" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML" hx-push-url="true" data-focus-target="#dashboard"{% if preset.selected %} aria-current="true"{% endif %}><span class="preset-label">{{ preset.label }}</span>{% if preset.dates %}<span class="preset-dates">{{ preset.dates }}</span>{% endif %}</a>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <form class="filters" method="get" action="/dashboard"
+        hx-get="/dashboard" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML"
+        hx-push-url="true" data-focus-target="#dashboard">
+        <input type="hidden" name="chart" value="{{ view.chart }}">
+        {% if view.table %}<input type="hidden" name="table" value="1">{% endif %}
+        <div class="field">
+          <label for="date_from">{{ _("From") }}</label>
+          <input id="date_from" name="date_from" type="date" value="{{ view.date_from }}">
+        </div>
+        <div class="field">
+          <label for="date_to">{{ _("To") }}</label>
+          <input id="date_to" name="date_to" type="date" value="{{ view.date_to }}">
+        </div>
+        <div class="field">
+          <label for="currency">{{ _("Currency") }}</label>
+          <select id="currency" name="currency">
+            <option value="">{{ view.all_label }}</option>
+            {% for code in view.currency_options %}
+            <option value="{{ code }}"{% if code == view.currency and not view.converted %} selected{% endif %}>{{ code }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <button type="submit" class="button">{{ _("Show") }}</button>
+      </form>
+    </section>
+  </div>
+
+
   {% if detail %}
   {% set chart = detail.time_chart %}
+  <div class="chart-row{% if view.table %} with-table{% endif %}">
   <section class="card chart-card" aria-labelledby="chart-title">
     <div class="card-head">
       <h2 id="chart-title">{% if view.chart == "pie" %}{{ _("Spending by category") }}{% else %}{{ chart.title }}{% endif %}</h2>
-      <div class="segmented" role="group" aria-label="{{ _('Chart view') }}">
-        {% for link in view.chart_links %}
-        <a href="{{ link.href }}" hx-get="{{ link.href }}" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML" hx-push-url="true" data-focus-target="#chart-title"{% if link.selected %} aria-current="true"{% endif %}>{{ link.label }}</a>
-        {% endfor %}
+      <div class="card-actions">
+        <div class="segmented" role="group" aria-label="{{ _('Chart view') }}">
+          {% for link in view.chart_links %}
+          <a href="{{ link.href }}" hx-get="{{ link.href }}" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML" hx-push-url="true" data-focus-target="#chart-title"{% if link.selected %} aria-current="true"{% endif %}>{{ link.label }}</a>
+          {% endfor %}
+        </div>
+        <a class="chip table-toggle" href="{{ view.table_href }}" hx-get="{{ view.table_href }}" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML" hx-push-url="true" data-focus-target="#chart-title"{% if view.table %} aria-current="true"{% endif %}>{% if view.table %}{{ _("Hide the table") }}{% else %}{{ _("Show as a table") }}{% endif %}</a>
       </div>
     </div>
-
-    {% if view.chart == "pie" %}
-    <div class="donut-chart">
-      <div class="donut-wrap">
-        <svg class="donut" viewBox="0 0 42 42" aria-hidden="true" focusable="false">
-          <circle class="donut-track" cx="21" cy="21" r="15.9155" fill="none" stroke-width="6"></circle>
+    {% if view.chart != "pie" %}<p class="chart-summary">{{ chart.summary }}</p>{% endif %}
+    <div class="chart-body">
+      {% if view.chart == "pie" %}
+      <div class="donut-chart">
+        <div class="donut-wrap">
+          <svg class="donut" viewBox="0 0 42 42" aria-hidden="true" focusable="false">
+            <circle class="donut-track" cx="21" cy="21" r="15.9155" fill="none" stroke-width="6"></circle>
+            {% for part in detail.donut %}
+            <circle class="slice slice-{{ part.color }}" cx="21" cy="21" r="15.9155" fill="none" stroke-width="6" stroke-dasharray="{{ part.slice.dasharray }}" stroke-dashoffset="{{ part.slice.dashoffset }}"><title>{{ part.label }}: {{ part.amount }} ({{ part.share }})</title></circle>
+            {% endfor %}
+          </svg>
+          <p class="donut-center"><span class="donut-total">{{ detail.total }}</span><span class="muted">{{ _("in total") }}</span></p>
+        </div>
+        <ul class="legend">
           {% for part in detail.donut %}
-          <circle class="slice slice-{{ part.color }}" cx="21" cy="21" r="15.9155" fill="none" stroke-width="6" stroke-dasharray="{{ part.slice.dasharray }}" stroke-dashoffset="{{ part.slice.dashoffset }}"><title>{{ part.label }}: {{ part.amount }} ({{ part.share }})</title></circle>
+          <li><span class="swatch slice-{{ part.color }}" aria-hidden="true"></span><a href="{{ part.href }}">{{ part.label }}</a> <span class="legend-value">{{ part.amount }} · {{ part.share }}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% else %}
+      <div class="column-chart">
+        <div class="axis-values" aria-hidden="true">{% for value in chart.axis %}<span>{{ value }}</span>{% endfor %}</div>
+        <svg class="columns" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+          <line class="gridline" x1="0" x2="100" y1="0.5" y2="0.5"></line>
+          <line class="gridline" x1="0" x2="100" y1="50" y2="50"></line>
+          <line class="baseline" x1="0" x2="100" y1="99.5" y2="99.5"></line>
+          {% for item in chart.columns %}
+          <rect x="{{ item.column.x }}" y="{{ item.column.y }}" width="{{ item.column.width }}" height="{{ item.column.height }}"><title>{{ item.tooltip }}</title></rect>
           {% endfor %}
         </svg>
-        <p class="donut-center"><span class="donut-total">{{ detail.total }}</span><span class="muted">{{ _("in total") }}</span></p>
+        <div class="axis-dates" aria-hidden="true">{% for tick in chart.ticks %}<span>{{ tick }}</span>{% endfor %}</div>
       </div>
-      <ul class="legend">
-        {% for part in detail.donut %}
-        <li><span class="swatch slice-{{ part.color }}" aria-hidden="true"></span><a href="{{ part.href }}">{{ part.label }}</a> <span class="legend-value">{{ part.amount }} · {{ part.share }}</span></li>
-        {% endfor %}
-      </ul>
-    </div>
-    {% else %}
-    <p class="chart-summary">{{ chart.summary }}</p>
-    <div class="column-chart">
-      <div class="axis-values" aria-hidden="true">{% for value in chart.axis %}<span>{{ value }}</span>{% endfor %}</div>
-      <svg class="columns" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false">
-        <line class="gridline" x1="0" x2="100" y1="0.5" y2="0.5"></line>
-        <line class="gridline" x1="0" x2="100" y1="50" y2="50"></line>
-        <line class="baseline" x1="0" x2="100" y1="99.5" y2="99.5"></line>
-        {% for item in chart.columns %}
-        <rect x="{{ item.column.x }}" y="{{ item.column.y }}" width="{{ item.column.width }}" height="{{ item.column.height }}"><title>{{ item.tooltip }}</title></rect>
-        {% endfor %}
-      </svg>
-      <div class="axis-dates" aria-hidden="true">{% for tick in chart.ticks %}<span>{{ tick }}</span>{% endfor %}</div>
-    </div>
-    <details>
-      <summary>{{ _("Show as a table") }}</summary>
-      <table>
-        <caption>{{ chart.title }}</caption>
-        <thead><tr><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Amount") }}</th></tr></thead>
-        <tbody>
-          {% for item in chart.columns %}
-          <tr><th scope="row"><a href="{{ item.href }}">{{ item.label }}</a></th><td>{{ item.amount }}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </details>
-    {% endif %}
-  </section>
-  {% endif %}
-
-  <section class="card controls" aria-labelledby="controls-title">
-    <h2 id="controls-title">{{ _("Period and currency") }}</h2>
-    {% if view.presets %}
-    <div class="presets" role="group" aria-label="{{ _('Quick periods') }}">
-      {% for preset in view.presets %}
-      <a class="chip" href="{{ preset.href }}" hx-get="{{ preset.href }}" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML" hx-push-url="true" data-focus-target="#dashboard"{% if preset.selected %} aria-current="true"{% endif %}>{{ preset.label }}</a>
-      {% endfor %}
-    </div>
-    {% endif %}
-    <form class="filters" method="get" action="/dashboard"
-      hx-get="/dashboard" hx-target="#dashboard" hx-select="#dashboard" hx-swap="outerHTML"
-      hx-push-url="true" data-focus-target="#dashboard">
-      <input type="hidden" name="chart" value="{{ view.chart }}">
-      <div class="field">
-        <label for="date_from">{{ _("From") }}</label>
-        <input id="date_from" name="date_from" type="date" value="{{ view.date_from }}">
-      </div>
-      <div class="field">
-        <label for="date_to">{{ _("To") }}</label>
-        <input id="date_to" name="date_to" type="date" value="{{ view.date_to }}">
-      </div>
-      <div class="field">
-        <label for="currency">{{ _("Currency") }}</label>
-        <select id="currency" name="currency">
-          <option value="">{{ view.all_label }}</option>
-          {% for code in view.currency_options %}
-          <option value="{{ code }}"{% if code == view.currency and not view.converted %} selected{% endif %}>{{ code }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" class="button">{{ _("Show") }}</button>
-    </form>
-    {% if view.show_currency_choice %}
-    <div class="currency-choice">
-      <h3 id="currencies-title">{{ _("Totals by currency") }}</h3>
-      <ul class="currency-totals" aria-labelledby="currencies-title">
-        {% if view.converted_href %}
-        <li><a class="chip" href="{{ view.converted_href }}"{% if view.converted %} aria-current="true"{% endif %}>{{ view.all_label }}</a></li>
-        {% endif %}
-        {% for line in view.currencies %}
-        <li><a class="chip" href="{{ line.href }}"{% if line.selected %} aria-current="true"{% endif %}>{{ line.total }}</a> <span class="muted">{{ line.count }}{% if line.no_rate %} · {{ _("no exchange rate") }}{% endif %}</span></li>
-        {% endfor %}
-      </ul>
-      {% if view.needs_default_currency %}
-      <p class="hint">{{ _("To see all spending in one currency, choose a default currency in") }} <a href="/settings">{{ _("Settings") }}</a>.</p>
-      {% elif view.rates_missing %}
-      <p class="hint">{{ _("Exchange rates are not available yet, so each currency is shown on its own.") }}</p>
-      {% elif not view.converted %}
-      <p class="hint">{{ _("This view shows one currency without conversion.") }}</p>
       {% endif %}
     </div>
+  </section>
+    {% if view.table %}
+    <section class="card table-card" aria-labelledby="table-title">
+      <h2 id="table-title">{{ chart.title }}</h2>
+      <div class="chart-table-scroll">
+        <table aria-labelledby="table-title">
+          <thead><tr><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Amount") }}</th></tr></thead>
+          <tbody>
+            {% for item in chart.rows %}
+            <tr><th scope="row"><a href="{{ item.href }}">{{ item.label }}</a></th><td>{{ item.amount }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
     {% endif %}
-  </section>
-
-  {% if detail %}
-  {% if detail.largest_category or detail.largest_expense %}
-  <section class="card" aria-labelledby="insights-title">
-    <h2 id="insights-title">{{ _("Insights") }}</h2>
-    <ul class="insights">
-      {% if detail.largest_category %}<li>{{ brand.mark(22, "mark-insight-1") }}<span>{{ detail.largest_category }}</span></li>{% endif %}
-      {% if detail.largest_expense %}<li>{{ brand.mark(22, "mark-insight-2") }}<a href="{{ detail.largest_expense_href }}">{{ detail.largest_expense }}</a></li>{% endif %}
-    </ul>
-  </section>
+  </div>
   {% endif %}
 
+  {% if detail %}
   {# In the pie view the donut already shows the categories, so only merchants follow. #}
   {% set bar_cards = [("merchants-title", _("Top merchants"), detail.merchants)] if view.chart == "pie" else [("categories-title", _("Spending by category"), detail.categories), ("merchants-title", _("Top merchants"), detail.merchants)] %}
   <div class="grid{% if bar_cards|length == 1 %} grid-single{% endif %}">

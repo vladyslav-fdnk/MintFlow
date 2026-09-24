@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% import "_brand.html" as brand %}
-{% block title %}{{ _("Check your email") }}{% endblock %}
+{% block title %}{{ _("Sign-in link unavailable") }}{% endblock %}
+{% block scripts %}{% endblock %}
 {% block navigation %}{% endblock %}
 {% block content %}
 <div class="sign-in">
@@ -10,9 +11,9 @@
   <p class="lockup-tagline">{{ _("Track less. Understand more.") }}</p>
 </div>
 <div class="form card">
-  <h1 class="card-title">{{ _("Check your email") }}</h1>
-  <p>{{ _("If the address can receive email, a sign-in link will arrive shortly. The link works once and expires soon.") }}</p>
-  <p class="hint"><a href="/sign-in">{{ _("Use a different address") }}</a></p>
+  <h1 class="card-title">{{ _("Sign-in link unavailable") }}</h1>
+  <p>{{ _("This sign-in link cannot be used. It may have expired or been used already. Request a new link to continue.") }}</p>
+  <a class="button button-wide" href="/sign-in">{{ _("Get a new sign-in link") }}</a>
 </div>
 </div>
 {% endblock %}

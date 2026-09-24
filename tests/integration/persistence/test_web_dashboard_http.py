@@ -297,12 +297,21 @@ async def test_presets_follow_the_users_calendar(
 
     presets = _region(response).find("div", class_="presets").find_all("a")
     # 23:30 UTC on 31 Aug is 1 Sep in Tokyo: this month is September.
-    assert [(link.text, link.attrs.get("aria-current")) for link in presets] == [
+    assert [
+        (link.find("span", class_="preset-label").text, link.attrs.get("aria-current"))
+        for link in presets
+    ] == [
+        ("Today", None),
+        ("This week", None),
         ("This month", "true"),
         ("Last month", None),
         ("Last 3 months", None),
     ]
-    assert "date_from=2026-08-01&date_to=2026-08-31" in str(presets[1].attrs["href"])
+    assert "date_from=2026-09-01&date_to=2026-09-01" in str(presets[0].attrs["href"])
+    assert presets[0].find("span", class_="preset-dates").text == "Sep 1, 2026"
+    # 1 Sep 2026 is a Tuesday: the week began on Monday 31 Aug.
+    assert "date_from=2026-08-31&date_to=2026-09-06" in str(presets[1].attrs["href"])
+    assert "date_from=2026-08-01&date_to=2026-08-31" in str(presets[3].attrs["href"])
 
 
 def _add_rates(session: Session) -> None:
@@ -334,12 +343,16 @@ async def test_with_a_default_currency_and_rates_everything_is_converted_and_mar
     assert response.status_code == 200
     region = _region(response)
     assert region.find("p", class_="answer").text == f"You spent {APPROX}34.00{NBSP}EUR"
-    notes = [note.text for note in region.find_all("p", class_="rates-note")]
-    assert notes == [
+    note = region.find("details", class_="rates-note")
+    assert note.find("summary").text == (
         "\u2248 Converted into EUR at the exchange rates of Aug 28, 2026 (European Central Bank)."
-        " Past spending is converted at today's rates, so these totals can change slightly.",
-        f"Not included, no exchange rate: 10.000{NBSP}BHD.",
-    ]
+    )
+    assert note.find("p").text == (
+        "Past spending is converted at today's rates, so these totals can change slightly."
+    )
+    assert region.find("p", class_="rates-warning").text == (
+        f"Not included, no exchange rate: 10.000{NBSP}BHD."
+    )
     # Every amount of the converted details carries the mark; Souq (BHD only) is not there.
     bars = region.find_all("ol", class_="bars")
     amounts = [
@@ -347,7 +360,8 @@ async def test_with_a_default_currency_and_rates_everything_is_converted_and_mar
     ]
     assert amounts and all(amount.startswith(APPROX) for amount in amounts)
     assert "Souq" not in region.find("section", aria_labelledby="merchants-title").text
-    assert all(cell.text.startswith(APPROX) for cell in region.find("table").find_all("td"))
+    table = _region(await _page(_application(migrated_database_url), "?table=1")).find("table")
+    assert all(cell.text.startswith(APPROX) for cell in table.find_all("td"))
     insight = region.find("ul", class_="insights").find_all("a")[0].text
     assert insight.startswith(f"Your largest expense was 30.00{NBSP}USD ({APPROX}24.00{NBSP}EUR)")
     # Links from converted figures open every currency's expenses.
@@ -372,7 +386,7 @@ async def test_a_chosen_currency_shows_its_own_amounts_without_conversion(
 
     region = _region(response)
     assert region.find("p", class_="answer").text == f"You spent 30.00{NBSP}USD"
-    assert region.find_all("p", class_="rates-note") == []
+    assert region.find_all("details", class_="rates-note") == []
     assert "\u2248" not in region.text
     totals = region.find("ul", class_="currency-totals")
     assert totals.find("a", aria_current="true").text == f"30.00{NBSP}USD"
@@ -393,7 +407,7 @@ async def test_without_rates_currencies_stay_separate_and_say_why(
     region = _region(response)
     assert region.find("p", class_="answer").text == f"You spent 10.00{NBSP}EUR"
     assert "\u2248" not in region.text
-    assert region.find_all("p", class_="rates-note") == []
+    assert region.find_all("details", class_="rates-note") == []
     assert "Exchange rates are not available yet" in region.find("p", class_="hint").text
     assert region.find("select", id="currency").find_all("option")[0].text == "Automatic"
 
@@ -443,6 +457,41 @@ async def test_a_period_with_only_unconvertible_currencies_says_so(
 
     region = _region(response)
     assert "No expenses in this period." not in region.text
-    assert region.find("p", class_="rates-note").text == (
+    assert region.find("p", class_="rates-warning").text == (
         f"Not included, no exchange rate: 10.000{NBSP}BHD."
     )
+    assert region.find_all("details", class_="rates-note") == []
+
+
+@pytest.mark.anyio
+async def test_the_daily_table_stays_open_across_chart_views(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    owner = _add_user(db_session, secret=SECRET)
+    _add(db_session, owner, 1_200, date(2026, 8, 20))
+    _add(db_session, owner, 800, date(2026, 8, 22))
+    application = _application(migrated_database_url)
+
+    closed = _region(await _page(application))
+    assert closed.find_all("table") == []
+    opened = _region(await _page(application, "?table=1&chart=pie"))
+
+    rows = opened.find("table").find("tbody").find_all("tr")
+    assert [row.find("th").text for row in rows] == ["Aug 20", "Aug 22"]
+    # Every other link on the page keeps the table open, so switching the chart keeps it.
+    columns_link = next(
+        link
+        for link in opened.find("div", class_="segmented").find_all("a")
+        if link.text == "Columns"
+    )
+    assert "table=1" in str(columns_link.attrs["href"])
+    assert "chart=columns" in str(columns_link.attrs["href"])
+    assert all(
+        "table=1" in str(preset.attrs["href"])
+        for preset in opened.find("div", class_="presets").find_all("a")
+    )
+    assert opened.find("input", name="table").attrs["value"] == "1"
+    assert opened.find("section", class_="card table-card").find("h2").text == "Spending by day"
+    toggle = opened.find("a", class_="chip table-toggle")
+    assert toggle.text == "Hide the table"
+    assert "table=1" not in str(toggle.attrs["href"])

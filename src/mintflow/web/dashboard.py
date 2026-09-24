@@ -68,6 +68,8 @@ DASHBOARD_PATH: Final = "/dashboard"
 COLUMNS: Final = "columns"
 PIE: Final = "pie"
 CHART_VIEWS: Final = frozenset({COLUMNS, PIE})
+# "?table=1" keeps the daily table open beside either chart, across every dashboard link.
+TABLE_OPEN: Final = "1"
 # Distinct slice colours in the stylesheet (.slice-0 .. .slice-7).
 DONUT_COLORS: Final = 8
 EXPENSES_PATH: Final = "/expenses"
@@ -111,6 +113,8 @@ class TimeChart:
     axis: tuple[str, str, str]
     # Evenly spaced date labels under the columns.
     ticks: tuple[str, ...]
+    # The table beside the chart lists only the buckets with spending.
+    rows: tuple[ColumnView, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,6 +139,8 @@ class Preset:
     label: str
     href: str
     selected: bool
+    # The dates the preset stands for, shown under its label.
+    dates: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,6 +166,8 @@ class Detail:
     largest_category: str | None
     largest_expense: str | None
     largest_expense_href: str | None
+    # "up", "down", or "flat" when there is a comparison.
+    comparison_direction: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,6 +183,9 @@ class DashboardView:
     chart: str
     chart_links: tuple[ChartLink, ...]
     presets: tuple[Preset, ...]
+    # Whether the daily table is open, and the link that opens or closes it.
+    table: bool = False
+    table_href: str = ""
     # The currency everything can be converted into, when there is a default and rates.
     main_currency: str | None = None
     # The currency menu's first choice: converted into the main currency, or automatic.
@@ -183,6 +194,7 @@ class DashboardView:
     converted_href: str | None = None
     show_currency_choice: bool = False
     rates_note: str | None = None
+    rates_detail: str | None = None
     unconverted_note: str | None = None
     # Several currencies shown one at a time: why, and where to change it.
     needs_default_currency: bool = False
@@ -229,20 +241,14 @@ def _expense_count(count: int, locale: BabelLocale) -> str:
 
 
 def _comparison(comparison: Comparison, amounts: _Amounts) -> str:
+    """The change against the previous comparable window; the window itself implies the days."""
     locale = amounts.locale
     previous = format_period(
         comparison.previous_period.date_from, comparison.previous_period.date_to, locale
     )
-    current = format_period(
-        comparison.current_period.date_from, comparison.current_period.date_to, locale
-    )
     change = comparison.change_minor_units
     if change == 0:
-        return sentence(
-            _("{current}: no change compared with {previous}.").format(
-                current=current, previous=previous
-            )
-        )
+        return sentence(_("No change compared with {previous}.").format(previous=previous))
     signed = amounts.mark(
         ("+" if change > 0 else MINUS_SIGN) + format_amount(abs(change), amounts.currency, locale)
     )
@@ -252,11 +258,16 @@ def _comparison(comparison: Comparison, amounts: _Amounts) -> str:
         else f"{format_share(abs(comparison.change_basis_points), locale)} ({signed})"
     )
     template = (
-        _("{current}: up {change} compared with {previous}.")
+        _("Up {change} compared with {previous}.")
         if change > 0
-        else _("{current}: down {change} compared with {previous}.")
+        else _("Down {change} compared with {previous}.")
     )
-    return sentence(template.format(current=current, change=change_text, previous=previous))
+    return sentence(template.format(change=change_text, previous=previous))
+
+
+def _direction(comparison: Comparison) -> str:
+    change = comparison.change_minor_units
+    return "up" if change > 0 else "down" if change < 0 else "flat"
 
 
 def _time_chart(
@@ -299,6 +310,7 @@ def _time_chart(
             format_axis_amount(0, amounts.currency, locale),
         ),
         ticks=tuple(views[index].label for index in tick_indexes),
+        rows=tuple(view for bucket, view in zip(buckets, views, strict=True) if bucket.count),
     )
 
 
@@ -407,17 +419,26 @@ def _detail(
         largest_expense_href=(
             f"{EXPENSES_PATH}/{largest_expense.expense_id}" if largest_expense is not None else None
         ),
+        comparison_direction=(
+            _direction(detail.summary.comparison) if detail.summary.comparison is not None else None
+        ),
     )
 
 
-def _presets(today: date, current: DashboardPeriod, extra: dict[str, str]) -> tuple[Preset, ...]:
-    """This month, last month, and the last three months, in the user's calendar."""
+def _presets(
+    today: date, current: DashboardPeriod, extra: dict[str, str], locale: BabelLocale
+) -> tuple[Preset, ...]:
+    """Today, this week (Monday to Sunday), this month, last month, and the last three months,
+    in the user's calendar."""
     first_this = today.replace(day=1)
     last_this = today.replace(day=calendar.monthrange(today.year, today.month)[1])
     last_previous = first_this - timedelta(days=1)
     first_previous = last_previous.replace(day=1)
     first_three = (first_previous - timedelta(days=1)).replace(day=1)
+    monday = today - timedelta(days=today.weekday())
     choices = (
+        (_("Today"), today, today),
+        (_("This week"), monday, monday + timedelta(days=6)),
         (_("This month"), first_this, last_this),
         (_("Last month"), first_previous, last_previous),
         (_("Last 3 months"), first_three, last_this),
@@ -428,6 +449,7 @@ def _presets(today: date, current: DashboardPeriod, extra: dict[str, str]) -> tu
             href=f"{DASHBOARD_PATH}?"
             + _query(date_from=start.isoformat(), date_to=end.isoformat(), **extra),
             selected=(start, end) == (current.date_from, current.date_to),
+            dates=format_period(start, end, locale),
         )
         for label, start, end in choices
     )
@@ -438,6 +460,7 @@ def build_dashboard_view(
     locale: BabelLocale,
     *,
     chart: str = COLUMNS,
+    table: bool = False,
     today: date | None = None,
     default_currency: CurrencyCode | None = None,
     rates_available: bool = False,
@@ -449,6 +472,8 @@ def build_dashboard_view(
         "date_from": period.date_from.isoformat(),
         "date_to": period.date_to.isoformat(),
     }
+    # The page's own choices, carried by every link so switching one keeps the others.
+    view_params = {"chart": chart, **({"table": TABLE_OPEN} if table else {})}
     currency = dashboard.currency
     conversion = dashboard.conversion
     main_currency = default_currency if rates_available else None
@@ -465,7 +490,7 @@ def build_dashboard_view(
             total=format_amount(total.total_minor_units, total.currency, locale),
             count=_expense_count(total.count, locale),
             href=f"{DASHBOARD_PATH}?"
-            + _query(**period_params, currency=total.currency.value, chart=chart),
+            + _query(**period_params, currency=total.currency.value, **view_params),
             selected=conversion is None and total.currency == currency,
             no_rate=total.currency in unconverted,
         )
@@ -488,7 +513,8 @@ def build_dashboard_view(
     chart_links = tuple(
         ChartLink(
             label=label,
-            href=f"{DASHBOARD_PATH}?" + _query(**period_params, **currency_param, chart=kind),
+            href=f"{DASHBOARD_PATH}?"
+            + _query(**period_params, **currency_param, **{**view_params, "chart": kind}),
             selected=kind == chart,
         )
         for kind, label in ((COLUMNS, _("Columns")), (PIE, _("Pie")))
@@ -497,8 +523,18 @@ def build_dashboard_view(
     return DashboardView(
         chart=chart,
         chart_links=chart_links,
+        table=table,
+        table_href=f"{DASHBOARD_PATH}?"
+        + _query(
+            **period_params,
+            **currency_param,
+            chart=chart,
+            **({} if table else {"table": TABLE_OPEN}),
+        ),
         presets=(
-            _presets(today, period, {**currency_param, "chart": chart}) if today is not None else ()
+            _presets(today, period, {**currency_param, **view_params}, locale)
+            if today is not None
+            else ()
         ),
         period=format_period(period.date_from, period.date_to, locale),
         date_from=period_params["date_from"],
@@ -516,7 +552,7 @@ def build_dashboard_view(
         ),
         converted=conversion is not None,
         converted_href=(
-            f"{DASHBOARD_PATH}?" + _query(**period_params, chart=chart)
+            f"{DASHBOARD_PATH}?" + _query(**period_params, **view_params)
             if main_currency is not None
             else None
         ),
@@ -527,10 +563,11 @@ def build_dashboard_view(
         ),
         rates_note=(
             rates_note(conversion.rates, currency, locale)
-            + " "
-            + _("Past spending is converted at today's rates, so these totals can change slightly.")
             if conversion is not None and conversion.rates and currency is not None
             else None
+        ),
+        rates_detail=_(
+            "Past spending is converted at today's rates, so these totals can change slightly."
         ),
         unconverted_note=(
             sentence(
@@ -582,11 +619,14 @@ async def dashboard_page(
     runtime: CaptureRuntimeDependency,
 ) -> Response:
     params = non_empty_params(request)
-    # The chart view is the page's own choice, not a dashboard query parameter.
+    # The chart view and the table are the page's own choices, not dashboard query parameters.
     chart = params.get("chart", COLUMNS)
     chart = chart if chart in CHART_VIEWS else COLUMNS
+    table = params.get("table") == TABLE_OPEN
     query = parse_dashboard_params(
-        QueryParams([(key, value) for key, value in params.multi_items() if key != "chart"])
+        QueryParams(
+            [(key, value) for key, value in params.multi_items() if key not in {"chart", "table"}]
+        )
     )
     invalid = query is None
     user = SqlAlchemyUserRepository(session).get(principal.user_id)
@@ -628,6 +668,7 @@ async def dashboard_page(
                 dashboard,
                 locale,
                 chart=chart,
+                table=table,
                 today=local_today(now=runtime.clock(), timezone=user.timezone),
                 default_currency=user.default_currency,
                 rates_available=main is not None,

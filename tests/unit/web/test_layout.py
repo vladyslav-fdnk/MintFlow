@@ -1,6 +1,11 @@
+import os
+from pathlib import Path
+
 import pytest
 
 from mintflow.http.authentication import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
+from mintflow.web import rendering
+from mintflow.web.formatting import use_language
 from mintflow.web.rendering import TEMPLATES, static_url, theme_from_cookie_header
 from mintflow.web.testing import Element, parse_html
 
@@ -73,7 +78,12 @@ def test_assets_are_versioned_and_htmx_is_locked_down() -> None:
 
     sources = [script.attrs["src"] for script in page.find_all("script")]
     assert sources == [static_url("vendor/htmx-2.0.11.min.js"), static_url("js/app.js")]
-    assert page.find("link", rel="stylesheet").attrs["href"] == static_url("css/app.css")
+    stylesheets = [link.attrs["href"] for link in page.find_all("link", rel="stylesheet")]
+    assert stylesheets == [static_url("css/app.css"), static_url("css/noscript.css")]
+    # The no-script stylesheet only applies without JavaScript.
+    assert page.find("noscript").find("link", rel="stylesheet").attrs["href"] == static_url(
+        "css/noscript.css"
+    )
     assert all("?v=" in str(source) for source in sources)
     config = page.find("meta", name="htmx-config").attrs["content"] or ""
     assert '"allowEval": false' in config and '"includeIndicatorStyles": false' in config
@@ -112,7 +122,7 @@ def test_there_is_one_navigation_whose_labels_exist_while_collapsed() -> None:
         "Sign out",
     ]
     assert all(svg.attrs["aria-hidden"] == "true" for svg in nav.find_all("svg"))
-    brand = page.find("aside", class_="sidebar").find("a", class_="brand")
+    brand = page.find("aside", class_="sidebar is-resting").find("a", class_="brand")
     assert brand.attrs["aria-label"] == "MintFlow, dashboard"
 
 
@@ -125,21 +135,33 @@ def test_the_favicon_and_font_are_versioned_static_files() -> None:
         static_url("favicon.svg"),
     )
     font = page.find("link", rel="preload")
-    assert font.attrs["href"] == static_url("fonts/manrope-latin.woff2")
+    assert font.attrs["href"] == static_url("fonts/onest-latin.woff2")
     assert "crossorigin" in font.attrs
+
+
+def test_pages_without_navigation_still_show_the_brand() -> None:
+    page = _page("error.html", status_code=404)
+
+    assert page.find_all("nav") == []
+    assert page.find("header", class_="bare-header").find("a", class_="brand").text == "MintFlow"
 
 
 @pytest.mark.parametrize(
     ("template", "context"),
-    [("error.html", {"status_code": 404}), ("sign_in_sent.html", {})],
+    [
+        ("sign_in_sent.html", {}),
+        ("magic_link_confirm.html", {"token": "T", "return_target": "dashboard", "action": "/a"}),
+        ("magic_link_unavailable.html", {}),
+    ],
 )
-def test_pages_without_navigation_still_show_the_brand(
+def test_the_sign_in_steps_share_the_branded_card(
     template: str, context: dict[str, object]
 ) -> None:
     page = _page(template, **context)
 
     assert page.find_all("nav") == []
-    assert page.find("header", class_="bare-header").find("a", class_="brand").text == "MintFlow"
+    assert page.find("p", class_="lockup-wordmark").text == "MintFlow"
+    assert page.find("div", class_="form card").find("h1", class_="card-title").text
 
 
 def _empty_view() -> object:
@@ -210,3 +232,29 @@ def test_phones_get_the_extra_controls_in_the_top_bar_with_names() -> None:
     assert names == ["Русский", "Dark theme", "Sign out"]
     theme = actions.find("button", role="switch")
     assert "data-theme-switch" in theme.attrs
+
+
+def test_an_edited_static_file_gets_a_new_url_without_a_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(rendering, "STATIC_DIRECTORY", tmp_path)
+    stylesheet = tmp_path / "app.css"
+    stylesheet.write_text("body { color: red; }")
+    before = static_url("app.css")
+
+    stylesheet.write_text("body { color: blue; }")
+    os.utime(stylesheet, ns=(1, stylesheet.stat().st_mtime_ns + 1_000_000))
+
+    assert static_url("app.css") != before
+
+
+def test_the_failure_message_for_htmx_requests_is_translated() -> None:
+    use_language("ru")
+    try:
+        page = parse_html(_SIGNED_IN_PAGE.render(active="dashboard"))
+    finally:
+        use_language("en")
+
+    assert page.find(id="status").attrs["data-error-message"] == (
+        "Что-то пошло не так. Попробуйте ещё раз."
+    )

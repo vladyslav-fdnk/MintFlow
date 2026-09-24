@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: MintFlow VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-24 15:59+0200\n"
+"POT-Creation-Date: 2026-09-24 20:51+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: ru\n"
@@ -23,25 +23,25 @@ msgstr ""
 msgid "Added from"
 msgstr "Добавлено через"
 
-#: templates/expenses.html:20
+#: templates/expenses.html:21
 msgid "All categories"
 msgstr "Все категории"
 
-#: templates/expenses.html:29
+#: templates/expenses.html:30
 msgid "All currencies"
 msgstr "Все валюты"
 
-#: dashboard.py:513
+#: dashboard.py:549
 #, python-brace-format
 msgid "All in {currency}"
 msgstr "Всё в {currency}"
 
-#: templates/dashboard.html:88 templates/expense_detail.html:7 templates/expense_edit.html:20
-#: templates/expenses.html:56
+#: templates/dashboard.html:178 templates/expense_detail.html:7 templates/expense_edit.html:20
+#: templates/expenses.html:57
 msgid "Amount"
 msgstr "Сумма"
 
-#: dashboard.py:515
+#: dashboard.py:551
 msgid "Automatic"
 msgstr "Автоматически"
 
@@ -57,7 +57,7 @@ msgstr "К настройкам"
 msgid "Back to the expense"
 msgstr "К расходу"
 
-#: templates/expenses.html:44
+#: templates/expenses.html:45
 msgid "Back to the newest expenses"
 msgstr "К последним расходам"
 
@@ -65,12 +65,12 @@ msgstr "К последним расходам"
 msgid "Cancel"
 msgstr "Отмена"
 
-#: templates/dashboard.html:30
+#: templates/dashboard.html:21
 msgid "Capture expenses in Telegram, understand them here."
 msgstr "Записывайте расходы в Telegram, а разбирайтесь в них здесь."
 
-#: templates/expense_detail.html:10 templates/expense_edit.html:46 templates/expenses.html:18
-#: templates/expenses.html:55
+#: templates/expense_detail.html:10 templates/expense_edit.html:46 templates/expenses.html:19
+#: templates/expenses.html:56
 msgid "Category"
 msgstr "Категория"
 
@@ -78,15 +78,15 @@ msgstr "Категория"
 msgid "Changes saved."
 msgstr "Изменения сохранены."
 
-#: templates/dashboard.html:46
+#: templates/dashboard.html:130
 msgid "Chart view"
 msgstr "Вид графика"
 
-#: templates/sign_in_sent.html:3 templates/sign_in_sent.html:6
+#: templates/sign_in_sent.html:3 templates/sign_in_sent.html:13
 msgid "Check your email"
 msgstr "Проверьте почту"
 
-#: templates/dashboard.html:37
+#: templates/dashboard.html:28
 msgid "Check your timezone and default currency in"
 msgstr "Проверьте часовой пояс и валюту по умолчанию в разделе"
 
@@ -98,7 +98,7 @@ msgstr "Выберите категорию."
 msgid "Choose a currency from the list."
 msgstr "Выберите валюту из списка."
 
-#: templates/dashboard.html:15
+#: templates/dashboard.html:41
 msgid "Choose a currency to see its details."
 msgstr "Выберите валюту, чтобы увидеть подробности."
 
@@ -118,11 +118,11 @@ msgstr "Выберите язык из списка."
 msgid "Choose a timezone from the list."
 msgstr "Выберите часовой пояс из списка."
 
-#: templates/expenses.html:37
+#: templates/expenses.html:38
 msgid "Clear filters"
 msgstr "Сбросить фильтры"
 
-#: dashboard.py:494
+#: dashboard.py:520
 msgid "Columns"
 msgstr "Столбцы"
 
@@ -134,15 +134,19 @@ msgstr "Вернитесь сюда и подтвердите аккаунт."
 msgid "Confirm"
 msgstr "Подтвердить"
 
+#: templates/magic_link_confirm.html:3 templates/magic_link_confirm.html:15
+msgid "Confirm sign in"
+msgstr "Подтвердите вход"
+
 #: templates/expense_detail.html:13
 msgid "Confirmed"
 msgstr "Подтверждено"
 
-#: templates/dashboard.html:35 templates/settings.html:73
+#: templates/dashboard.html:26 templates/settings.html:74
 msgid "Connect Telegram"
 msgstr "Подключить Telegram"
 
-#: templates/settings.html:71
+#: templates/settings.html:72
 msgid "Connect Telegram to add expenses by sending the bot an amount or a receipt photo."
 msgstr "Подключите Telegram, чтобы добавлять расходы: отправьте боту сумму или фото чека."
 
@@ -151,33 +155,33 @@ msgstr "Подключите Telegram, чтобы добавлять расхо�
 msgid "Connect the Telegram account {name}?"
 msgstr "Подключить аккаунт Telegram {name}?"
 
-#: templates/settings.html:65
+#: templates/settings.html:66
 #, python-brace-format
 msgid "Connected as {name} since {date}."
 msgstr "Подключён как {name} с {date}."
 
-#: templates/dashboard.html:122 templates/expense_edit.html:25 templates/expenses.html:27
+#: templates/dashboard.html:109 templates/expense_edit.html:25 templates/expenses.html:28
 msgid "Currency"
 msgstr "Валюта"
 
-#: templates/base.html:33 templates/base.html:47
+#: templates/base.html:35 templates/base.html:49
 msgid "Dark theme"
 msgstr "Тёмная тема"
 
-#: templates/base.html:25 templates/dashboard.html:3 templates/dashboard.html:9
+#: templates/base.html:27 templates/dashboard.html:3 templates/dashboard.html:9
 msgid "Dashboard"
 msgstr "Обзор"
 
-#: templates/dashboard.html:88 templates/expense_detail.html:8 templates/expense_edit.html:35
-#: templates/expenses.html:53
+#: templates/dashboard.html:178 templates/expense_detail.html:8 templates/expense_edit.html:35
+#: templates/expenses.html:54
 msgid "Date"
 msgstr "Дата"
 
-#: templates/settings.html:32
+#: templates/settings.html:33
 msgid "Decides what \"today\" and \"this month\" mean on your dashboard."
 msgstr "Определяет, что считать «сегодня» и «этим месяцем» в обзоре."
 
-#: templates/settings.html:36
+#: templates/settings.html:37
 msgid "Default currency"
 msgstr "Валюта по умолчанию"
 
@@ -197,13 +201,18 @@ msgstr "Удалить этот расход?"
 msgid "Disconnect"
 msgstr "Отключить"
 
-#: templates/settings.html:68 templates/settings_disconnect.html:2
+#: templates/settings.html:69 templates/settings_disconnect.html:2
 msgid "Disconnect Telegram"
 msgstr "Отключить Telegram"
 
 #: templates/settings_disconnect.html:4
 msgid "Disconnect Telegram?"
 msgstr "Отключить Telegram?"
+
+#: dashboard.py:263
+#, python-brace-format
+msgid "Down {change} compared with {previous}."
+msgstr "На {change} меньше, чем за {previous}."
 
 #: templates/expense_detail.html:17
 msgid "Edit"
@@ -238,11 +247,11 @@ msgstr "Укажите сумму больше нуля и в допустимы
 msgid "Enter an amount like {example}."
 msgstr "Укажите сумму, например {example}."
 
-#: sign_in.py:102
+#: sign_in.py:114
 msgid "Enter an email address like name@example.com."
 msgstr "Укажите адрес вида name@example.com."
 
-#: sign_in.py:90
+#: sign_in.py:102
 msgid "Enter your email address."
 msgstr "Укажите адрес электронной почты."
 
@@ -254,7 +263,7 @@ msgstr "Развлечения"
 msgid "European Central Bank"
 msgstr "Европейский центральный банк"
 
-#: templates/dashboard.html:146
+#: templates/dashboard.html:59
 msgid "Exchange rates are not available yet, so each currency is shown on its own."
 msgstr "Курсов валют пока нет, поэтому каждая валюта показана отдельно."
 
@@ -270,15 +279,15 @@ msgstr "Расход удалён"
 msgid "Expense restored."
 msgstr "Расход восстановлен."
 
-#: templates/base.html:26 templates/expenses.html:2 templates/expenses.html:4
+#: templates/base.html:28 templates/expenses.html:3 templates/expenses.html:5
 msgid "Expenses"
 msgstr "Расходы"
 
-#: templates/expenses.html:50
+#: templates/expenses.html:51
 msgid "Expenses, newest first"
 msgstr "Расходы, сначала новые"
 
-#: templates/expenses.html:8
+#: templates/expenses.html:9
 msgid "Filter expenses"
 msgstr "Фильтр расходов"
 
@@ -286,9 +295,13 @@ msgstr "Фильтр расходов"
 msgid "Food & Dining"
 msgstr "Кафе и рестораны"
 
-#: templates/dashboard.html:114 templates/expenses.html:10
+#: templates/dashboard.html:101 templates/expenses.html:11
 msgid "From"
 msgstr "С"
+
+#: templates/magic_link_unavailable.html:16
+msgid "Get a new sign-in link"
+msgstr "Получить новую ссылку"
 
 #: formatting.py:214
 msgid "Gifts"
@@ -306,7 +319,11 @@ msgstr "Продукты"
 msgid "Health"
 msgstr "Здоровье"
 
-#: dashboard.py:285
+#: templates/dashboard.html:135
+msgid "Hide the table"
+msgstr "Скрыть таблицу"
+
+#: dashboard.py:296
 #, python-brace-format
 msgid "Highest: {label}, {amount}."
 msgstr "Больше всего: {label}, {amount}."
@@ -315,7 +332,7 @@ msgstr "Больше всего: {label}, {amount}."
 msgid "Housing"
 msgstr "Жильё"
 
-#: templates/sign_in_sent.html:7
+#: templates/sign_in_sent.html:14
 msgid ""
 "If the address can receive email, a sign-in link will arrive shortly. The link works once and "
 "expires soon."
@@ -323,7 +340,13 @@ msgstr ""
 "Если на этот адрес приходят письма, ссылка для входа скоро придёт. Она сработает один раз и "
 "вскоре перестанет действовать."
 
-#: templates/dashboard.html:157
+#: templates/magic_link_confirm.html:22
+msgid "If you did not ask for this link, close this page; nothing happens without the button."
+msgstr ""
+"Если вы не запрашивали эту ссылку, просто закройте страницу: без нажатия кнопки ничего не "
+"произойдёт."
+
+#: templates/dashboard.html:77
 msgid "Insights"
 msgstr "Выводы"
 
@@ -343,11 +366,11 @@ msgstr "Оставить"
 msgid "Keep it connected"
 msgstr "Оставить подключённым"
 
-#: templates/settings.html:17
+#: templates/settings.html:18
 msgid "Language"
 msgstr "Язык"
 
-#: dashboard.py:423
+#: dashboard.py:444
 msgid "Last 3 months"
 msgstr "Последние 3 месяца"
 
@@ -355,23 +378,23 @@ msgstr "Последние 3 месяца"
 msgid "Last changed"
 msgstr "Последнее изменение"
 
-#: dashboard.py:422
+#: dashboard.py:443
 msgid "Last month"
 msgstr "Прошлый месяц"
 
-#: templates/expenses.html:81
+#: templates/expenses.html:82
 msgid "Load more"
 msgstr "Показать ещё"
 
-#: templates/expenses.html:82
+#: templates/expenses.html:83
 msgid "Loading…"
 msgstr "Загрузка…"
 
-#: templates/base.html:23
+#: templates/base.html:25
 msgid "Main"
 msgstr "Главное меню"
 
-#: templates/expense_detail.html:9 templates/expenses.html:54
+#: templates/expense_detail.html:9 templates/expenses.html:55
 msgid "Merchant"
 msgstr "Продавец"
 
@@ -379,7 +402,7 @@ msgstr "Продавец"
 msgid "Merchant or description"
 msgstr "Продавец или описание"
 
-#: templates/base.html:22
+#: templates/base.html:24
 msgid "MintFlow, dashboard"
 msgstr "MintFlow, обзор"
 
@@ -387,19 +410,24 @@ msgstr "MintFlow, обзор"
 msgid "National Bank of Ukraine"
 msgstr "Национальный банк Украины"
 
-#: templates/dashboard.html:17
+#: dashboard.py:251
+#, python-brace-format
+msgid "No change compared with {previous}."
+msgstr "Столько же, сколько за {previous}."
+
+#: templates/dashboard.html:43
 msgid "No expenses in this period."
 msgstr "За этот период расходов нет."
 
-#: templates/expenses.html:71
+#: templates/expenses.html:72
 msgid "No expenses match these filters."
 msgstr "Под эти фильтры расходы не подходят."
 
-#: templates/expenses.html:73
+#: templates/expenses.html:74
 msgid "No expenses yet. Send the bot an amount or a receipt photo to add one."
 msgstr "Расходов пока нет. Отправьте боту сумму или фото чека, чтобы добавить первый."
 
-#: templates/expenses.html:63
+#: templates/expenses.html:64
 msgid "No merchant"
 msgstr "Без продавца"
 
@@ -407,7 +435,7 @@ msgstr "Без продавца"
 msgid "No password needed. We will email you a link that signs you in on this device."
 msgstr "Пароль не нужен. Мы пришлём ссылку, по которой вы войдёте на этом устройстве."
 
-#: dashboard.py:283
+#: dashboard.py:294
 msgid "No spending in this period."
 msgstr "За этот период трат нет."
 
@@ -415,11 +443,11 @@ msgstr "За этот период трат нет."
 msgid "None"
 msgstr "Нет"
 
-#: templates/settings.html:38
+#: templates/settings.html:39
 msgid "None: always ask"
 msgstr "Нет, всегда спрашивать"
 
-#: dashboard.py:537
+#: dashboard.py:574
 #, python-brace-format
 msgid "Not included, no exchange rate: {amounts}."
 msgstr "Не учтено, нет курса: {amounts}."
@@ -432,7 +460,7 @@ msgstr "Заметка"
 msgid "Nothing was lost. Please try again in a moment."
 msgstr "Ничего не потеряно. Попробуйте ещё раз чуть позже."
 
-#: templates/settings.html:47
+#: templates/settings.html:48
 msgid "Number and date format"
 msgstr "Формат чисел и дат"
 
@@ -440,7 +468,7 @@ msgstr "Формат чисел и дат"
 msgid "Open Telegram"
 msgstr "Открыть Telegram"
 
-#: templates/dashboard.html:33 templates/settings.html:67
+#: templates/dashboard.html:24 templates/settings.html:68
 msgid "Open the bot"
 msgstr "Открыть бота"
 
@@ -452,7 +480,7 @@ msgstr "Откройте бота в Telegram и нажмите «Старт». 
 msgid "Optional. Leave empty to remove it."
 msgstr "Необязательно. Оставьте пустым, чтобы убрать."
 
-#: dashboard.py:395 formatting.py:215
+#: dashboard.py:407 formatting.py:215
 msgid "Other"
 msgstr "Другое"
 
@@ -460,15 +488,15 @@ msgstr "Другое"
 msgid "Page not found"
 msgstr "Страница не найдена"
 
-#: dashboard.py:531
+#: dashboard.py:570
 msgid "Past spending is converted at today's rates, so these totals can change slightly."
 msgstr "Прошлые расходы пересчитаны по сегодняшнему курсу, поэтому итоги могут немного меняться."
 
-#: templates/dashboard.html:101
+#: templates/dashboard.html:87
 msgid "Period and currency"
 msgstr "Период и валюта"
 
-#: dashboard.py:494
+#: dashboard.py:520
 msgid "Pie"
 msgstr "Круговая"
 
@@ -476,11 +504,15 @@ msgstr "Круговая"
 msgid "Please correct the highlighted fields."
 msgstr "Исправьте отмеченные поля."
 
-#: templates/dashboard.html:103
+#: templates/magic_link_confirm.html:16
+msgid "Press the button to sign in to MintFlow on this device."
+msgstr "Нажмите кнопку, чтобы войти в MintFlow на этом устройстве."
+
+#: templates/dashboard.html:89
 msgid "Quick periods"
 msgstr "Быстрый выбор периода"
 
-#: templates/settings.html:49
+#: templates/settings.html:50
 msgid "Same as the language"
 msgstr "Как у языка"
 
@@ -488,16 +520,16 @@ msgstr "Как у языка"
 msgid "Save changes"
 msgstr "Сохранить изменения"
 
-#: templates/settings.html:56
+#: templates/settings.html:57
 msgid "Save settings"
 msgstr "Сохранить настройки"
 
-#: templates/dashboard.html:32
+#: templates/dashboard.html:23
 msgid "Send the bot an amount like 12.50, or a photo of a receipt."
 msgstr "Отправьте боту сумму, например 12.50, или фото чека."
 
-#: templates/base.html:27 templates/dashboard.html:37 templates/dashboard.html:144
-#: templates/settings.html:2 templates/settings.html:8
+#: templates/base.html:29 templates/dashboard.html:28 templates/dashboard.html:57
+#: templates/settings.html:3 templates/settings.html:9
 msgid "Settings"
 msgstr "Настройки"
 
@@ -509,11 +541,11 @@ msgstr "Настройки сохранены."
 msgid "Shopping"
 msgstr "Покупки"
 
-#: templates/dashboard.html:130 templates/expenses.html:35
+#: templates/dashboard.html:117 templates/expenses.html:36
 msgid "Show"
 msgstr "Показать"
 
-#: templates/dashboard.html:85
+#: templates/dashboard.html:135
 msgid "Show as a table"
 msgstr "Показать таблицей"
 
@@ -521,11 +553,19 @@ msgstr "Показать таблицей"
 msgid "Sign in"
 msgstr "Вход"
 
-#: templates/base.html:36 templates/base.html:48
+#: templates/magic_link_confirm.html:20
+msgid "Sign me in"
+msgstr "Войти"
+
+#: templates/base.html:38 templates/base.html:50
 msgid "Sign out"
 msgstr "Выйти"
 
-#: templates/base.html:18
+#: templates/magic_link_unavailable.html:3 templates/magic_link_unavailable.html:14
+msgid "Sign-in link unavailable"
+msgstr "Ссылка для входа недействительна"
+
+#: templates/base.html:20
 msgid "Skip to content"
 msgstr "Перейти к содержимому"
 
@@ -533,15 +573,19 @@ msgstr "Перейти к содержимому"
 msgid "Something went wrong"
 msgstr "Что-то пошло не так"
 
-#: templates/dashboard.html:45 templates/dashboard.html:166
+#: templates/base.html:55
+msgid "Something went wrong. Please try again."
+msgstr "Что-то пошло не так. Попробуйте ещё раз."
+
+#: templates/dashboard.html:128 templates/dashboard.html:193
 msgid "Spending by category"
 msgstr "Траты по категориям"
 
-#: dashboard.py:292
+#: dashboard.py:303
 msgid "Spending by day"
 msgstr "Траты по дням"
 
-#: dashboard.py:292
+#: dashboard.py:303
 msgid "Spending by month"
 msgstr "Траты по месяцам"
 
@@ -549,7 +593,7 @@ msgstr "Траты по месяцам"
 msgid "Start again"
 msgstr "Начать заново"
 
-#: expense_detail.py:65 templates/settings.html:61 templates/settings_link.html:2
+#: expense_detail.py:65 templates/settings.html:62 templates/settings_link.html:2
 msgid "Telegram"
 msgstr "Telegram"
 
@@ -569,7 +613,7 @@ msgstr "Telegram отключён."
 msgid "Telegram is connected."
 msgstr "Telegram подключён."
 
-#: templates/settings.html:63
+#: templates/settings.html:64
 msgid "Telegram is not set up on this server."
 msgstr "Telegram на этом сервере не настроен."
 
@@ -598,7 +642,7 @@ msgstr "Не удалось сохранить эти значения. Пров
 msgid "This link has expired."
 msgstr "Срок действия ссылки истёк."
 
-#: dashboard.py:421
+#: dashboard.py:442
 msgid "This month"
 msgstr "Этот месяц"
 
@@ -610,11 +654,23 @@ msgstr "Такой страницы нет, или она вам недосту�
 msgid "This request could not be completed."
 msgstr "Не удалось выполнить запрос."
 
-#: templates/dashboard.html:148
+#: templates/magic_link_unavailable.html:15
+msgid ""
+"This sign-in link cannot be used. It may have expired or been used already. Request a new link to"
+" continue."
+msgstr ""
+"Этой ссылкой нельзя воспользоваться: возможно, она устарела или уже была использована. Запросите "
+"новую ссылку."
+
+#: templates/dashboard.html:61
 msgid "This view shows one currency without conversion."
 msgstr "Здесь показана одна валюта без пересчёта."
 
-#: templates/expenses.html:41
+#: dashboard.py:441
+msgid "This week"
+msgstr "Эта неделя"
+
+#: templates/expenses.html:42
 msgid ""
 "Those filters are not valid, so all expenses are shown. The start date must not be after the end "
 "date."
@@ -622,37 +678,42 @@ msgstr ""
 "Фильтры заданы неверно, поэтому показаны все расходы. Дата начала не может быть позже даты "
 "окончания."
 
-#: templates/dashboard.html:24
+#: templates/dashboard.html:15
 msgid "Those filters are not valid, so this month is shown. Choose both dates, at most 366 days apart."
 msgstr ""
 "Фильтры заданы неверно, поэтому показан текущий месяц. Укажите обе даты, не дальше 366 дней друг "
 "от друга."
 
-#: templates/settings.html:26
+#: templates/settings.html:27
 msgid "Timezone"
 msgstr "Часовой пояс"
 
-#: templates/dashboard.html:118 templates/expenses.html:14
+#: templates/dashboard.html:105 templates/expenses.html:15
 msgid "To"
 msgstr "По"
 
-#: templates/dashboard.html:144
+#: templates/dashboard.html:57
 msgid "To see all spending in one currency, choose a default currency in"
 msgstr "Чтобы видеть все расходы в одной валюте, выберите валюту по умолчанию в разделе"
 
-#: templates/dashboard.html:166
+#: dashboard.py:440
+msgid "Today"
+msgstr "Сегодня"
+
+#: templates/dashboard.html:193
 msgid "Top merchants"
 msgstr "Главные продавцы"
 
-#: templates/dashboard.html:134
+#: templates/dashboard.html:47
 msgid "Totals by currency"
 msgstr "Итоги по валютам"
 
-#: templates/base.html:40
+#: templates/base.html:42
 msgid "Track less."
 msgstr "Меньше учёта."
 
-#: templates/sign_in.html:10
+#: templates/magic_link_confirm.html:12 templates/magic_link_unavailable.html:11
+#: templates/sign_in.html:10 templates/sign_in_sent.html:10
 msgid "Track less. Understand more."
 msgstr "Меньше учёта. Больше понимания."
 
@@ -668,7 +729,7 @@ msgstr "Путешествия"
 msgid "Uncategorized"
 msgstr "Без категории"
 
-#: templates/base.html:40
+#: templates/base.html:42
 msgid "Understand more."
 msgstr "Больше понимания."
 
@@ -676,7 +737,12 @@ msgstr "Больше понимания."
 msgid "Undo"
 msgstr "Отменить удаление"
 
-#: templates/sign_in_sent.html:8
+#: dashboard.py:261
+#, python-brace-format
+msgid "Up {change} compared with {previous}."
+msgstr "На {change} больше, чем за {previous}."
+
+#: templates/sign_in_sent.html:15
 msgid "Use a different address"
 msgstr "Указать другой адрес"
 
@@ -685,13 +751,13 @@ msgstr "Указать другой адрес"
 msgid "Use at most {limit} characters."
 msgstr "Не больше {limit} символов."
 
-#: templates/settings.html:43
+#: templates/settings.html:44
 msgid ""
-"Used when you type an amount without a currency. Amounts in different currencies are never "
-"converted or added together."
+"Used when you type an amount without a currency. The dashboard also shows your totals converted "
+"into it."
 msgstr ""
-"Используется, если сумма введена без валюты. Суммы в разных валютах никогда не конвертируются и "
-"не складываются."
+"Используется, если сумма введена без валюты. В этой же валюте обзор показывает пересчитанные "
+"итоги."
 
 #: formatting.py:209
 msgid "Utilities"
@@ -705,15 +771,15 @@ msgstr "Ждём Telegram…"
 msgid "Web"
 msgstr "Веб"
 
-#: templates/dashboard.html:29
+#: templates/dashboard.html:20
 msgid "Welcome to MintFlow"
 msgstr "Добро пожаловать в MintFlow"
 
-#: templates/dashboard.html:12
+#: templates/dashboard.html:38
 msgid "You spent"
 msgstr "Вы потратили"
 
-#: templates/settings.html:11
+#: templates/settings.html:12
 msgid "Your conventions"
 msgstr "Ваши настройки"
 
@@ -721,26 +787,26 @@ msgstr "Ваши настройки"
 msgid "Your expenses stay. You can connect again at any time."
 msgstr "Расходы останутся. Подключиться снова можно в любой момент."
 
-#: dashboard.py:339
+#: dashboard.py:351
 #, python-brace-format
 msgid "Your largest category was {category} at {amount}, representing {share} of spending."
 msgstr "Больше всего ушло на «{category}»: {amount}, это {share} всех трат."
 
-#: dashboard.py:352
+#: dashboard.py:364
 #, python-brace-format
 msgid "Your largest expense was {amount} at {merchant} on {date}."
 msgstr "Самый крупный расход — {amount} в {merchant}, {date}."
 
-#: dashboard.py:356
+#: dashboard.py:368
 #, python-brace-format
 msgid "Your largest expense was {amount} on {date}."
 msgstr "Самый крупный расход — {amount}, {date}."
 
-#: templates/dashboard.html:62
+#: templates/dashboard.html:149
 msgid "in total"
 msgstr "всего"
 
-#: templates/dashboard.html:140
+#: templates/dashboard.html:53
 msgid "no exchange rate"
 msgstr "нет курса"
 
@@ -752,11 +818,11 @@ msgstr "вход"
 msgid "that you just used"
 msgstr "который вы только что использовали"
 
-#: templates/settings.html:65 templates/settings_disconnect.html:5
+#: templates/settings.html:66 templates/settings_disconnect.html:5
 msgid "your Telegram account"
 msgstr "вашего аккаунта Telegram"
 
-#: dashboard.py:226
+#: dashboard.py:238
 #, python-brace-format
 msgid "{count} expense"
 msgid_plural "{count} expenses"
@@ -768,21 +834,6 @@ msgstr[2] "{count} расходов"
 #, python-brace-format
 msgid "{currency} amounts have at most {digits} decimal places."
 msgstr "У сумм в {currency} не больше {digits} знаков после запятой."
-
-#: dashboard.py:257
-#, python-brace-format
-msgid "{current}: down {change} compared with {previous}."
-msgstr "{current}: на {change} меньше, чем за {previous}."
-
-#: dashboard.py:242
-#, python-brace-format
-msgid "{current}: no change compared with {previous}."
-msgstr "{current}: столько же, сколько за {previous}."
-
-#: dashboard.py:255
-#, python-brace-format
-msgid "{current}: up {change} compared with {previous}."
-msgstr "{current}: на {change} больше, чем за {previous}."
 
 #: formatting.py:239
 #, python-brace-format

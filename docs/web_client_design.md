@@ -136,21 +136,31 @@ These are already decided and are not reopened here:
   Light #F3F4F6. The mark is redrawn as SVG (approved on the design canvas).
 - Contrast: #22C55E and #16A34A are too light for body text on white (2.3:1 and 3.3:1), so
   links and button fills use #15803D (5.0:1); the brand greens stay on the logo, charts, fills,
-  and large text. The dark theme (#111827 ground) uses #22C55E and #4ADE80.
-- Typeface: Manrope (SIL Open Font License), vendored as woff2 with Latin and Cyrillic subsets,
+  and large text. The light ground is #F6F7F8 (white with a hint of grey) under white cards.
+- Typeface: Onest (SIL Open Font License; replaced Manrope on 2026-09-24 for readability at small sizes), vendored as woff2 with Latin and Cyrillic subsets,
   so the CSP stays `font-src 'self'` (default-src).
 - Layout: a dark sidebar collapsed to icons that expands over the content on hover and on
   keyboard focus inside it (`:hover`, `:focus-within`, no script); the hovered or focused item
   grows slightly. Labels stay in the accessibility tree while collapsed. Motion is removed under
   `prefers-reduced-motion`. Below 900 px the same navigation becomes a bottom tab bar.
-- A dark theme follows the system setting (`prefers-color-scheme`).
+- Hover expands the sidebar after a 250 ms pause and closes it at once, so a pointer heading
+  for the content never finds it open. A page renders the sidebar resting (it loads under the
+  pointer after a click on a section); `app.js` wakes it once the pointer stays over it for
+  150 ms or leaves it. Without JavaScript `noscript.css` restores the plain hover (2026-09-24).
+- A dark theme follows the system setting (`prefers-color-scheme`). Since 2026-09-24 it is a
+  neutral graphite theme without the earlier navy tint (#18181B ground, #242428 cards), chosen by
+  the product owner; greens stay #22C55E and #4ADE80.
 
 ### W12. The dashboard leads with the answer, then the chart (added 2026-09-24, WEB-09)
 
-- Order: the period and a one-line answer ("You spent 672.23 EUR", with the comparison and the
-  count), then the main chart, then the period and currency controls, then insights,
-  categories, and merchants. Period presets (this month, last month, last three months) sit next
-  to custom dates; currencies present in the period are choices with their totals.
+- Order (revised 2026-09-24): the page title, a first row with the answer card ("You spent
+  672.23 EUR", the count, the comparison, the totals by currency, and the rates note) and the
+  insights stacked on the left and the period and currency controls on the right, then the
+  main chart, then categories and merchants. Period presets (today, this week from Monday, this
+  month, last month, last three months) sit above custom dates.
+- The daily table is its own card beside the chart, opened with `table=1` in the URL, so it
+  stays open across chart views, presets, and filters. It lists only days with spending.
+- Each tab's title is green with the tab's navigation icon on a soft badge.
 - The main chart switches between columns (spending over time) and a donut (share by
   category), chosen by the product owner. This extends MVP section 8 ("exactly three charts",
   bars preferred over a pie): the donut is an alternative view of the category data, not a new

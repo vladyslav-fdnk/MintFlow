@@ -1,0 +1,17 @@
+/* Loaded only without JavaScript: app.js never wakes the resting sidebar, so hover expands it
+   directly, as it did before the resting state existed (web design W11). */
+.sidebar.is-resting:hover {
+  width: var(--sidebar-expanded);
+  box-shadow: 8px 0 32px rgb(3 7 18 / 0.3);
+}
+
+.sidebar.is-resting:hover .label {
+  opacity: 1;
+}
+
+@media (max-width: 900px) {
+  .sidebar.is-resting:hover {
+    width: auto;
+    box-shadow: 0 -1px 0 rgb(255 255 255 / 0.08);
+  }
+}

@@ -2,14 +2,13 @@ import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from html import escape
 from ipaddress import IPv4Address, IPv6Address, ip_address
 from typing import Annotated
 from urllib.parse import parse_qs, quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -380,42 +379,6 @@ def generic_magic_link_request_response() -> JSONResponse:
     )
 
 
-def magic_link_confirmation_response(*, token: str, return_target: str) -> HTMLResponse:
-    safe_token = escape(token, quote=True)
-    safe_return_target = escape(return_target, quote=True)
-    return HTMLResponse(
-        "<!doctype html><html lang=en><head><meta charset=utf-8>"
-        '<meta name=viewport content="width=device-width,initial-scale=1">'
-        "<title>Confirm sign in | MintFlow</title></head><body>"
-        "<main><h1>Confirm sign in</h1>"
-        "<p>Continue to sign in to MintFlow.</p>"
-        f'<form method="post" action="{MAGIC_LINK_CONFIRMATION_PATH}">'
-        f'<input type="hidden" name="token" value="{safe_token}">'
-        f'<input type="hidden" name="return_target" value="{safe_return_target}">'
-        '<button type="submit">Continue</button></form></main></body></html>',
-        headers={
-            **authentication_security_headers(),
-            # Not no-referrer: under that policy browsers send "Origin: null" with the form's
-            # POST, which the consumption's Origin check must reject. strict-origin still keeps
-            # the token out of every Referer (only the bare origin is ever sent).
-            "Referrer-Policy": CONFIRMATION_PAGE_REFERRER_POLICY,
-        },
-    )
-
-
-def generic_magic_link_confirmation_failure_response() -> HTMLResponse:
-    return HTMLResponse(
-        "<!doctype html><html lang=en><head><meta charset=utf-8>"
-        '<meta name=viewport content="width=device-width,initial-scale=1">'
-        "<title>Sign-in link unavailable | MintFlow</title></head><body>"
-        "<main><h1>Sign-in link unavailable</h1>"
-        "<p>This sign-in link cannot be used. Request a new link to continue.</p>"
-        "</main></body></html>",
-        status_code=400,
-        headers=authentication_security_headers(),
-    )
-
-
 def has_approved_login_origin(*, request: Request, approved_origin: str) -> bool:
     """Require one byte-for-byte first-party Origin; forwarding headers are irrelevant."""
     origins = request.headers.getlist("origin")
@@ -522,48 +485,6 @@ async def parse_magic_link_confirmation(request: Request) -> MagicLinkConfirmati
     if MAGIC_LINK_TOKEN_PATTERN.fullmatch(token) is None:
         return None
     return MagicLinkConfirmationDTO(token=token)
-
-
-@router.api_route("/magic-link", methods=["GET", "HEAD"], response_class=HTMLResponse)
-async def confirm_magic_link(request: Request) -> HTMLResponse:
-    token = request.query_params.get("token")
-    return_target = request.query_params.get("return_target")
-    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
-    if token is None or MAGIC_LINK_TOKEN_PATTERN.fullmatch(token) is None or return_target is None:
-        return generic_magic_link_confirmation_failure_response()
-    try:
-        runtime.link_builder.validate_return_target(return_target)
-    except InvalidReturnTargetError:
-        return generic_magic_link_confirmation_failure_response()
-    return magic_link_confirmation_response(token=token, return_target=return_target)
-
-
-@router.post("/magic-link", response_class=HTMLResponse)
-async def consume_magic_link(
-    request: Request,
-    consume: ConsumeMagicLinkDependency,
-) -> Response:
-    runtime: AuthenticationRuntime = request.app.state.authentication_runtime
-    if not has_approved_login_origin(
-        request=request,
-        approved_origin=runtime.link_builder.web_origin,
-    ):
-        return generic_magic_link_confirmation_failure_response()
-    submitted_confirmation = await parse_magic_link_confirmation(request)
-    if submitted_confirmation is None:
-        return generic_magic_link_confirmation_failure_response()
-    result = consume.execute(token=submitted_confirmation.token)
-    if not result.authenticated or result.session_secret is None or result.return_target is None:
-        return generic_magic_link_confirmation_failure_response()
-    try:
-        return successful_magic_link_response(
-            session_secret=result.session_secret,
-            return_target=result.return_target,
-            link_builder=runtime.link_builder,
-            csrf_digester=runtime.csrf_digester,
-        )
-    except InvalidReturnTargetError:
-        return generic_magic_link_confirmation_failure_response()
 
 
 @router.post("/magic-link/request", response_class=JSONResponse)

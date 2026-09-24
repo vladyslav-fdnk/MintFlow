@@ -212,7 +212,7 @@ async def test_mutations_need_the_csrf_header_the_script_sends(settings: Setting
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     ("name", "content_type"),
-    [("favicon.svg", "image/svg+xml"), ("fonts/manrope-latin.woff2", "font/woff2")],
+    [("favicon.svg", "image/svg+xml"), ("fonts/onest-latin.woff2", "font/woff2")],
 )
 async def test_brand_assets_are_served_as_static_files(
     settings: Settings, name: str, content_type: str

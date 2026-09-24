@@ -3,48 +3,49 @@
    CSP forbids them. */
 
 @font-face {
-  font-family: "Manrope";
+  font-family: "Onest";
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url("../fonts/manrope-latin.woff2") format("woff2");
+  src: url("../fonts/onest-latin.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304,
     U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "Manrope";
+  font-family: "Onest";
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url("../fonts/manrope-latin-ext.woff2") format("woff2");
+  src: url("../fonts/onest-latin-ext.woff2") format("woff2");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308,
     U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113,
     U+2C60-2C7F, U+A720-A7FF;
 }
 
 @font-face {
-  font-family: "Manrope";
+  font-family: "Onest";
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url("../fonts/manrope-cyrillic.woff2") format("woff2");
+  src: url("../fonts/onest-cyrillic.woff2") format("woff2");
   unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
 }
 
 @font-face {
-  font-family: "Manrope";
+  font-family: "Onest";
   font-style: normal;
   font-weight: 400 800;
   font-display: swap;
-  src: url("../fonts/manrope-cyrillic-ext.woff2") format("woff2");
+  src: url("../fonts/onest-cyrillic-ext.woff2") format("woff2");
   unicode-range: U+0460-052F, U+1C80-1C8A, U+20B4, U+2DE0-2DFF, U+A640-A69F, U+FE2E-FE2F;
 }
 
 /* --- tokens -------------------------------------------------------------------------------- */
 
 :root {
-  --bg: #f3f4f6;
+  /* White with a hint of grey, so white cards still stand out. */
+  --bg: #f6f7f8;
   --surface: #ffffff;
   --border: #e5e7eb;
   --border-strong: #6b7280;
@@ -72,7 +73,7 @@
   --sidebar-active: #15803d;
   --sidebar-focus: #93c5fd;
   --shadow: 0 1px 2px rgb(17 24 39 / 0.06);
-  --gridline: #d1d5db;
+  --gridline: #b8bfc8;
   /* Donut slices: distinct hues, each at least 3:1 against the card (WCAG 1.4.11). */
   --slice-0: #16a34a;
   --slice-1: #0e7490;
@@ -90,35 +91,37 @@
   color-scheme: light;
 }
 
-/* Dark: the system setting applies unless the user chose light; an explicit choice of dark
+/* Dark: a neutral graphite theme without the earlier navy tint, chosen by the product owner on
+   2026-09-24. The system setting applies unless the user chose light; an explicit choice of dark
    applies regardless of the system (design W13). Keep the two blocks identical. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #111827;
-    --surface: #1f2937;
-    --border: #374151;
-    --border-strong: #9ca3af;
-    --text: #f9fafb;
-    --muted: #d1d5db;
+    --bg: #18181b;
+    --surface: #242428;
+    --border: #3a3a40;
+    --border-strong: #a1a1aa;
+    --text: #f4f4f5;
+    --muted: #d4d4d8;
     --accent: #4ade80;
     --accent-hover: #86efac;
     --on-accent: #052e16;
-    --soft: #14532d;
+    --soft: #1d3b2a;
     --chart: #22c55e;
-    --chart-track: #374151;
+    --chart-track: #3a3a40;
     --danger: #fca5a5;
     --danger-fill: #dc2626;
     --on-danger: #ffffff;
     --focus: #93c5fd;
-    --wordmark-mint: #f9fafb;
+    --wordmark-mint: #f4f4f5;
     --wordmark-flow: #22c55e;
     --mark-start: #4ade80;
     --mark-end: #22c55e;
     --mark-line: #4ade80;
-    --sidebar-bg: #030712;
-    --sidebar-hover: #1f2937;
+    --sidebar-bg: #0f0f11;
+    --sidebar-text: #d4d4d8;
+    --sidebar-hover: #27272a;
     --shadow: none;
-    --gridline: #4b5563;
+    --gridline: #5b5b63;
     --slice-0: #22c55e;
     --slice-1: #22d3ee;
     --slice-2: #60a5fa;
@@ -128,36 +131,36 @@
     --slice-6: #9ca3af;
     --slice-7: #34d399;
     color-scheme: dark;
-
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #111827;
-  --surface: #1f2937;
-  --border: #374151;
-  --border-strong: #9ca3af;
-  --text: #f9fafb;
-  --muted: #d1d5db;
+  --bg: #18181b;
+  --surface: #242428;
+  --border: #3a3a40;
+  --border-strong: #a1a1aa;
+  --text: #f4f4f5;
+  --muted: #d4d4d8;
   --accent: #4ade80;
   --accent-hover: #86efac;
   --on-accent: #052e16;
-  --soft: #14532d;
+  --soft: #1d3b2a;
   --chart: #22c55e;
-  --chart-track: #374151;
+  --chart-track: #3a3a40;
   --danger: #fca5a5;
   --danger-fill: #dc2626;
   --on-danger: #ffffff;
   --focus: #93c5fd;
-  --wordmark-mint: #f9fafb;
+  --wordmark-mint: #f4f4f5;
   --wordmark-flow: #22c55e;
   --mark-start: #4ade80;
   --mark-end: #22c55e;
   --mark-line: #4ade80;
-  --sidebar-bg: #030712;
-  --sidebar-hover: #1f2937;
+  --sidebar-bg: #0f0f11;
+  --sidebar-text: #d4d4d8;
+  --sidebar-hover: #27272a;
   --shadow: none;
-  --gridline: #4b5563;
+  --gridline: #5b5b63;
   --slice-0: #22c55e;
   --slice-1: #22d3ee;
   --slice-2: #60a5fa;
@@ -167,7 +170,6 @@
   --slice-6: #9ca3af;
   --slice-7: #34d399;
   color-scheme: dark;
-
 }
 
 /* --- base ---------------------------------------------------------------------------------- */
@@ -179,7 +181,7 @@
 }
 
 html {
-  font-family: "Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Onest", system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.5;
   color: var(--text);
   background: var(--bg);
@@ -205,6 +207,24 @@ a:hover {
 :focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
+}
+
+/* A page title names the current section: its navigation icon on a soft badge, in green. */
+.page-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--accent);
+}
+
+.page-title-icon {
+  display: inline-grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius);
+  background: var(--soft);
 }
 
 h1 {
@@ -334,10 +354,17 @@ textarea {
     box-shadow 180ms ease;
 }
 
-.sidebar:hover,
+/* Hovering expands after a short pause, so a pointer passing by or heading for the content does
+   not open it; it closes at once. A page that loads under a resting pointer waits for the pointer
+   to move ("is-resting", set by app.js). Keyboard focus always expands it immediately. */
+.sidebar:hover:not(.is-resting),
 .sidebar:focus-within {
   width: var(--sidebar-expanded);
   box-shadow: 8px 0 32px rgb(3 7 18 / 0.3);
+}
+
+.sidebar:hover:not(.is-resting) {
+  transition-delay: 250ms;
 }
 
 .sidebar .brand {
@@ -376,9 +403,13 @@ textarea {
   transition: opacity 120ms ease;
 }
 
-.sidebar:hover .label,
+.sidebar:hover:not(.is-resting) .label,
 .sidebar:focus-within .label {
   opacity: 1;
+}
+
+.sidebar:hover:not(.is-resting) .label {
+  transition-delay: 250ms;
 }
 
 .sidebar nav {
@@ -480,7 +511,7 @@ textarea {
   margin: 0;
   padding: 0 12px;
   color: #9ca3af;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
 }
 
 .icon {
@@ -790,38 +821,105 @@ main:focus {
   font-weight: 600;
 }
 
+.overview {
+  padding-top: 20px;
+}
+
 .answer {
-  margin: 4px 0 0;
-  font-size: 1.5rem;
+  margin: 0;
+  font-size: 1.125rem;
   font-weight: 600;
   line-height: 1.2;
+  color: var(--muted);
 }
 
 .answer strong {
   display: block;
+  margin-top: 4px;
   font-size: 2.75rem;
   font-weight: 800;
   letter-spacing: -0.03em;
+  color: var(--text);
 }
 
 .answer-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 16px;
-  margin: 8px 0 0;
-  font-size: 1.0625rem;
-  color: var(--muted);
-}
-
-.rates-note {
-  margin: 8px 0 0;
-  max-width: 60ch;
-  font-size: 0.9375rem;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 12px 0 0;
+  font-size: 1rem;
   color: var(--muted);
 }
 
 .answer-comparison {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg);
   font-weight: 600;
+  color: var(--text);
+}
+
+.comparison-arrow {
+  font-size: 0.75rem;
+}
+
+.overview .currency-choice {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.overview .currency-choice h3 {
+  margin: 0 0 12px;
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+
+.overview .currency-totals {
+  gap: 8px 16px;
+}
+
+.overview .currency-totals li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overview .currency-totals .muted {
+  white-space: nowrap;
+  font-size: 0.9375rem;
+}
+
+.rates-note {
+  margin-top: 16px;
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+
+.rates-note summary {
+  display: list-item;
+  min-height: 0;
+  max-width: 75ch;
+  color: var(--muted);
+  font-weight: 400;
+  cursor: pointer;
+}
+
+.rates-note p {
+  margin: 8px 0 0;
+  max-width: 75ch;
+}
+
+.rates-warning {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--bg);
+  font-size: 0.9375rem;
   color: var(--text);
 }
 
@@ -852,6 +950,174 @@ main:focus {
 .chart-summary {
   margin: 0 0 12px;
   color: var(--muted);
+}
+
+/* The daily table is its own card beside the chart card; the chart card narrows to make room. */
+.chart-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+.chart-row.with-table {
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem);
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.table-toggle {
+  min-height: 44px;
+}
+
+.table-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.table-card h2 {
+  margin: 0 0 12px;
+}
+
+/* Grows only as tall as the chart card beside it, then scrolls. */
+.table-card .chart-table-scroll {
+  flex: 1 1 0;
+  min-height: 12rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.table-card thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+}
+
+.table-card th,
+.table-card td {
+  padding: 8px 12px;
+}
+
+.table-card td,
+.table-card thead th:last-child {
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* "You spent" and the period controls share the first row. */
+.top-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(19rem, 24rem);
+  gap: 20px;
+  align-items: stretch;
+}
+
+/* "You spent" and the insights stack on the left; the controls span both on the right. */
+.top-main {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-width: 0;
+}
+
+.top-main > .card {
+  margin: 0;
+}
+
+/* The panel is as tall as the two cards beside it: the title at the top, the quick periods in
+   the middle, and the dates and currency at the bottom. */
+.top-row .toolbar {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px;
+}
+
+.top-row .toolbar h2 {
+  margin: 0;
+}
+
+/* The quick periods fill the panel: two per row, the last one alone spanning both. */
+.top-row .toolbar .presets {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(64px, 1fr);
+  gap: 10px;
+}
+
+.top-row .toolbar .presets .chip {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 1.0625rem;
+  text-align: center;
+}
+
+.preset-dates {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.chip[aria-current="true"] .preset-dates {
+  color: var(--on-accent);
+}
+
+.top-row .toolbar .presets .chip:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.top-row .toolbar .filters {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.top-row .toolbar .field {
+  min-width: 0;
+}
+
+.top-row .toolbar .field input,
+.top-row .toolbar .field select,
+.top-row .toolbar .filters .button {
+  width: 100%;
+  min-width: 0;
+}
+
+/* The period and currency controls sit in one compact bar under the page title. */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px 24px;
+  padding: 16px 24px;
+}
+
+.toolbar .presets {
+  margin: 0;
+}
+
+.toolbar .filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 0;
+}
+
+.toolbar .field {
+  margin: 0;
 }
 
 .column-chart {
@@ -888,12 +1154,17 @@ main:focus {
 .gridline,
 .baseline {
   stroke: var(--gridline);
-  stroke-width: 0.6;
+  stroke-width: 1;
   vector-effect: non-scaling-stroke;
 }
 
 .gridline {
-  stroke-dasharray: 4 4;
+  stroke-dasharray: 5 4;
+}
+
+.baseline {
+  stroke: var(--border-strong);
+  stroke-width: 1.5;
 }
 
 .columns rect:hover {
@@ -1176,7 +1447,7 @@ td {
 
 .history .converted {
   display: block;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
   font-weight: 400;
   color: var(--muted);
 }
@@ -1221,7 +1492,7 @@ td {
 .details dt {
   color: var(--muted);
   font-weight: 700;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 
 .details dd {
@@ -1277,10 +1548,23 @@ main > section + section {
   max-width: none;
 }
 
+.card-title {
+  margin: 0 0 8px;
+  font-size: 1.5rem;
+}
+
+.sign-in .card p {
+  margin: 0 0 16px;
+}
+
+.sign-in .card .hint {
+  margin: 16px 0 0;
+}
+
 .sign-in .hint {
   margin: 0;
   text-align: center;
-  font-size: 0.875rem;
+  font-size: 0.9375rem;
 }
 
 /* --- narrow screens: the sidebar becomes a bottom tab bar ---------------------------------- */
@@ -1296,6 +1580,7 @@ main > section + section {
 @media (max-width: 900px) {
   .sidebar,
   .sidebar:hover,
+  .sidebar:hover:not(.is-resting),
   .sidebar:focus-within {
     inset: auto 0 0 0;
     width: auto;
@@ -1332,7 +1617,7 @@ main > section + section {
     min-width: 64px;
     min-height: 56px;
     padding: 4px 8px;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
   }
 
   .nav-item:hover,
@@ -1380,7 +1665,53 @@ main > section + section {
   }
 }
 
+@media (max-width: 900px) {
+  .top-row,
+  .chart-row.with-table {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* In one column the controls follow "You spent" directly, before the insights. */
+  .top-main {
+    display: contents;
+  }
+
+  .top-main > .overview {
+    order: 1;
+  }
+
+  .top-row > .toolbar {
+    order: 2;
+  }
+
+  .top-main > .card:not(.overview) {
+    order: 3;
+  }
+
+  .table-card .chart-table-scroll {
+    flex: none;
+    max-height: 20rem;
+  }
+}
+
 @media (max-width: 600px) {
+  /* A compact period bar on phones: fields sit two by two. */
+  .toolbar {
+    padding: 16px;
+  }
+
+  .toolbar .filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .toolbar .field input,
+  .toolbar .field select,
+  .toolbar .filters .button {
+    width: 100%;
+  }
+
   h1 {
     font-size: 1.625rem;
   }
@@ -1430,12 +1761,12 @@ main > section + section {
   .history td:nth-child(3) {
     grid-area: 2 / 1;
     color: var(--muted);
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
   }
 
   .history td:nth-child(1) {
     grid-area: 3 / 1;
-    font-size: 0.875rem;
+    font-size: 0.9375rem;
   }
 
   .history td.amount {

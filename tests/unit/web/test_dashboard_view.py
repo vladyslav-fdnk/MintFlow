@@ -127,25 +127,25 @@ def test_a_largest_expense_without_a_merchant_reads_naturally() -> None:
 
 
 @pytest.mark.parametrize(
-    ("change", "basis_points", "expected"),
+    ("change", "basis_points", "expected", "direction"),
     [
-        (1_500, 1_500, f"up 15% (+15.00{NBSP}EUR)"),
-        (-2_500, -2_500, f"down 25% (\u221225.00{NBSP}EUR)"),
-        (1_500, None, f"up +15.00{NBSP}EUR"),
-        (0, 0, "no change"),
+        (1_500, 1_500, f"Up 15% (+15.00{NBSP}EUR)", "up"),
+        (-2_500, -2_500, f"Down 25% (\u221225.00{NBSP}EUR)", "down"),
+        (1_500, None, f"Up +15.00{NBSP}EUR", "up"),
+        (0, 0, "No change", "flat"),
     ],
 )
-def test_the_comparison_names_both_windows_and_the_direction(
-    change: int, basis_points: int | None, expected: str
+def test_the_comparison_names_the_previous_window_and_the_direction(
+    change: int, basis_points: int | None, expected: str, direction: str
 ) -> None:
     view = build_dashboard_view(
         _dashboard(_detail(comparison=_comparison(change, basis_points))), EN
     )
 
     assert view.detail is not None and view.detail.comparison is not None
-    assert view.detail.comparison.startswith(f"Sep 1{THIN}–{THIN}23, 2026: ")
-    assert expected in view.detail.comparison
+    assert view.detail.comparison.startswith(expected)
     assert view.detail.comparison.endswith(f"compared with Aug 1{THIN}–{THIN}23, 2026.")
+    assert view.detail.comparison_direction == direction
 
 
 def test_several_currencies_are_listed_separately_and_never_added() -> None:
@@ -182,10 +182,12 @@ def test_formatting_follows_the_users_locale() -> None:
 # --- the template -----------------------------------------------------------------------------
 
 
-def _render(dashboard: Dashboard, onboarding: Onboarding | None = None) -> Element:
+def _render(
+    dashboard: Dashboard, onboarding: Onboarding | None = None, *, table: bool = False
+) -> Element:
     html = TEMPLATES.get_template("dashboard.html").render(
         active="dashboard",
-        view=build_dashboard_view(dashboard, EN),
+        view=build_dashboard_view(dashboard, EN, table=table),
         invalid_filters=False,
         onboarding=onboarding,
     )
@@ -193,11 +195,12 @@ def _render(dashboard: Dashboard, onboarding: Onboarding | None = None) -> Eleme
 
 
 def test_every_chart_value_is_available_as_text() -> None:
-    page = _render(_dashboard())
+    page = _render(_dashboard(), table=True)
 
     table = page.find("table")
     rows = table.find("tbody").find_all("tr")
-    assert len(rows) == 30
+    # Days without a row had no spending; every other column's value is in the table.
+    assert len(rows) == 15
     assert rows[0].text == f"Sep 1 40.00{NBSP}EUR"
     assert rows[0].find("a").attrs["href"] == (
         "/expenses?date_from=2026-09-01&date_to=2026-09-01&currency=EUR"
@@ -326,24 +329,33 @@ def test_chart_links_keep_the_period_and_currency() -> None:
     )
 
 
-def test_presets_cover_this_month_last_month_and_three_months() -> None:
+def test_presets_cover_today_this_week_and_the_months() -> None:
+    # 23 Sep 2026 is a Wednesday.
     view = build_dashboard_view(_dashboard(), EN, chart="pie", today=date(2026, 9, 23))
 
     assert [(preset.label, preset.selected) for preset in view.presets] == [
+        ("Today", False),
+        ("This week", False),
         ("This month", True),
         ("Last month", False),
         ("Last 3 months", False),
     ]
-    assert view.presets[1].href == (
+    assert view.presets[0].href.startswith("/dashboard?date_from=2026-09-23&date_to=2026-09-23")
+    # The week runs Monday to Sunday.
+    assert view.presets[1].href.startswith("/dashboard?date_from=2026-09-21&date_to=2026-09-27")
+    assert view.presets[3].href == (
         "/dashboard?date_from=2026-08-01&date_to=2026-08-31&currency=EUR&chart=pie"
     )
-    assert view.presets[2].href.startswith("/dashboard?date_from=2026-07-01&date_to=2026-09-30")
+    assert view.presets[4].href.startswith("/dashboard?date_from=2026-07-01&date_to=2026-09-30")
 
 
 def test_presets_across_the_new_year() -> None:
-    view = build_dashboard_view(_dashboard(), EN, today=date(2027, 1, 5))
+    # 1 Jan 2027 is a Friday, so its week began in 2026.
+    view = build_dashboard_view(_dashboard(), EN, today=date(2027, 1, 1))
 
     assert [preset.href.split("&currency")[0] for preset in view.presets] == [
+        "/dashboard?date_from=2027-01-01&date_to=2027-01-01",
+        "/dashboard?date_from=2026-12-28&date_to=2027-01-03",
         "/dashboard?date_from=2027-01-01&date_to=2027-01-31",
         "/dashboard?date_from=2026-12-01&date_to=2026-12-31",
         "/dashboard?date_from=2026-11-01&date_to=2027-01-31",
@@ -360,12 +372,21 @@ def _render_view(chart: str) -> Element:
     return parse_html(html)
 
 
-def test_the_answer_comes_before_the_chart_and_the_controls_after() -> None:
+def test_the_answer_insights_and_controls_share_the_first_row_before_the_chart() -> None:
     region = _render_view("columns").find(id="dashboard")
 
     order = [child.attrs.get("class") or child.tag for child in region.children]
-    assert order[0] == "hero"
-    assert order.index("card chart-card") < order.index("card controls")
+    assert order[:2] == ["hero", "top-row"]
+    assert order.index("top-row") < order.index("chart-row")
+    top = region.find("div", class_="top-row")
+    assert [child.attrs.get("class") for child in top.children] == [
+        "top-main",
+        "card controls toolbar",
+    ]
+    # The insights sit under "You spent", so the controls span both on the right.
+    main = top.find("div", class_="top-main")
+    assert [child.attrs.get("class") for child in main.children] == ["card overview", "card"]
+    assert main.find("h2", id="insights-title").text == "Insights"
     assert region.find("p", class_="answer").text == f"You spent 120.00{NBSP}EUR"
     hero = region.find("div", class_="hero")
     assert [child.tag for child in hero.children][:2] == ["h1", "p"]
@@ -457,3 +478,14 @@ def test_a_converted_dashboard_without_used_rates_shows_exact_amounts() -> None:
     assert view.rates_note is None
     assert view.unconverted_note == f"Not included, no exchange rate: 5.000{NBSP}BHD."
     assert [line.no_rate for line in view.currencies] == [False, True]
+
+
+def test_the_chart_table_lists_only_days_with_spending() -> None:
+    view = build_dashboard_view(_dashboard(), EN)
+
+    assert view.detail is not None
+    chart = view.detail.time_chart
+    assert len(chart.columns) == 30
+    # _detail() spends 40.00 EUR on odd days only.
+    assert [row.label for row in chart.rows] == [f"Sep {day}" for day in range(1, 31, 2)]
+    assert all(row.amount == f"40.00{NBSP}EUR" for row in chart.rows)

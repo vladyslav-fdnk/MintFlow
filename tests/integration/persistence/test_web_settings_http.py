@@ -158,7 +158,7 @@ async def test_the_page_shows_the_current_conventions(
         _selected(page, "default_currency"),
         _selected(page, "locale"),
     ) == ("Asia/Tokyo", "PLN", "de-DE")
-    assert "never converted" in page.find(id="currency-hint").text
+    assert "converted into it" in page.find(id="currency-hint").text
     assert page.find("section", id="telegram").find("button").text == "Connect Telegram"
 
 

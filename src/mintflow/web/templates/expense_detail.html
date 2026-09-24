@@ -4,7 +4,7 @@
 <p><a href="/expenses">{{ _("Back to expenses") }}</a></p>
 <h1>{{ expense.merchant or _("Expense") }}</h1>
 <dl class="details">
-  <div><dt>{{ _("Amount") }}</dt><dd>{{ expense.amount }}</dd></div>
+  <div class="detail-amount"><dt>{{ _("Amount") }}</dt><dd>{{ expense.amount }}</dd></div>
   <div><dt>{{ _("Date") }}</dt><dd>{{ expense.date }}</dd></div>
   <div><dt>{{ _("Merchant") }}</dt><dd>{% if expense.merchant %}{{ expense.merchant }}{% else %}<span class="muted">{{ _("None") }}</span>{% endif %}</dd></div>
   <div><dt>{{ _("Category") }}</dt><dd>{{ expense.category }}</dd></div>

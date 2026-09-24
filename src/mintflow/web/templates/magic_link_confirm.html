@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_brand.html" as brand %}
+{% block title %}{{ _("Confirm sign in") }}{% endblock %}
+{# The token is in this page, so it runs no script at all. #}
+{% block scripts %}{% endblock %}
+{% block navigation %}{% endblock %}
+{% block content %}
+<div class="sign-in">
+<div class="lockup">
+  {{ brand.mark(88, "mark-sign-in") }}
+  <p class="lockup-wordmark">{{ brand.wordmark() }}</p>
+  <p class="lockup-tagline">{{ _("Track less. Understand more.") }}</p>
+</div>
+<div class="form card">
+  <h1 class="card-title">{{ _("Confirm sign in") }}</h1>
+  <p>{{ _("Press the button to sign in to MintFlow on this device.") }}</p>
+  <form method="post" action="{{ action }}">
+    <input type="hidden" name="token" value="{{ token }}">
+    <input type="hidden" name="return_target" value="{{ return_target }}">
+    <button type="submit" class="button button-wide">{{ _("Sign me in") }}</button>
+  </form>
+  <p class="hint">{{ _("If you did not ask for this link, close this page; nothing happens without the button.") }}</p>
+</div>
+</div>
+{% endblock %}

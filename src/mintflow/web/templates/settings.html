@@ -1,13 +1,14 @@
 {% extends "base.html" %}
+{% import "_brand.html" as brand %}
 {% block title %}{{ _("Settings") }}{% endblock %}
 {% macro field_error(name) %}
 {% if errors.get(name) %}<p id="{{ name }}-error" class="field-error">{{ errors[name] }}</p>{% endif %}
 {% endmacro %}
 {% macro invalid(name) %}{% if errors.get(name) %} aria-invalid="true" aria-describedby="{{ name }}-error"{% endif %}{% endmacro %}
 {% block content %}
-<h1>{{ _("Settings") }}</h1>
+{{ brand.page_title("settings", _("Settings")) }}
 
-<section aria-labelledby="preferences-title">
+<section class="card settings-card" aria-labelledby="preferences-title">
   <h2 id="preferences-title">{{ _("Your conventions") }}</h2>
   <form id="preferences-form" class="form" method="post" action="/settings/preferences"
     hx-post="/settings/preferences" hx-target="#preferences-form" hx-select="#preferences-form"
@@ -40,7 +41,7 @@
         <option value="{{ code }}"{% if code == form.default_currency %} selected{% endif %}>{{ code }}</option>
         {% endfor %}
       </select>
-      <p id="currency-hint" class="hint">{{ _("Used when you type an amount without a currency. Amounts in different currencies are never converted or added together.") }}</p>
+      <p id="currency-hint" class="hint">{{ _("Used when you type an amount without a currency. The dashboard also shows your totals converted into it.") }}</p>
       {{ field_error("default_currency") }}
     </div>
     <div class="field">
@@ -57,7 +58,7 @@
   </form>
 </section>
 
-<section id="telegram" aria-labelledby="telegram-title">
+<section id="telegram" class="card settings-card" aria-labelledby="telegram-title">
   <h2 id="telegram-title">{{ _("Telegram") }}</h2>
   {% if not telegram.available %}
   <p>{{ _("Telegram is not set up on this server.") }}</p>

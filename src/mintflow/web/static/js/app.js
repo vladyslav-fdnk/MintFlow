@@ -59,13 +59,35 @@
     }
   });
 
-  // A failed request leaves the page as it was and says so in the status region.
+  // A failed request leaves the page as it was and says so in the status region, in the page's
+  // language (the server puts the translated text on the region).
   document.addEventListener("htmx:responseError", function () {
     const status = document.getElementById("status");
     if (status) {
-      status.textContent = "Something went wrong. Please try again.";
+      status.textContent = status.dataset.errorMessage || "Something went wrong. Please try again.";
     }
   });
+
+  // A page can load under a pointer resting on the sidebar (after a click on a section). The
+  // browser applies that hover on the first paint, where the expansion delay does not act, so the
+  // server renders the sidebar "resting" and it wakes when the pointer first moves over it; from
+  // then on hovering expands it after the pause, and heading for the content never finds it open.
+  const sidebar = document.querySelector(".sidebar");
+  if (sidebar) {
+    // Still over the sidebar a moment after moving: the user wants it, so wake it. Leaving it
+    // (heading for the content) ends the resting state at once, so later hovers are ordinary.
+    let wakeTimer = null;
+    const wake = function () {
+      clearTimeout(wakeTimer);
+      sidebar.classList.remove("is-resting");
+    };
+    sidebar.addEventListener("pointermove", function () {
+      if (sidebar.classList.contains("is-resting") && wakeTimer === null) {
+        wakeTimer = setTimeout(wake, 150);
+      }
+    });
+    sidebar.addEventListener("pointerleave", wake);
+  }
 
   // The theme switch (design W13): the choice is kept in a cookie the server reads, so the next
   // page renders in it at once; without a choice the system setting applies.

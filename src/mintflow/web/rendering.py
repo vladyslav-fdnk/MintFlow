@@ -49,11 +49,18 @@ PAGE_HEADERS: Final = {
 _VERSIONED_STATIC_CACHE: Final = "public, max-age=31536000, immutable"
 
 
-@cache
 def _static_version(name: str) -> str:
+    """A content hash, recomputed when the file changes, so an edited stylesheet gets a new URL
+    even in a process that was started before the edit (``make run`` reloads on Python changes
+    only) and browsers never keep a stale copy under the year-long cache."""
     path = (STATIC_DIRECTORY / name).resolve()
     if not path.is_relative_to(STATIC_DIRECTORY.resolve()) or not path.is_file():
         raise ValueError(f"unknown static file {name!r}")
+    return _content_hash(path, path.stat().st_mtime_ns)
+
+
+@cache
+def _content_hash(path: Path, modified_ns: int) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:12]
 
 
@@ -122,11 +129,16 @@ TEMPLATES: Final = _environment()
 
 
 def render(
-    template: str, context: Mapping[str, object] | None = None, *, status_code: int = 200
+    template: str,
+    context: Mapping[str, object] | None = None,
+    *,
+    status_code: int = 200,
+    headers: Mapping[str, str] | None = None,
 ) -> HTMLResponse:
+    """``headers`` replace page headers of the same name (the sign-in link pages tighten some)."""
     values = {"theme": _request_theme.get(), "language": current_language(), **(context or {})}
     html = TEMPLATES.get_template(template).render(**values)
-    return HTMLResponse(html, status_code=status_code, headers=PAGE_HEADERS)
+    return HTMLResponse(html, status_code=status_code, headers={**PAGE_HEADERS, **(headers or {})})
 
 
 def redirect(url: str) -> RedirectResponse:

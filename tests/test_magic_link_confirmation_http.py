@@ -16,9 +16,24 @@ from mintflow.http.authentication import (
 )
 from mintflow.logging import UVICORN_ACCESS_LOGGER_NAME
 from mintflow.main import create_app
+from mintflow.web.testing import parse_html
 
 TOKEN = "A" * 43
 PATH = f"/auth/magic-link?token={TOKEN}&return_target=dashboard"
+
+
+def _assert_link_unavailable(response: Response) -> None:
+    """The one generic failure state: a branded page with a way back, no form, no script."""
+    assert response.status_code == 400
+    page = parse_html(response.text)
+    assert page.find("h1").text == "Sign-in link unavailable"
+    assert page.find("a", class_="button button-wide").attrs["href"] == "/sign-in"
+    assert page.find_all("form") == []
+    assert "<script" not in response.text
+    assert TOKEN not in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert "default-src 'self'" in response.headers["content-security-policy"]
 
 
 class RecordingMagicLinkConsumption:
@@ -46,6 +61,9 @@ async def test_valid_looking_token_renders_fixed_internal_post_form(settings: Se
     assert 'name="return_target" value="dashboard"' in response.text
     assert not re.search(r"(?:src|href|action)=[\"'](?:https?:)?//", response.text)
     assert "<script" not in response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["referrer-policy"] == "strict-origin"
+    assert parse_html(response.text).find("h1").text == "Confirm sign in"
 
 
 @pytest.mark.anyio
@@ -63,14 +81,7 @@ async def test_malformed_or_missing_input_renders_one_generic_safe_state(
     response = await _request(settings, "GET", path)
 
     assert response.status_code == 400
-    assert response.text == (
-        "<!doctype html><html lang=en><head><meta charset=utf-8>"
-        '<meta name=viewport content="width=device-width,initial-scale=1">'
-        "<title>Sign-in link unavailable | MintFlow</title></head><body>"
-        "<main><h1>Sign-in link unavailable</h1>"
-        "<p>This sign-in link cannot be used. Request a new link to continue.</p>"
-        "</main></body></html>"
-    )
+    _assert_link_unavailable(response)
 
 
 @pytest.mark.anyio
@@ -182,14 +193,7 @@ async def test_invalid_consumption_has_generic_failure_and_no_cookie(settings: S
 
     assert response.status_code == 400
     assert "set-cookie" not in response.headers
-    assert response.text == (
-        "<!doctype html><html lang=en><head><meta charset=utf-8>"
-        '<meta name=viewport content="width=device-width,initial-scale=1">'
-        "<title>Sign-in link unavailable | MintFlow</title></head><body>"
-        "<main><h1>Sign-in link unavailable</h1>"
-        "<p>This sign-in link cannot be used. Request a new link to continue.</p>"
-        "</main></body></html>"
-    )
+    _assert_link_unavailable(response)
 
 
 @pytest.mark.anyio
@@ -244,3 +248,14 @@ async def test_the_confirmation_page_lets_the_browser_send_a_real_origin(
     policy = page.headers["referrer-policy"]
 
     assert _FORM_POST_ORIGIN_BY_POLICY[policy] == settings.authentication_web_origin
+
+
+@pytest.mark.anyio
+async def test_the_confirmation_page_speaks_the_browsers_language(settings: Settings) -> None:
+    transport = ASGITransport(app=create_app(settings))
+    async with AsyncClient(transport=transport, base_url="https://app.mintflow.test") as client:
+        response = await client.get(PATH, headers={"Accept-Language": "ru-RU,ru;q=0.9"})
+
+    page = parse_html(response.text)
+    assert page.find("h1").text == "Подтвердите вход"
+    assert page.find("button").text == "Войти"
