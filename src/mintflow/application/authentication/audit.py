@@ -16,6 +16,8 @@ class AuthenticationAuditEventType(StrEnum):
     TELEGRAM_LINK_CLAIMED = "telegram_link_claimed"
     TELEGRAM_LINKED = "telegram_linked"
     TELEGRAM_UNLINKED = "telegram_unlinked"
+    # Anonymous: recorded without a user id once the account is gone (account deletion, A2).
+    ACCOUNT_DELETED = "account_deleted"
 
 
 class AuthenticationAuditOutcome(StrEnum):

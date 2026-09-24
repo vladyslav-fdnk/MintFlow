@@ -23,12 +23,17 @@ from mintflow.application.receipts import (
     RecognitionOutput,
     TotalCandidate,
 )
+from mintflow.application.users import DeleteAccount
 from mintflow.commands.receipt_worker import build_receipt_worker
 from mintflow.config import Settings
 from mintflow.domain.user import UserStatus
 from mintflow.http.authentication import AUTHENTICATED_SESSION_COOKIE_NAME, AuthenticationRuntime
 from mintflow.http.capture import CaptureRuntime
-from mintflow.infrastructure.persistence import create_session_factory
+from mintflow.infrastructure.persistence import (
+    PostgreSQLAccountDeletionRepository,
+    StoredImage,
+    create_session_factory,
+)
 from mintflow.infrastructure.persistence.models import (
     CaptureDraftRecord,
     ExpenseRecord,
@@ -43,7 +48,7 @@ from mintflow.infrastructure.persistence.models import (
 from mintflow.infrastructure.recognition.fake import FakeReceiptRecognizer
 from mintflow.main import create_app
 from mintflow.telegram import InlineButton, messages
-from mintflow.telegram.receipt_worker import ReceiptOutcome, ReceiptWorker
+from mintflow.telegram.receipt_worker import ImageStore, ReceiptOutcome, ReceiptWorker
 from mintflow.telegram.runtime import TelegramRuntime
 from mintflow.telegram.testing import RecordingTelegramBotApi
 
@@ -485,3 +490,76 @@ async def test_a_recognizer_raising_timeout_error_fails_at_once(world: World) ->
 
     assert world.worker(recognizer=Raising()).process_next() is ReceiptOutcome.FAILED
     assert time.monotonic() - started < 5
+
+
+# --- the account is deleted while its receipt is being processed (account deletion, A1) ---------
+
+
+def _delete_account(engine: Engine, user_id: UUID) -> None:
+    with Session(engine) as session:
+        assert DeleteAccount(
+            repository=PostgreSQLAccountDeletionRepository(session), clock=lambda: NOW
+        ).execute(user_id=user_id)
+
+
+class _DeletingBeforeTheImage:
+    """An image store that deletes the account just before the worker stores the photo."""
+
+    def __init__(self, inner: ImageStore, engine: Engine, user_id: UUID) -> None:
+        self._inner = inner
+        self._engine = engine
+        self._user_id = user_id
+
+    def get(self, *, receipt_id: UUID) -> StoredImage | None:
+        return self._inner.get(receipt_id=receipt_id)
+
+    def put(self, *, receipt_id: UUID, media_type: str, content: bytes, now: datetime) -> bool:
+        _delete_account(self._engine, self._user_id)
+        return self._inner.put(
+            receipt_id=receipt_id, media_type=media_type, content=content, now=now
+        )
+
+
+class _DeletingWhileRecognizing:
+    def __init__(self, engine: Engine, user_id: UUID) -> None:
+        self._engine = engine
+        self._user_id = user_id
+
+    def recognize(self, *, image: bytes, media_type: str) -> RecognitionOutput:
+        _delete_account(self._engine, self._user_id)
+        return FULL
+
+
+@pytest.mark.anyio
+async def test_a_receipt_whose_account_is_deleted_before_its_image_is_skipped(
+    world: World, engine: Engine, caplog: pytest.LogCaptureFixture
+) -> None:
+    await world.send_photo()
+    sent_before = len(world.texts())
+    worker = world.worker()
+    worker._images = _DeletingBeforeTheImage(worker._images, engine, world.user_id)
+
+    assert worker.process_next() is ReceiptOutcome.STALE
+
+    # Nothing more is said in the chat of an account that no longer exists.
+    assert len(world.texts()) == sent_before
+    assert "receipt_worker_iteration_failed" not in caplog.text
+    world.session.expire_all()
+    assert world.session.scalar(select(func.count()).select_from(ReceiptRecord)) == 0
+
+
+@pytest.mark.anyio
+async def test_a_receipt_whose_account_is_deleted_during_recognition_is_skipped(
+    world: World, engine: Engine
+) -> None:
+    await world.send_photo()
+    sent_before = len(world.texts())
+    worker = world.worker(recognizer=_DeletingWhileRecognizing(engine, world.user_id))
+
+    assert worker.process_next() is ReceiptOutcome.STALE
+
+    # Nothing more is said in the chat of an account that no longer exists.
+    assert len(world.texts()) == sent_before
+    world.session.expire_all()
+    for table in (ReceiptRecord, CaptureDraftRecord, UserRecord):
+        assert world.session.scalar(select(func.count()).select_from(table)) == 0

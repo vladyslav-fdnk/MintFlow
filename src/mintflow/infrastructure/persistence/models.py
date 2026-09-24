@@ -172,7 +172,7 @@ class AuthenticationAuditRecordModel(Base):
         CheckConstraint(
             "event_type IN ('login_challenge_requested', 'login_succeeded', 'login_failed', "
             "'current_session_revoked', 'all_sessions_revoked', 'telegram_link_claimed', "
-            "'telegram_linked', 'telegram_unlinked')",
+            "'telegram_linked', 'telegram_unlinked', 'account_deleted')",
             name="ck_auth_audit_records_event_type",
         ),
         CheckConstraint(
@@ -186,10 +186,24 @@ class AuthenticationAuditRecordModel(Base):
     occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     event_type: Mapped[str] = mapped_column(String(32), nullable=False)
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Cleared when the account is deleted (account deletion, A2); SET NULL is the safety net.
     user_id: Mapped[UUID | None] = mapped_column(
-        PostgreSQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT")
+        PostgreSQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL")
     )
     subject_record_id: Mapped[UUID | None] = mapped_column(PostgreSQLUUID(as_uuid=True))
+
+
+class DeletedAccountRecord(Base):
+    """A deleted account's id, kept 35 days so a restored backup can be deleted again (A5).
+
+    Nothing else is kept: no email, no preferences, no Telegram identifier.
+    """
+
+    __tablename__ = "deleted_accounts"
+    __table_args__ = (Index("ix_deleted_accounts_deleted_at", "deleted_at"),)
+
+    user_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
 class CategoryRecord(Base):

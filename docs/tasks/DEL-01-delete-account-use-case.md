@@ -1,6 +1,6 @@
 # DEL-01 — Delete Account: Use Case and Persistence
 
-Status: ready
+Status: done
 
 ## Goal
 

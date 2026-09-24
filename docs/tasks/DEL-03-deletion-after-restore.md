@@ -1,6 +1,6 @@
 # DEL-03 — Deleted Accounts Stay Deleted After a Restore
 
-Status: blocked
+Status: ready
 
 ## Goal
 

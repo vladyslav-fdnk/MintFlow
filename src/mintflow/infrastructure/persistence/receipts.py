@@ -208,13 +208,26 @@ class SqlAlchemyReceiptImageStore:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def put(self, *, receipt_id: UUID, media_type: str, content: bytes, now: datetime) -> None:
+    def put(self, *, receipt_id: UUID, media_type: str, content: bytes, now: datetime) -> bool:
+        """Store the image unless the receipt is gone.
+
+        FOR KEY SHARE waits for an account deletion that holds the receipt, then sees it gone,
+        so the insert never fails its foreign key (account deletion design, A1).
+        """
+        present = self._session.scalar(
+            select(ReceiptRecord.id)
+            .where(ReceiptRecord.id == receipt_id)
+            .with_for_update(key_share=True)
+        )
+        if present is None:
+            return False
         self._session.add(
             ReceiptImageRecord(
                 receipt_id=receipt_id, media_type=media_type, content=content, stored_at=now
             )
         )
         self._session.flush()
+        return True
 
     def get(self, *, receipt_id: UUID) -> StoredImage | None:
         row = self._session.execute(

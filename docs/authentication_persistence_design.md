@@ -115,6 +115,11 @@ Audit records must not contain raw tokens, token hashes, cookie secrets, complet
 - `AuthenticationAuditRecord` to `User`: optional many-to-one correlation with deletion behavior that preserves or removes audit independently according to approved privacy policy.
 - Rate-limit buckets have no foreign keys to User or EmailIdentity.
 
+Account deletion is defined separately in `docs/account_deletion_design.md` (approved
+2026-09-24): it removes every row the user owns in one transaction, and
+`authentication_audit_records.user_id` became `ON DELETE SET NULL` so audit evidence outlives the
+account without pointing at it. The statements below about deactivation still hold.
+
 Account deactivation is not deletion: it preserves all ownership, rejects future login/session use, revokes every active session, makes every pending TelegramLinkChallenge unusable, and immediately unlinks the active TelegramConnection. If reactivation is introduced later, Telegram must be linked again through the complete ceremony. Hard deletion and anonymization are outside MVP. Authentication foreign keys must use conservative behavior and must not cascade from authentication tables into User, `Expense`, `CaptureDraft`, `Receipt`, or other financial data.
 
 ## 4. Required database constraints

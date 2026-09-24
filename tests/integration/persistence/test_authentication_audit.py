@@ -100,20 +100,22 @@ def test_database_rejects_missing_required_fields(db_session: Session, missing: 
         db_session.commit()
 
 
-def test_user_correlation_is_valid_and_restrictive(db_session: Session) -> None:
+def test_deleting_a_user_keeps_its_audit_records_without_the_user(db_session: Session) -> None:
+    # Account deletion (docs/account_deletion_design.md, A2) replaced the earlier RESTRICT.
     user = add_user(db_session)
-    SqlAlchemyAuthenticationAuditAppender(db_session).append(
-        AuthenticationAuditRecord(
-            occurred_at=NOW,
-            event_type=AuthenticationAuditEventType.ALL_SESSIONS_REVOKED,
-            outcome=AuthenticationAuditOutcome.SUCCEEDED,
-            user_id=user.id,
-        )
+    record = AuthenticationAuditRecord(
+        occurred_at=NOW,
+        event_type=AuthenticationAuditEventType.ALL_SESSIONS_REVOKED,
+        outcome=AuthenticationAuditOutcome.SUCCEEDED,
+        user_id=user.id,
     )
+    SqlAlchemyAuthenticationAuditAppender(db_session).append(record)
 
-    with pytest.raises(IntegrityError):
-        db_session.execute(delete(UserRecord).where(UserRecord.id == user.id))
-        db_session.commit()
+    db_session.execute(delete(UserRecord).where(UserRecord.id == user.id))
+    db_session.commit()
+
+    kept = db_session.get(AuthenticationAuditRecordModel, record.id)
+    assert kept is not None and kept.user_id is None
 
 
 def test_invalid_user_correlation_is_rejected(db_session: Session) -> None:

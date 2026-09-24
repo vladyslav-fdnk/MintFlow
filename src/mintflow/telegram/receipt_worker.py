@@ -89,7 +89,9 @@ class ReceiptRepository(Protocol):
 
 
 class ImageStore(Protocol):
-    def put(self, *, receipt_id: UUID, media_type: str, content: bytes, now: datetime) -> None: ...
+    def put(self, *, receipt_id: UUID, media_type: str, content: bytes, now: datetime) -> bool:
+        """False when the receipt no longer exists (its account was deleted)."""
+        ...
 
     def get(self, *, receipt_id: UUID) -> StoredImage | None: ...
 
@@ -120,6 +122,10 @@ class Transaction(Protocol):
 class _Image:
     media_type: str
     content: bytes
+
+
+class _Vanished(Exception):
+    """The receipt was deleted with its account while being processed."""
 
 
 class _Unreadable(Exception):
@@ -170,6 +176,9 @@ class ReceiptWorker:
             output: RecognitionOutput | None = self._recognize(image)
         except _Unreadable:
             output = None
+        except _Vanished:
+            logger.info("receipt_processed outcome=%s", ReceiptOutcome.STALE.value)
+            return ReceiptOutcome.STALE
         outcome = self._finish(receipt, receipt.attempt_id, output=output)
         logger.info(
             "receipt_processed outcome=%s duration_ms=%d",
@@ -233,13 +242,15 @@ class ReceiptWorker:
         # Committed now: delay notices commit while recognition runs, and a worker that takes
         # over after the lease expires should not download the file again.
         try:
-            self._images.put(
+            kept = self._images.put(
                 receipt_id=receipt.id, media_type=media_type, content=content, now=self._clock()
             )
             self._transaction.commit()
         except BaseException:
             self._transaction.rollback()
             raise
+        if not kept:
+            raise _Vanished
         return _Image(media_type, content)
 
     def _recognize(self, image: _Image) -> RecognitionOutput | None:

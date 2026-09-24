@@ -554,20 +554,20 @@ tasks:
   - id: DEL-01
     title: "Delete Account: Use Case and Persistence"
     file: docs/tasks/DEL-01-delete-account-use-case.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
   - id: DEL-02
     title: "Web: Delete Account Page and Flow"
     file: docs/tasks/DEL-02-web-delete-account.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - DEL-01
   - id: DEL-03
     title: "Deleted Accounts Stay Deleted After a Restore"
     file: docs/tasks/DEL-03-deletion-after-restore.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - DEL-01
