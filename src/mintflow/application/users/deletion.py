@@ -17,6 +17,7 @@ from mintflow.application.authentication.audit import (
     AuthenticationAuditOutcome,
     AuthenticationAuditRecord,
 )
+from mintflow.application.authentication.email import InvalidEmailError, normalize_email
 
 # Longer than any backup lives (30 days, operations O7), so a restored account is deleted again.
 DELETED_ACCOUNT_RETENTION: Final = timedelta(days=35)
@@ -33,6 +34,14 @@ class AccountDeletionRepository(Protocol):
     def delete_account(self, deletion: AccountDeletion) -> bool:
         """Delete every row owned by the user in one transaction; False if the user is gone."""
         ...
+
+
+class AccountEmailRepository(Protocol):
+    def canonical_email(self, *, user_id: UUID) -> str | None: ...
+
+
+class DeletionNotConfirmed(Exception):
+    """The typed address is not the account's email, so nothing was deleted."""
 
 
 class DeleteAccount:
@@ -62,3 +71,27 @@ class DeleteAccount:
                 ),
             )
         )
+
+
+class ConfirmAndDeleteAccount:
+    """Delete the account only when the user typed its email address (design A3).
+
+    The typed address is normalized exactly as at sign-in (surrounding spaces and the domain's
+    letter case do not matter; the part before "@" is kept as typed) and compared with the
+    account's canonical address, so it matches exactly when signing in with it would.
+    """
+
+    def __init__(self, *, emails: AccountEmailRepository, delete_account: DeleteAccount) -> None:
+        self._emails = emails
+        self._delete_account = delete_account
+
+    def execute(self, *, user_id: UUID, typed_email: str) -> None:
+        """Raises DeletionNotConfirmed when the address does not match."""
+        account_email = self._emails.canonical_email(user_id=user_id)
+        try:
+            typed = normalize_email(typed_email).canonical_email
+        except InvalidEmailError:
+            raise DeletionNotConfirmed from None
+        if account_email is None or typed != account_email:
+            raise DeletionNotConfirmed
+        self._delete_account.execute(user_id=user_id)

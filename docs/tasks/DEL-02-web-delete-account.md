@@ -1,6 +1,6 @@
 # DEL-02 — Web: Delete Account Page and Flow
 
-Status: ready
+Status: done
 
 ## Goal
 

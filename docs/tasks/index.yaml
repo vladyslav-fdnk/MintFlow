@@ -560,7 +560,7 @@ tasks:
   - id: DEL-02
     title: "Web: Delete Account Page and Flow"
     file: docs/tasks/DEL-02-web-delete-account.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - DEL-01

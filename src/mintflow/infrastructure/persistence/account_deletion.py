@@ -6,10 +6,13 @@ then finds nothing to delete, and a concurrent write for the user (a receipt, an
 commits before the lock or fails its own foreign-key check afterwards.
 """
 
-from sqlalchemy import text
+from uuid import UUID
+
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from mintflow.application.users.deletion import AccountDeletion
+from mintflow.infrastructure.persistence.models import EmailIdentityRecord
 
 # Each statement takes :user_id. Drafts and expenses reference each other, so one statement
 # deletes both; PostgreSQL checks those references at its end.
@@ -45,6 +48,13 @@ _DELETE_OWNED_ROWS = (
 class PostgreSQLAccountDeletionRepository:
     def __init__(self, session: Session) -> None:
         self._session = session
+
+    def canonical_email(self, *, user_id: UUID) -> str | None:
+        return self._session.scalar(
+            select(EmailIdentityRecord.canonical_email).where(
+                EmailIdentityRecord.user_id == user_id
+            )
+        )
 
     def delete_account(self, deletion: AccountDeletion) -> bool:
         """Commit everything or nothing. Joins a transaction the session already has open (a

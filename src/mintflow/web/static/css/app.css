@@ -683,6 +683,11 @@ main:focus {
   content: "Error: ";
 }
 
+/* The prefix is text, so it follows the page language (<html lang>). */
+.field-error:lang(ru)::before {
+  content: "Ошибка: ";
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -1093,6 +1098,38 @@ main:focus {
 .top-row .toolbar .filters .button {
   width: 100%;
   min-width: 0;
+}
+
+/* The amount leads an expense's details. */
+.details .detail-amount {
+  grid-column: 1 / -1;
+}
+
+.details .detail-amount dd {
+  font-size: 2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.settings-card {
+  max-width: 44rem;
+}
+
+.settings-card + .settings-card {
+  margin-top: 20px;
+}
+
+.settings-card h2 {
+  margin-top: 0;
+}
+
+.deletion-list {
+  margin: 0 0 16px;
+  padding-left: 1.25rem;
+}
+
+.danger-card {
+  border-color: var(--danger);
 }
 
 /* The period and currency controls sit in one compact bar under the page title. */

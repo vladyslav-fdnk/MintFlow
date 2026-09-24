@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_brand.html" as brand %}
+{% block title %}{{ _("Account deleted") }}{% endblock %}
+{% block navigation %}{% endblock %}
+{% block content %}
+<div class="sign-in">
+<div class="lockup">
+  {{ brand.mark(88, "mark-sign-in") }}
+  <p class="lockup-wordmark">{{ brand.wordmark() }}</p>
+  <p class="lockup-tagline">{{ _("Track less. Understand more.") }}</p>
+</div>
+<div class="form card">
+  <h1 class="card-title">{{ _("Your account has been deleted") }}</h1>
+  <p>{{ _("Everything in it is gone. Thank you for trying MintFlow.") }}</p>
+  <a class="button button-wide" href="/sign-in">{{ _("Sign in") }}</a>
+</div>
+</div>
+{% endblock %}

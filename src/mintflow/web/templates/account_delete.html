@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Delete account") }}{% endblock %}
+{% block content %}
+<p><a href="/settings">{{ _("Back to settings") }}</a></p>
+<section class="card settings-card danger-card" aria-labelledby="delete-title">
+  <h1 id="delete-title">{{ _("Delete your account?") }}</h1>
+  <p>{{ _("This permanently deletes your MintFlow account and everything in it:") }}</p>
+  <ul class="deletion-list">
+    <li>{{ _("every expense and its change history") }}</li>
+    <li>{{ _("receipts and their photos") }}</li>
+    <li>{{ _("drafts and the Telegram connection") }}</li>
+    <li>{{ _("your settings and your sign-in address") }}</li>
+  </ul>
+  <p><strong>{{ _("This cannot be undone.") }}</strong> {{ _("Encrypted backups keep a copy for up to 30 days; after that it is gone for good.") }}</p>
+  <p class="hint">{{ _("You can sign in again later with the same address. That creates a new, empty account.") }}</p>
+  <form id="delete-form" class="form" method="post" action="/settings/delete-account"
+    hx-post="/settings/delete-account" hx-target="#delete-form" hx-select="#delete-form"
+    hx-swap="outerHTML" data-focus-first="#delete-form [aria-invalid]">
+    <div class="field">
+      <label for="email">{{ _("Type your email address to confirm") }}</label>
+      <input id="email" name="email" type="email" autocomplete="off" spellcheck="false" required maxlength="320"
+        value="{{ email }}"{% if error %} aria-invalid="true" aria-describedby="email-error"{% endif %}>
+      {% if error %}<p id="email-error" class="field-error">{{ error }}</p>{% endif %}
+    </div>
+    <p class="actions">
+      <button type="submit" class="button button-danger">{{ _("Delete my account permanently") }}</button>
+      <a href="/settings">{{ _("Keep my account") }}</a>
+    </p>
+  </form>
+</section>
+{% endblock %}

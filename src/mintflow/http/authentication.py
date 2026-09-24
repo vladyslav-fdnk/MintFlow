@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, quote
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -434,6 +434,12 @@ def logout_response() -> JSONResponse:
         status_code=200,
         headers=authentication_security_headers(),
     )
+    clear_authentication_cookies(response)
+    return response
+
+
+def clear_authentication_cookies(response: Response) -> None:
+    """Expire the session and CSRF cookies (sign-out, account deletion)."""
     response.delete_cookie(
         key=AUTHENTICATED_SESSION_COOKIE_NAME,
         path="/",
@@ -448,7 +454,6 @@ def logout_response() -> JSONResponse:
         httponly=False,
         samesite="lax",
     )
-    return response
 
 
 async def parse_magic_link_request(request: Request) -> MagicLinkRequestDTO | None:

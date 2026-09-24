@@ -75,4 +75,9 @@
   </p>
   {% endif %}
 </section>
+<section class="card settings-card" aria-labelledby="delete-account-title">
+  <h2 id="delete-account-title">{{ _("Delete account") }}</h2>
+  <p>{{ _("Permanently delete your account, all your expenses, and your receipts.") }}</p>
+  <p class="actions"><a class="button button-danger" href="/settings/delete-account">{{ _("Delete account") }}</a></p>
+</section>
 {% endblock %}

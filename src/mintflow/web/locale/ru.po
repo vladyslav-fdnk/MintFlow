@@ -7,7 +7,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: MintFlow VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2026-09-24 20:51+0200\n"
+"POT-Creation-Date: 2026-09-24 22:46+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: ru\n"
@@ -18,6 +18,10 @@ msgstr ""
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: Babel 2.18.0\n"
+
+#: templates/account_deleted.html:3
+msgid "Account deleted"
+msgstr "Аккаунт удалён"
 
 #: templates/expense_detail.html:12
 msgid "Added from"
@@ -49,7 +53,7 @@ msgstr "Автоматически"
 msgid "Back to expenses"
 msgstr "К расходам"
 
-#: templates/settings_link_status.html:14
+#: templates/account_delete.html:4 templates/settings_link_status.html:14
 msgid "Back to settings"
 msgstr "К настройкам"
 
@@ -164,11 +168,11 @@ msgstr "Подключён как {name} с {date}."
 msgid "Currency"
 msgstr "Валюта"
 
-#: templates/base.html:35 templates/base.html:49
+#: templates/base.html:37 templates/base.html:51
 msgid "Dark theme"
 msgstr "Тёмная тема"
 
-#: templates/base.html:27 templates/dashboard.html:3 templates/dashboard.html:9
+#: templates/base.html:29 templates/dashboard.html:3 templates/dashboard.html:9
 msgid "Dashboard"
 msgstr "Обзор"
 
@@ -189,13 +193,25 @@ msgstr "Валюта по умолчанию"
 msgid "Delete"
 msgstr "Удалить"
 
+#: templates/account_delete.html:2 templates/settings.html:79 templates/settings.html:81
+msgid "Delete account"
+msgstr "Удалить аккаунт"
+
 #: templates/expense_delete.html:2 templates/expense_delete.html:8
 msgid "Delete expense"
 msgstr "Удалить расход"
 
+#: templates/account_delete.html:26
+msgid "Delete my account permanently"
+msgstr "Удалить аккаунт навсегда"
+
 #: templates/expense_delete.html:4
 msgid "Delete this expense?"
 msgstr "Удалить этот расход?"
+
+#: templates/account_delete.html:6
+msgid "Delete your account?"
+msgstr "Удалить аккаунт?"
 
 #: templates/settings_disconnect.html:8
 msgid "Disconnect"
@@ -234,6 +250,10 @@ msgstr "Адрес электронной почты"
 msgid "Email me a sign-in link"
 msgstr "Прислать ссылку для входа"
 
+#: templates/account_delete.html:14
+msgid "Encrypted backups keep a copy for up to 30 days; after that it is gone for good."
+msgstr "Зашифрованные резервные копии хранят данные ещё до 30 дней, после этого они исчезают навсегда."
+
 #: expense_form.py:124
 msgid "Enter a date."
 msgstr "Укажите дату."
@@ -263,6 +283,10 @@ msgstr "Развлечения"
 msgid "European Central Bank"
 msgstr "Европейский центральный банк"
 
+#: templates/account_deleted.html:14
+msgid "Everything in it is gone. Thank you for trying MintFlow."
+msgstr "Все данные удалены. Спасибо, что попробовали MintFlow."
+
 #: templates/dashboard.html:59
 msgid "Exchange rates are not available yet, so each currency is shown on its own."
 msgstr "Курсов валют пока нет, поэтому каждая валюта показана отдельно."
@@ -279,7 +303,7 @@ msgstr "Расход удалён"
 msgid "Expense restored."
 msgstr "Расход восстановлен."
 
-#: templates/base.html:28 templates/expenses.html:3 templates/expenses.html:5
+#: templates/base.html:30 templates/expenses.html:3 templates/expenses.html:5
 msgid "Expenses"
 msgstr "Расходы"
 
@@ -366,6 +390,10 @@ msgstr "Оставить"
 msgid "Keep it connected"
 msgstr "Оставить подключённым"
 
+#: templates/account_delete.html:27
+msgid "Keep my account"
+msgstr "Оставить аккаунт"
+
 #: templates/settings.html:18
 msgid "Language"
 msgstr "Язык"
@@ -390,7 +418,7 @@ msgstr "Показать ещё"
 msgid "Loading…"
 msgstr "Загрузка…"
 
-#: templates/base.html:25
+#: templates/base.html:27
 msgid "Main"
 msgstr "Главное меню"
 
@@ -402,7 +430,7 @@ msgstr "Продавец"
 msgid "Merchant or description"
 msgstr "Продавец или описание"
 
-#: templates/base.html:24
+#: templates/base.html:26
 msgid "MintFlow, dashboard"
 msgstr "MintFlow, обзор"
 
@@ -496,6 +524,10 @@ msgstr "Прошлые расходы пересчитаны по сегодня
 msgid "Period and currency"
 msgstr "Период и валюта"
 
+#: templates/settings.html:80
+msgid "Permanently delete your account, all your expenses, and your receipts."
+msgstr "Навсегда удалить аккаунт, все расходы и чеки."
+
 #: dashboard.py:520
 msgid "Pie"
 msgstr "Круговая"
@@ -528,7 +560,7 @@ msgstr "Сохранить настройки"
 msgid "Send the bot an amount like 12.50, or a photo of a receipt."
 msgstr "Отправьте боту сумму, например 12.50, или фото чека."
 
-#: templates/base.html:29 templates/dashboard.html:28 templates/dashboard.html:57
+#: templates/base.html:31 templates/dashboard.html:28 templates/dashboard.html:57
 #: templates/settings.html:3 templates/settings.html:9
 msgid "Settings"
 msgstr "Настройки"
@@ -549,7 +581,7 @@ msgstr "Показать"
 msgid "Show as a table"
 msgstr "Показать таблицей"
 
-#: templates/sign_in.html:3
+#: templates/account_deleted.html:15 templates/sign_in.html:3
 msgid "Sign in"
 msgstr "Вход"
 
@@ -557,7 +589,7 @@ msgstr "Вход"
 msgid "Sign me in"
 msgstr "Войти"
 
-#: templates/base.html:38 templates/base.html:50
+#: templates/base.html:40 templates/base.html:52
 msgid "Sign out"
 msgstr "Выйти"
 
@@ -565,7 +597,7 @@ msgstr "Выйти"
 msgid "Sign-in link unavailable"
 msgstr "Ссылка для входа недействительна"
 
-#: templates/base.html:20
+#: templates/base.html:22
 msgid "Skip to content"
 msgstr "Перейти к содержимому"
 
@@ -573,7 +605,7 @@ msgstr "Перейти к содержимому"
 msgid "Something went wrong"
 msgstr "Что-то пошло не так"
 
-#: templates/base.html:55
+#: templates/base.html:57
 msgid "Something went wrong. Please try again."
 msgstr "Что-то пошло не так. Попробуйте ещё раз."
 
@@ -621,6 +653,10 @@ msgstr "Telegram на этом сервере не настроен."
 msgid "Telegram receipt"
 msgstr "Чек в Telegram"
 
+#: account_deletion.py:57
+msgid "That is not the email address of this account. Nothing was deleted."
+msgstr "Это не адрес почты этого аккаунта. Ничего не удалено."
+
 #: templates/settings_disconnect.html:5
 #, python-brace-format
 msgid "The bot will stop accepting expenses from {name} and will no longer show your account."
@@ -638,6 +674,10 @@ msgstr "Не удалось прочитать форму. Попробуйте 
 msgid "These values could not be saved. Please check them and try again."
 msgstr "Не удалось сохранить эти значения. Проверьте их и попробуйте ещё раз."
 
+#: templates/account_delete.html:14
+msgid "This cannot be undone."
+msgstr "Это нельзя отменить."
+
 #: templates/settings_link_status.html:16
 msgid "This link has expired."
 msgstr "Срок действия ссылки истёк."
@@ -649,6 +689,10 @@ msgstr "Этот месяц"
 #: templates/error.html:8
 msgid "This page does not exist, or it is not yours to see."
 msgstr "Такой страницы нет, или она вам недоступна."
+
+#: templates/account_delete.html:7
+msgid "This permanently deletes your MintFlow account and everything in it:"
+msgstr "Аккаунт MintFlow и все его данные будут удалены навсегда:"
 
 #: templates/error.html:14
 msgid "This request could not be completed."
@@ -708,12 +752,12 @@ msgstr "Главные продавцы"
 msgid "Totals by currency"
 msgstr "Итоги по валютам"
 
-#: templates/base.html:42
+#: templates/base.html:44
 msgid "Track less."
 msgstr "Меньше учёта."
 
-#: templates/magic_link_confirm.html:12 templates/magic_link_unavailable.html:11
-#: templates/sign_in.html:10 templates/sign_in_sent.html:10
+#: templates/account_deleted.html:10 templates/magic_link_confirm.html:12
+#: templates/magic_link_unavailable.html:11 templates/sign_in.html:10 templates/sign_in_sent.html:10
 msgid "Track less. Understand more."
 msgstr "Меньше учёта. Больше понимания."
 
@@ -725,11 +769,19 @@ msgstr "Транспорт"
 msgid "Travel"
 msgstr "Путешествия"
 
+#: templates/account_delete.html:20
+msgid "Type your email address to confirm"
+msgstr "Для подтверждения введите адрес своей почты"
+
+#: account_deletion.py:48
+msgid "Type your email address to confirm."
+msgstr "Для подтверждения введите адрес своей почты."
+
 #: formatting.py:216
 msgid "Uncategorized"
 msgstr "Без категории"
 
-#: templates/base.html:42
+#: templates/base.html:44
 msgid "Understand more."
 msgstr "Больше понимания."
 
@@ -775,9 +827,17 @@ msgstr "Веб"
 msgid "Welcome to MintFlow"
 msgstr "Добро пожаловать в MintFlow"
 
+#: templates/account_delete.html:15
+msgid "You can sign in again later with the same address. That creates a new, empty account."
+msgstr "Позже можно снова войти с тем же адресом: будет создан новый, пустой аккаунт."
+
 #: templates/dashboard.html:38
 msgid "You spent"
 msgstr "Вы потратили"
+
+#: templates/account_deleted.html:13
+msgid "Your account has been deleted"
+msgstr "Ваш аккаунт удалён"
 
 #: templates/settings.html:12
 msgid "Your conventions"
@@ -802,6 +862,14 @@ msgstr "Самый крупный расход — {amount} в {merchant}, {date
 msgid "Your largest expense was {amount} on {date}."
 msgstr "Самый крупный расход — {amount}, {date}."
 
+#: templates/account_delete.html:11
+msgid "drafts and the Telegram connection"
+msgstr "черновики и связь с Telegram"
+
+#: templates/account_delete.html:9
+msgid "every expense and its change history"
+msgstr "все расходы и история их изменений"
+
 #: templates/dashboard.html:149
 msgid "in total"
 msgstr "всего"
@@ -809,6 +877,10 @@ msgstr "всего"
 #: templates/dashboard.html:53
 msgid "no exchange rate"
 msgstr "нет курса"
+
+#: templates/account_delete.html:10
+msgid "receipts and their photos"
+msgstr "чеки и их фотографии"
 
 #: templates/sign_in.html:9
 msgid "sign in"
@@ -821,6 +893,10 @@ msgstr "который вы только что использовали"
 #: templates/settings.html:66 templates/settings_disconnect.html:5
 msgid "your Telegram account"
 msgstr "вашего аккаунта Telegram"
+
+#: templates/account_delete.html:12
+msgid "your settings and your sign-in address"
+msgstr "ваши настройки и адрес для входа"
 
 #: dashboard.py:238
 #, python-brace-format
