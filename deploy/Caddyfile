@@ -1,0 +1,12 @@
+# The only public entry point (docs/operations_design.md, O2). Caddy obtains and renews the
+# Let's Encrypt certificate, redirects HTTP to HTTPS on its own, and replaces any client-sent
+# X-Forwarded-For with the real address before proxying.
+{
+	email {$ACME_EMAIL}
+}
+
+{$MINTFLOW_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy app:8000
+}

@@ -118,6 +118,11 @@ Use `make docker-down` to stop the environment. The PostgreSQL Docker volume is 
 | `make docker-up` | Build and start the application and PostgreSQL. |
 | `make docker-down` | Stop the Docker environment. |
 | `make docker-logs` | Follow application container logs. |
+| `make image-check` | Build the production image and check it runs as non-root and reports healthy. |
+
+Production runs from `deploy/` (Compose, Caddy, and an example server environment); see
+`docs/operations_design.md`. CI publishes `ghcr.io/vladyslav-fdnk/mintflow:<commit SHA>` from
+`main`.
 
 ## Development workflow
 

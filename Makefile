@@ -1,4 +1,4 @@
-.PHONY: setup format lint typecheck test check run hooks translations docker-up docker-down docker-logs
+.PHONY: setup format lint typecheck test check run hooks translations docker-up docker-down docker-logs image-check
 
 setup:
 	uv sync --all-groups
@@ -39,3 +39,6 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f app
+
+image-check:
+	./scripts/check-production-image.sh

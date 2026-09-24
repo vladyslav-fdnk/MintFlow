@@ -1,6 +1,6 @@
 # OPS-03 — Scheduled Jobs, Telegram Webhook, Dead Man's Switches
 
-Status: blocked
+Status: ready
 
 ## Goal
 

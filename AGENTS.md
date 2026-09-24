@@ -32,6 +32,13 @@ MintFlow is a platform, with the Telegram Client and Web Client serving distinct
 - Never silently redesign the product.
 - Prefer incremental improvements.
 
+## Migrations and releases
+
+- Every migration must be backward compatible with the previous release, so a rollback only starts
+  the previous image and never needs a downgrade (docs/operations_design.md, O1).
+- Split destructive schema changes across two releases: first stop using the column or table,
+  then remove it in a later release.
+
 ## Code Quality
 
 - Prefer readable code over clever code.

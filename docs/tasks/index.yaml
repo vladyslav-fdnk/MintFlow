@@ -524,21 +524,21 @@ tasks:
   - id: OPS-02
     title: "Production Image, Compose, Caddy, Image Registry"
     file: docs/tasks/OPS-02-production-image-and-compose.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - OPS-01
   - id: OPS-03
     title: "Scheduled Jobs, Telegram Webhook, Dead Man's Switches"
     file: docs/tasks/OPS-03-scheduled-jobs-and-webhook.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - OPS-02
   - id: OPS-04
     title: "Encrypted Backups and Rehearsed Restore"
     file: docs/tasks/OPS-04-backups-and-restore.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - OPS-02

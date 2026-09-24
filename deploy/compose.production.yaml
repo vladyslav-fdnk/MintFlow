@@ -1,0 +1,101 @@
+# MintFlow in production on one server (docs/operations_design.md, O1, O2, O8).
+#
+# Run from the server's /srv/mintflow, next to its .env (see production.env.example):
+#   docker compose -f compose.production.yaml pull
+#   docker compose -f compose.production.yaml run --rm migrate
+#   docker compose -f compose.production.yaml up -d
+# Roll back by setting MINTFLOW_IMAGE_TAG to the previous commit SHA and running `up -d` again;
+# migrations stay backward compatible with the previous release (AGENTS.md).
+
+name: mintflow
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-app: &app
+  image: ghcr.io/vladyslav-fdnk/mintflow:${MINTFLOW_IMAGE_TAG:?set MINTFLOW_IMAGE_TAG to a commit SHA}
+  restart: unless-stopped
+  env_file: ${MINTFLOW_ENV_FILE:-.env}
+  environment:
+    MINTFLOW_ENVIRONMENT: production
+    MINTFLOW_DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+    # Only Caddy, on the fixed internal network below, may forward client addresses.
+    MINTFLOW_TRUSTED_PROXIES: '["172.30.0.0/24"]'
+  networks: [internal]
+  logging: *logging
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      MINTFLOW_DOMAIN: ${MINTFLOW_DOMAIN:?set MINTFLOW_DOMAIN to the site's domain}
+      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL for certificate notices}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [internal]
+    logging: *logging
+    depends_on:
+      app:
+        condition: service_healthy
+
+  app:
+    <<: *app
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "mintflow.commands.receipt_worker"]
+    # The image's health check asks the web server, which the worker does not run.
+    healthcheck:
+      disable: true
+
+  # A one-off step of every deploy: `docker compose run --rm migrate`.
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    healthcheck:
+      disable: true
+    profiles: [tools]
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    # No published port: only the containers on the internal network reach the database.
+    networks: [internal]
+    logging: *logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+networks:
+  internal:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:
+  postgres-data:
