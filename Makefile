@@ -22,7 +22,7 @@ test:
 check: lint typecheck test
 
 run:
-	uv run uvicorn --factory mintflow.main:create_app --reload --no-access-log
+	uv run uvicorn --factory mintflow.main:create_app --reload --no-access-log --no-proxy-headers
 
 hooks:
 	uv run pre-commit run --all-files

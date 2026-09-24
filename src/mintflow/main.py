@@ -4,9 +4,15 @@ from contextlib import ExitStack, asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
+from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 from mintflow.application.authentication.login_challenge import EmailSender
-from mintflow.config import Settings, get_settings
+from mintflow.config import (
+    ProductionConfigurationError,
+    Settings,
+    get_settings,
+    production_configuration_problems,
+)
 from mintflow.http.analytics import (
     router as analytics_router,
 )
@@ -24,7 +30,7 @@ from mintflow.http.capture import (
 from mintflow.http.telegram import (
     router as telegram_router,
 )
-from mintflow.infrastructure.email import create_local_email_sender
+from mintflow.infrastructure.email import create_email_sender
 from mintflow.infrastructure.persistence import create_database_engine, create_session_factory
 from mintflow.logging import configure_logging
 from mintflow.readiness import is_postgresql_ready
@@ -37,11 +43,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     runtime_settings = settings or get_settings()
     configure_logging(runtime_settings.log_level)
+    problems = production_configuration_problems(runtime_settings)
+    if problems:
+        raise ProductionConfigurationError(
+            "refusing to start in production: " + "; ".join(problems)
+        )
     try:
         with ExitStack() as composition_cleanup:
-            authentication_email_sender: EmailSender | None = None
-            if runtime_settings.email_backend == "mailpit":
-                authentication_email_sender = create_local_email_sender(runtime_settings)
+            authentication_email_sender: EmailSender | None = create_email_sender(runtime_settings)
             database_engine = create_database_engine(
                 runtime_settings.database_url.get_secret_value()
             )
@@ -86,6 +95,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(analytics_router)
     application.include_router(telegram_router)
     install_web(application)
+    if runtime_settings.trusted_proxies:
+        # Added last, so it is outermost: every later layer, login throttling included, sees the
+        # client address the trusted proxy forwarded (docs/operations_design.md, O2). Headers from
+        # any other peer are ignored.
+        application.add_middleware(
+            ProxyHeadersMiddleware, trusted_hosts=sorted(runtime_settings.trusted_proxies)
+        )
 
     @application.get("/health/live", tags=["health"])
     async def liveness() -> JSONResponse:

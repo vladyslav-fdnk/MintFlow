@@ -518,13 +518,13 @@ tasks:
   - id: OPS-01
     title: "Production Settings, SMTP Email, Trusted Proxy"
     file: docs/tasks/OPS-01-production-settings-email-proxy.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on: []
   - id: OPS-02
     title: "Production Image, Compose, Caddy, Image Registry"
     file: docs/tasks/OPS-02-production-image-and-compose.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - OPS-01

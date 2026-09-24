@@ -1,6 +1,6 @@
 # OPS-01 — Production Settings, SMTP Email, Trusted Proxy
 
-Status: ready
+Status: done
 
 ## Goal
 

@@ -1,6 +1,6 @@
 # OPS-02 — Production Image, Compose, Caddy, Image Registry
 
-Status: blocked
+Status: ready
 
 ## Goal
 

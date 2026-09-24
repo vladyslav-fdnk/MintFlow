@@ -37,7 +37,7 @@ def test_runtime_constructs_and_uses_explicitly_configured_mailpit_sender(
         assert settings is configured_settings
         return sender
 
-    monkeypatch.setattr("mintflow.main.create_local_email_sender", create_sender)
+    monkeypatch.setattr("mintflow.main.create_email_sender", create_sender)
 
     application = create_app(configured_settings)
     message = MagicLinkMessage(

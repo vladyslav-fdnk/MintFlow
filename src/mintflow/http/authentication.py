@@ -335,7 +335,9 @@ def _unauthenticated() -> HTTPException:
 
 
 async def get_normalized_network_source(request: Request) -> NormalizedNetworkSource:
-    """Normalize only the direct request peer; forwarding headers are intentionally ignored."""
+    """Normalize the request peer. Forwarding headers are never read here: only the outermost
+    proxy middleware, configured with ``trusted_proxies``, may replace the peer with the client
+    address a trusted proxy forwarded (docs/operations_design.md, O2)."""
     return normalize_direct_peer(request)
 
 

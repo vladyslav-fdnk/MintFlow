@@ -57,9 +57,13 @@ From the code:
 
 - Caddy obtains Let's Encrypt certificates, redirects HTTP to HTTPS, and sends HSTS.
 - Only Caddy is reachable from outside. `app` listens on the internal Compose network.
-- uvicorn runs with `--proxy-headers` and trusts forwarded headers only from Caddy's address on
-  that network. Throttling then sees the real client address.
-- A test proves that a spoofed `X-Forwarded-For` from an untrusted peer is ignored.
+- The application, not the server command, decides whom to believe: `MINTFLOW_TRUSTED_PROXIES`
+  lists the addresses or networks of the proxy (Caddy's Compose network), and the app then adds
+  uvicorn's `ProxyHeadersMiddleware` for exactly those as its outermost layer. uvicorn itself
+  runs with `--no-proxy-headers`. With the list empty, forwarding headers are ignored as before.
+  Login throttling then sees the real client address.
+- Tests prove that a spoofed `X-Forwarded-For` from an untrusted peer is ignored, and that only
+  the rightmost untrusted hop counts behind a trusted one.
 
 ### O3. A generic SMTP sender, configured for Resend
 

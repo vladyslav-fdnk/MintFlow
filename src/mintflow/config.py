@@ -1,5 +1,6 @@
 import re
 from functools import lru_cache
+from ipaddress import ip_network
 from typing import Literal
 
 from pydantic import EmailStr, Field, SecretStr, field_validator, model_validator
@@ -21,11 +22,23 @@ class Settings(BaseSettings):
     authentication_csrf_signing_key: SecretStr
     authentication_web_origin: str = Field(min_length=1)
     authentication_return_targets: frozenset[str]
-    email_backend: Literal["mailpit"] | None = None
+    email_backend: Literal["mailpit", "smtp"] | None = None
     mailpit_smtp_host: str | None = Field(default=None, min_length=1)
     mailpit_smtp_port: int = Field(default=1025, ge=1, le=65535)
     mailpit_smtp_timeout_seconds: float = Field(default=5.0, gt=0)
     mailpit_from_email: EmailStr | None = None
+    # A deployed SMTP provider such as Resend (docs/operations_design.md, O3). Only encrypted
+    # transports exist: implicit TLS (port 465) or STARTTLS (port 587), always with a login.
+    smtp_host: str | None = Field(default=None, min_length=1)
+    smtp_port: int = Field(default=465, ge=1, le=65535)
+    smtp_tls: Literal["implicit", "starttls"] = "implicit"
+    smtp_username: str | None = Field(default=None, min_length=1)
+    smtp_password: SecretStr | None = None
+    smtp_from_email: EmailStr | None = None
+    smtp_timeout_seconds: float = Field(default=10.0, gt=0)
+    # Reverse proxies whose X-Forwarded-For and X-Forwarded-Proto are believed (addresses or
+    # networks, O2). Empty: forwarding headers are ignored and the direct peer is the client.
+    trusted_proxies: frozenset[str] = frozenset()
     telegram_bot_token: SecretStr | None = None
     telegram_bot_username: str | None = None
     telegram_webhook_secret: SecretStr | None = None
@@ -51,6 +64,31 @@ class Settings(BaseSettings):
         if self.mailpit_smtp_host is None or self.mailpit_from_email is None:
             raise ValueError("Mailpit requires an SMTP host and sender address")
         return self
+
+    @model_validator(mode="after")
+    def validate_smtp_email_backend(self) -> "Settings":
+        """A deployed SMTP provider needs every connection value; none of them is echoed."""
+
+        if self.email_backend != "smtp":
+            return self
+        if (
+            self.smtp_host is None
+            or self.smtp_username is None
+            or self.smtp_password is None
+            or self.smtp_from_email is None
+        ):
+            raise ValueError("SMTP email requires a host, username, password, and sender address")
+        return self
+
+    @field_validator("trusted_proxies")
+    @classmethod
+    def validate_trusted_proxies(cls, value: frozenset[str]) -> frozenset[str]:
+        for entry in value:
+            try:
+                ip_network(entry, strict=False)
+            except ValueError:
+                raise ValueError("trusted proxies must be IP addresses or networks") from None
+        return value
 
     @model_validator(mode="after")
     def validate_telegram_configuration(self) -> "Settings":
@@ -105,6 +143,32 @@ class Settings(BaseSettings):
         if any(not target or len(target) > 64 for target in value):
             raise ValueError("authentication return targets must contain 1 to 64 characters")
         return value
+
+
+class ProductionConfigurationError(RuntimeError):
+    """The Web application refuses to start with a configuration unfit for production."""
+
+
+def production_configuration_problems(settings: Settings) -> list[str]:
+    """What stops ``settings`` from serving production (docs/operations_design.md, O4).
+
+    Only the Web application checks this: commands such as the receipt worker or the cleanups
+    run with the same environment file but need neither email nor Telegram themselves.
+    """
+    if settings.environment != "production":
+        return []
+    problems = []
+    if settings.enable_api_docs:
+        problems.append("API docs must be off")
+    if not settings.authentication_web_origin.startswith("https://"):
+        problems.append("the Web origin must be an https:// URL")
+    if settings.email_backend != "smtp":
+        problems.append("the email backend must be smtp")
+    if not settings.telegram_enabled:
+        problems.append("the Telegram bot token, username, and webhook secret are required")
+    if settings.receipt_recognizer == "fake":
+        problems.append("the fake receipt recognizer is not allowed")
+    return problems
 
 
 @lru_cache
