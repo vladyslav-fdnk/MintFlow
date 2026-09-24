@@ -113,15 +113,17 @@ A mistake stops the deploy before users see it.
 
 ### O7. Nightly encrypted backups, restore rehearsed
 
-- `deploy/backup.sh` runs `pg_dump --format=custom` inside the `postgres` container and
-  encrypts the dump with `age` using a public key. The private key is kept offline by the owner,
+- `deploy/backup.sh` runs `pg_dump --format=custom` from a small tools container
+  (`deploy/tools`: PostgreSQL 17 client, `age`, AWS CLI) on the internal network and encrypts the
+  dump with `age` to a public key as it streams, so no unencrypted copy is written. The private key is kept offline by the owner,
   never on the server. The script uploads the file to S3-compatible object storage, recommended
   Hetzner Object Storage in the same region.
 - A lifecycle rule deletes backups after 30 days. That period matches the retention statement in
   `authentication_persistence_design.md`: deleted data may live on in backups until they expire.
   After a full restore, both cleanup commands run before traffic returns.
 - **Targets:** at most 24 hours of lost data (RPO) and service back within 4 hours (RTO).
-- `deploy/restore.sh` restores a chosen backup into a fresh database. The rehearsal restores the
+- `deploy/restore.sh` restores a chosen backup into a new database (never an existing one). The
+  private key is piped into the tools container for that run only. The rehearsal restores the
   latest backup on a scratch server, runs the migrations check and the readiness endpoint, and
   compares row counts. It is recorded in the runbook with its date.
 - Weekly Hetzner server snapshots are an extra layer, not a replacement.

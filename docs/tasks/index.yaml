@@ -538,14 +538,14 @@ tasks:
   - id: OPS-04
     title: "Encrypted Backups and Rehearsed Restore"
     file: docs/tasks/OPS-04-backups-and-restore.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - OPS-02
   - id: OPS-05
     title: "Runbook and First Production Deploy"
     file: docs/tasks/OPS-05-runbook-and-first-deploy.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - OPS-03

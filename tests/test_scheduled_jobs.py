@@ -66,6 +66,8 @@ def test_every_command_the_crontab_names_exists() -> None:
         words = command.split()
         if words[0] == "$M/mintflow-command.sh":
             assert (modules / f"{words[1]}.py").is_file(), words[1]
+        else:
+            assert (DEPLOY / words[0].removeprefix("$M/")).is_file(), words[0]
 
 
 # --- ping only on success -----------------------------------------------------------------------

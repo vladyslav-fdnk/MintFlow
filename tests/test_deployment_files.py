@@ -106,3 +106,43 @@ def test_the_image_runs_unprivileged_with_a_health_check() -> None:
     assert "\nUSER mintflow\n" in dockerfile
     assert "HEALTHCHECK" in dockerfile and "/health/ready" in dockerfile
     assert '"--no-proxy-headers"' in dockerfile
+
+
+def test_the_backup_tools_never_receive_the_app_secrets_or_a_private_key(
+    services: dict[str, Any],
+) -> None:
+    backup = services["backup"]
+
+    assert backup["profiles"] == ["tools"]
+    assert backup["build"]["context"].endswith("deploy/tools")
+    # Resolved without a backup.env, the service sees only the database login: the app's .env
+    # (Telegram, email, signing keys) is never passed to it.
+    assert set(backup["environment"]) == {"POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"}
+    raw = (ROOT / "deploy" / "compose.production.yaml").read_text()
+    section = raw[raw.index("\n  backup:") : raw.index("\n  postgres:")]
+    assert "path: ${MINTFLOW_BACKUP_ENV_FILE:-backup.env}" in section
+    assert "<<: *app" not in section
+    assert [volume["target"] for volume in backup.get("volumes", [])] == ["/work"]
+
+
+def test_the_tools_image_runs_unprivileged() -> None:
+    dockerfile = (ROOT / "deploy" / "tools" / "Dockerfile").read_text()
+
+    assert "postgresql17-client" in dockerfile and " age " in dockerfile
+    assert "\nUSER backup\n" in dockerfile
+
+
+def test_backups_expire_after_thirty_days() -> None:
+    rules = json.loads((ROOT / "deploy" / "backup-lifecycle.json").read_text())["Rules"]
+
+    assert rules == [
+        {
+            "ID": "expire-nightly-backups-after-30-days",
+            "Status": "Enabled",
+            "Filter": {"Prefix": "nightly/"},
+            "Expiration": {"Days": 30},
+        }
+    ]
+    example = (ROOT / "deploy" / "backup.env.example").read_text()
+    assert "BACKUP_S3_PREFIX=nightly/" in example
+    assert "AGE-SECRET-KEY" not in example

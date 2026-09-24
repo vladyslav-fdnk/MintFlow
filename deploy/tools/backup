@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Dump the database, encrypt it to the age public key, and upload it (operations design, O7).
+# The dump is encrypted as it streams, so no unencrypted copy is ever written. Only the public key
+# is needed: the private key never comes near the server.
+set -euo pipefail
+
+missing=()
+for name in POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB BACKUP_AGE_RECIPIENT BACKUP_S3_ENDPOINT \
+  BACKUP_S3_BUCKET AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY; do
+  [ -n "${!name:-}" ] || missing+=("$name")
+done
+if [ "${#missing[@]}" -gt 0 ]; then
+  echo "refusing to back up: set ${missing[*]}" >&2
+  exit 2
+fi
+case "$BACKUP_AGE_RECIPIENT" in
+  age1*) ;;
+  *) echo "refusing to back up: BACKUP_AGE_RECIPIENT is not an age public key" >&2; exit 2 ;;
+esac
+
+name="mintflow-$(date -u +%Y%m%dT%H%M%SZ).dump.age"
+trap 'rm -f "/work/$name"' EXIT
+PGPASSWORD="$POSTGRES_PASSWORD" pg_dump --host "${POSTGRES_HOST:-postgres}" \
+  --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" --format=custom --no-password \
+  | age --encrypt --recipient "$BACKUP_AGE_RECIPIENT" --output "/work/$name"
+aws s3 cp "/work/$name" "s3://${BACKUP_S3_BUCKET}/${BACKUP_S3_PREFIX:-}${name}" \
+  --endpoint-url "$BACKUP_S3_ENDPOINT" --only-show-errors
+echo "backup ${BACKUP_S3_PREFIX:-}${name} uploaded ($(stat -c %s "/work/$name") bytes)"

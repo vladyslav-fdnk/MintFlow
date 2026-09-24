@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Restore one backup into a new, empty database (operations design, O7):
+#   restore BACKUP_NAME TARGET_DATABASE
+# The age private key arrives on standard input for this run only (restore.sh pipes it in), is kept
+# in a private temporary file, and is deleted on exit. The target database must not exist yet: a
+# restore never overwrites data. Prints every table's row count at the end.
+set -euo pipefail
+
+backup="${1:?usage: restore BACKUP_NAME TARGET_DATABASE}"
+target="${2:?usage: restore BACKUP_NAME TARGET_DATABASE}"
+identity="/work/.identity-$$"
+file=""
+trap 'rm -f "$identity" ${file:+"$file"}' EXIT
+(umask 077 && cat > "$identity")
+grep -q '^AGE-SECRET-KEY-' "$identity" \
+  || { echo "refusing to restore: no age private key on standard input" >&2; exit 2; }
+[[ "$target" =~ ^[a-z_][a-z0-9_]{0,62}$ ]] || { echo "the target must be a plain database name" >&2; exit 2; }
+for name in POSTGRES_USER POSTGRES_PASSWORD BACKUP_S3_ENDPOINT BACKUP_S3_BUCKET AWS_ACCESS_KEY_ID \
+  AWS_SECRET_ACCESS_KEY; do
+  [ -n "${!name:-}" ] || { echo "refusing to restore: set $name" >&2; exit 2; }
+done
+
+export PGHOST="${POSTGRES_HOST:-postgres}" PGUSER="$POSTGRES_USER" PGPASSWORD="$POSTGRES_PASSWORD"
+if [ -n "$(psql --dbname postgres -Atc "SELECT 1 FROM pg_database WHERE datname = '$target'")" ]; then
+  echo "refusing to restore: the database $target already exists" >&2
+  exit 2
+fi
+
+file="/work/$(basename "$backup")"
+aws s3 cp "s3://${BACKUP_S3_BUCKET}/${backup}" "$file" --endpoint-url "$BACKUP_S3_ENDPOINT" \
+  --only-show-errors
+psql --dbname postgres -qc "CREATE DATABASE \"$target\""
+age --decrypt --identity "$identity" "$file" \
+  | pg_restore --dbname "$target" --no-owner --no-privileges --exit-on-error
+
+echo "restored $backup into $target; row counts:"
+psql --dbname "$target" -At -c "
+  SELECT table_name FROM information_schema.tables
+  WHERE table_schema = 'public' AND table_type = 'BASE TABLE' ORDER BY table_name" \
+  | while read -r table; do
+      echo "  $table $(psql --dbname "$target" -Atc "SELECT count(*) FROM \"$table\"")"
+    done

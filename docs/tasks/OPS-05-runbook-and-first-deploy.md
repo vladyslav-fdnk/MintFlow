@@ -1,6 +1,6 @@
 # OPS-05 — Runbook and First Production Deploy
 
-Status: blocked
+Status: ready
 
 ## Goal
 

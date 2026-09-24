@@ -1,0 +1,10 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-nightly-backups-after-30-days",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "nightly/" },
+      "Expiration": { "Days": 30 }
+    }
+  ]
+}

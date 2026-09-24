@@ -71,6 +71,27 @@ services:
       disable: true
     profiles: [tools]
 
+  # Nightly encrypted backups and restores (O7), run through backup.sh and restore.sh. Only the
+  # age public key is configured here; a restore mounts the private key for that run alone.
+  backup:
+    build: ./tools
+    image: mintflow-backup-tools
+    env_file:
+      - path: ${MINTFLOW_BACKUP_ENV_FILE:-backup.env}
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+    volumes:
+      - backup-work:/work
+    networks: [internal]
+    logging: *logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles: [tools]
+
   postgres:
     image: postgres:17-alpine
     restart: unless-stopped
@@ -97,6 +118,7 @@ networks:
         - subnet: 172.30.0.0/24
 
 volumes:
+  backup-work:
   caddy-data:
   caddy-config:
   postgres-data:

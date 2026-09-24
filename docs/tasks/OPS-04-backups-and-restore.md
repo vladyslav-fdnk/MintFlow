@@ -1,6 +1,6 @@
 # OPS-04 — Encrypted Backups and Rehearsed Restore
 
-Status: ready
+Status: done
 
 ## Goal
 
