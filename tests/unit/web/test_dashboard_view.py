@@ -1,4 +1,6 @@
+from dataclasses import replace
 from datetime import date
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -7,6 +9,7 @@ from mintflow.application.analytics import (
     BucketGranularity,
     CategorySpending,
     Comparison,
+    Conversion,
     CurrencyTotal,
     Dashboard,
     DashboardDetail,
@@ -19,6 +22,7 @@ from mintflow.application.analytics import (
     TimeBucket,
     TopMerchants,
 )
+from mintflow.application.rates import ExchangeRate
 from mintflow.domain.capture import CurrencyCode, Money
 from mintflow.domain.user import Locale
 from mintflow.web.dashboard import Onboarding, build_dashboard_view
@@ -388,3 +392,68 @@ def test_the_chart_switch_marks_the_current_view() -> None:
         ("Columns", None),
         ("Pie", "true"),
     ]
+
+
+APPROX = f"\u2248{NBSP}"
+PLN_RATE = ExchangeRate(PLN, Decimal("4.25"), date(2026, 9, 23), "ECB")
+
+
+def _converted(**overrides: object) -> Dashboard:
+    detail = _detail(comparison=_comparison(1_500, 1_500))
+    largest = detail.insights.largest_expense
+    assert largest is not None
+    detail = replace(
+        detail,
+        insights=replace(
+            detail.insights,
+            largest_expense=replace(
+                largest, money=Money(minor_units=25_500, currency=PLN), converted_minor_units=6_000
+            ),
+        ),
+    )
+    values: dict[str, object] = {
+        "currencies": (CurrencyTotal(EUR, 6_000, 2), CurrencyTotal(PLN, 25_500, 1)),
+        "conversion": Conversion(rates=(PLN_RATE,), unconverted=()),
+    }
+    values.update(overrides)
+    return _dashboard(detail, **values)
+
+
+def test_a_converted_dashboard_marks_every_amount_but_exact_zero() -> None:
+    view = build_dashboard_view(_converted(), EN, default_currency=EUR, rates_available=True)
+
+    detail = view.detail
+    assert detail is not None
+    assert detail.total == f"{APPROX}120.00{NBSP}EUR"
+    assert detail.comparison is not None
+    assert f"({APPROX}+15.00{NBSP}EUR)" in detail.comparison
+    assert all(row.amount.startswith(APPROX) for row in (*detail.categories, *detail.merchants))
+    assert all(column.amount.startswith(APPROX) for column in detail.time_chart.columns)
+    assert detail.time_chart.axis[0].startswith(APPROX)
+    assert detail.time_chart.axis[2] == f"0{NBSP}EUR"
+    assert detail.largest_expense == (
+        f"Your largest expense was 255.00{NBSP}PLN ({APPROX}60.00{NBSP}EUR)"
+        " at Corner Shop on Sep 12, 2026."
+    )
+    assert "currency=" not in str(detail.categories[0].href)
+    assert view.rates_note is not None
+    assert view.rates_note.startswith("\u2248 Converted into EUR at the exchange rates of Sep 23")
+    assert (view.converted, view.all_label, view.unconverted_note) == (True, "All in EUR", None)
+    assert not any(line.selected for line in view.currencies)
+
+
+def test_a_converted_dashboard_without_used_rates_shows_exact_amounts() -> None:
+    dashboard = _dashboard(
+        currencies=(CurrencyTotal(EUR, 12_000, 3), CurrencyTotal(CurrencyCode("BHD"), 5_000, 1)),
+        conversion=Conversion(
+            rates=(), unconverted=(CurrencyTotal(CurrencyCode("BHD"), 5_000, 1),)
+        ),
+    )
+
+    view = build_dashboard_view(dashboard, EN, default_currency=EUR, rates_available=True)
+
+    assert view.detail is not None
+    assert view.detail.total == f"120.00{NBSP}EUR"
+    assert view.rates_note is None
+    assert view.unconverted_note == f"Not included, no exchange rate: 5.000{NBSP}BHD."
+    assert [line.no_rate for line in view.currencies] == [False, True]

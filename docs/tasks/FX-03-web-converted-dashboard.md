@@ -1,6 +1,6 @@
 # FX-03 — Web: Converted Dashboard and History
 
-Status: ready
+Status: done
 
 ## Goal
 

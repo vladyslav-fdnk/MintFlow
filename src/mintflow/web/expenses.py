@@ -2,7 +2,9 @@
 
 It uses the same history query and filter rules as ``GET /capture/expenses``: confirmed,
 non-deleted Expenses, newest transaction date first, keyset pages. "Load more" appends the next
-page with htmx; without JavaScript the same link opens the next page on its own.
+page with htmx; without JavaScript the same link opens the next page on its own. A row in
+another currency than the user's default also shows "≈" its amount in the default currency when
+there is a rate (docs/exchange_rates_design.md, X5).
 """
 
 from dataclasses import dataclass
@@ -13,11 +15,13 @@ from babel import Locale as BabelLocale
 from fastapi import APIRouter, Request
 from starlette.responses import Response
 
+from mintflow.application.analytics import ConvertTo
 from mintflow.application.capture import (
     ExpenseHistoryFilter,
     ExpenseHistoryPage,
     encode_history_cursor,
 )
+from mintflow.application.rates import ExchangeRate
 from mintflow.domain.capture import Category, Expense, supported_currency_codes
 from mintflow.http.authentication import DatabaseSession
 from mintflow.http.capture import parse_expense_history_params
@@ -26,7 +30,16 @@ from mintflow.infrastructure.persistence import (
     SqlAlchemyExpenseRepository,
     SqlAlchemyUserRepository,
 )
-from mintflow.web.formatting import category_label, display_locale, format_date, format_money
+from mintflow.web.dashboard import main_currency
+from mintflow.web.formatting import (
+    approximately,
+    category_label,
+    display_locale,
+    format_amount,
+    format_date,
+    format_money,
+    rates_note,
+)
 from mintflow.web.pages import PagePrincipalDependency, SignInRequired, non_empty_params
 from mintflow.web.rendering import render
 
@@ -43,6 +56,8 @@ class ExpenseRow:
     merchant: str | None
     category: str
     amount: str
+    # "≈" the amount in the default currency, for a row in another currency.
+    converted: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -59,15 +74,33 @@ class HistoryView:
     filtered: bool
     # True on a page reached with a cursor, i.e. not the first page.
     continued: bool
+    rates_note: str | None = None
 
 
-def _row(expense: Expense, category_names: dict[str, str], locale: BabelLocale) -> ExpenseRow:
+def _row(
+    expense: Expense,
+    category_names: dict[str, str],
+    locale: BabelLocale,
+    convert_to: ConvertTo | None,
+    used: set[str],
+) -> ExpenseRow:
+    """``used`` collects the currencies whose rates a converted amount needed."""
+    converted = None
+    money = expense.money
+    if convert_to is not None and money.currency != convert_to.currency:
+        minor_units = convert_to.rates.convert(
+            money.minor_units, money.currency, convert_to.currency
+        )
+        if minor_units is not None:
+            converted = approximately(format_amount(minor_units, convert_to.currency, locale))
+            used.update((money.currency.value, convert_to.currency.value))
     return ExpenseRow(
         href=f"{EXPENSES_PATH}/{expense.id}",
         date=format_date(expense.transaction_date.value, locale),
         merchant=expense.merchant.value if expense.merchant is not None else None,
         category=category_names.get(expense.category_key, expense.category_key),
-        amount=format_money(expense.money, locale),
+        amount=format_money(money, locale),
+        converted=converted,
     )
 
 
@@ -82,6 +115,7 @@ def build_history_view(
     categories: list[Category],
     locale: BabelLocale,
     continued: bool,
+    convert_to: ConvertTo | None = None,
 ) -> HistoryView:
     names = {category.key: category_label(category.key, category.name) for category in categories}
     filter_params: list[tuple[str, str]] = []
@@ -97,8 +131,15 @@ def build_history_view(
     if page.next_position is not None:
         cursor = encode_history_cursor(page.next_position)
         next_href = f"{EXPENSES_PATH}?" + urlencode([*filter_params, ("cursor", cursor)])
+    used: set[str] = set()
+    rows = tuple(_row(expense, names, locale, convert_to, used) for expense in page.items)
+    used_rates: list[ExchangeRate] = (
+        [convert_to.rates.rates[code] for code in sorted(used) if code in convert_to.rates.rates]
+        if convert_to is not None
+        else []
+    )
     return HistoryView(
-        rows=tuple(_row(expense, names, locale) for expense in page.items),
+        rows=rows,
         next_href=next_href,
         date_from=(
             history_filter.date_from.isoformat() if history_filter.date_from is not None else ""
@@ -112,6 +153,11 @@ def build_history_view(
         currency_options=supported_currency_codes(),
         filtered=bool(filter_params),
         continued=continued,
+        rates_note=(
+            rates_note(used_rates, convert_to.currency, locale)
+            if convert_to is not None and used_rates
+            else None
+        ),
     )
 
 
@@ -139,6 +185,7 @@ async def expense_history_page(
         categories=SqlAlchemyCategoryRepository(session).list_active(),
         locale=display_locale(user.locale),
         continued=query is not None and query.after is not None,
+        convert_to=main_currency(session, user.default_currency),
     )
     return render(
         "expenses.html",

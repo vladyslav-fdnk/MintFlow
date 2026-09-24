@@ -1,5 +1,6 @@
-# web-client is complete. exchange-rates is the active sprint: dashboard totals in the user's
-# default currency at today's ECB and NBU rates (docs/exchange_rates_design.md, approved).
+# exchange-rates is complete: dashboard totals and history rows in the user's default currency
+# at today's ECB and NBU rates (docs/exchange_rates_design.md). The daily refresh still needs a
+# scheduler entry, which belongs to the operations sprint.
 # All earlier sprints are complete except RCPT-07, which waits for consented sample receipts
 # to run the Azure evaluation.
 sprint: exchange-rates
@@ -511,7 +512,7 @@ tasks:
   - id: FX-03
     title: "Web: Converted Dashboard and History"
     file: docs/tasks/FX-03-web-converted-dashboard.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - FX-02

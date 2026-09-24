@@ -1,8 +1,11 @@
 """The dashboard page (web design W4, W7, W9; MVP section 8).
 
 ``build_dashboard_view`` turns the ``Dashboard`` snapshot into display-ready text and chart
-geometry, so templates only lay things out. Amounts in different currencies are never combined:
-a period with several currencies shows one total per currency and details for one of them.
+geometry, so templates only lay things out. With a default currency and exchange rates, the page
+shows every currency converted into the default one by default, each converted amount marked "≈"
+with a note on the rates (docs/exchange_rates_design.md, X4). Otherwise amounts in different
+currencies are never combined: a period with several currencies shows one total per currency and
+details for one of them. Each currency's own dashboard stays one link away.
 """
 
 import calendar
@@ -13,12 +16,14 @@ from urllib.parse import urlencode
 
 from babel import Locale as BabelLocale
 from fastapi import APIRouter, Request
+from sqlalchemy.orm import Session
 from starlette.datastructures import QueryParams
 from starlette.responses import Response
 
 from mintflow.application.analytics import (
     BucketGranularity,
     Comparison,
+    ConvertTo,
     Dashboard,
     DashboardDetail,
     DashboardPeriod,
@@ -31,6 +36,7 @@ from mintflow.http.analytics import BuildDashboardDependency, parse_dashboard_pa
 from mintflow.http.authentication import DatabaseSession
 from mintflow.http.capture import CaptureRuntimeDependency
 from mintflow.infrastructure.persistence import (
+    SqlAlchemyExchangeRateRepository,
     SqlAlchemyExpenseRepository,
     SqlAlchemyTelegramLinkRepository,
     SqlAlchemyUserRepository,
@@ -39,17 +45,20 @@ from mintflow.telegram.runtime import TelegramRuntime
 from mintflow.web.charts import Column, Slice, bar_lengths, columns, donut, nice_ceiling
 from mintflow.web.formatting import (
     _,
+    approximately,
     category_label,
     display_locale,
     format_amount,
     format_axis_amount,
     format_count,
     format_date,
+    format_money,
     format_month,
     format_period,
     format_share,
     format_short_date,
     ngettext,
+    rates_note,
     sentence,
 )
 from mintflow.web.pages import PagePrincipalDependency, SignInRequired, non_empty_params
@@ -77,6 +86,8 @@ class CurrencyLine:
     count: str
     href: str
     selected: bool
+    # A converted dashboard leaves this currency out: it has no exchange rate.
+    no_rate: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,19 +175,51 @@ class DashboardView:
     chart: str
     chart_links: tuple[ChartLink, ...]
     presets: tuple[Preset, ...]
+    # The currency everything can be converted into, when there is a default and rates.
+    main_currency: str | None = None
+    # The currency menu's first choice: converted into the main currency, or automatic.
+    all_label: str = ""
+    converted: bool = False
+    converted_href: str | None = None
+    show_currency_choice: bool = False
+    rates_note: str | None = None
+    unconverted_note: str | None = None
+    # Several currencies shown one at a time: why, and where to change it.
+    needs_default_currency: bool = False
+    rates_missing: bool = False
 
 
 def _query(**params: str) -> str:
     return urlencode(params)
 
 
-def _expenses_href(period: DashboardPeriod, currency: CurrencyCode, **extra: str) -> str:
+def _expenses_href(period: DashboardPeriod, currency: CurrencyCode | None, **extra: str) -> str:
+    """The matching history; a converted dashboard links to every currency."""
+    currency_param = {"currency": currency.value} if currency is not None else {}
     return f"{EXPENSES_PATH}?" + _query(
         date_from=period.date_from.isoformat(),
         date_to=period.date_to.isoformat(),
         **extra,
-        currency=currency.value,
+        **currency_param,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class _Amounts:
+    """Formats one dashboard's amounts, marking them "≈" when they were converted."""
+
+    currency: CurrencyCode
+    locale: BabelLocale
+    approximate: bool
+
+    def mark(self, text: str) -> str:
+        return approximately(text) if self.approximate else text
+
+    def amount(self, minor_units: int) -> str:
+        return self.mark(format_amount(minor_units, self.currency, self.locale))
+
+    def axis(self, minor_units: int) -> str:
+        return self.mark(format_axis_amount(minor_units, self.currency, self.locale))
 
 
 def _expense_count(count: int, locale: BabelLocale) -> str:
@@ -185,7 +228,8 @@ def _expense_count(count: int, locale: BabelLocale) -> str:
     )
 
 
-def _comparison(comparison: Comparison, currency: CurrencyCode, locale: BabelLocale) -> str:
+def _comparison(comparison: Comparison, amounts: _Amounts) -> str:
+    locale = amounts.locale
     previous = format_period(
         comparison.previous_period.date_from, comparison.previous_period.date_to, locale
     )
@@ -199,8 +243,9 @@ def _comparison(comparison: Comparison, currency: CurrencyCode, locale: BabelLoc
                 current=current, previous=previous
             )
         )
-    amount = format_amount(abs(change), currency, locale)
-    signed = ("+" if change > 0 else MINUS_SIGN) + amount
+    signed = amounts.mark(
+        ("+" if change > 0 else MINUS_SIGN) + format_amount(abs(change), amounts.currency, locale)
+    )
     change_text = (
         signed
         if comparison.change_basis_points is None
@@ -214,7 +259,10 @@ def _comparison(comparison: Comparison, currency: CurrencyCode, locale: BabelLoc
     return sentence(template.format(current=current, change=change_text, previous=previous))
 
 
-def _time_chart(detail: DashboardDetail, currency: CurrencyCode, locale: BabelLocale) -> TimeChart:
+def _time_chart(
+    detail: DashboardDetail, amounts: _Amounts, link_currency: CurrencyCode | None
+) -> TimeChart:
+    locale = amounts.locale
     over_time = detail.spending_over_time
     monthly = over_time.granularity is BucketGranularity.MONTH
     label = format_month if monthly else format_short_date
@@ -225,8 +273,8 @@ def _time_chart(detail: DashboardDetail, currency: CurrencyCode, locale: BabelLo
         ColumnView(
             column=column,
             label=label(bucket.period.date_from, locale),
-            amount=format_amount(bucket.total_minor_units, currency, locale),
-            href=_expenses_href(bucket.period, currency),
+            amount=amounts.amount(bucket.total_minor_units),
+            href=_expenses_href(bucket.period, link_currency),
         )
         for bucket, column in zip(buckets, geometry, strict=True)
     )
@@ -236,7 +284,7 @@ def _time_chart(detail: DashboardDetail, currency: CurrencyCode, locale: BabelLo
     else:
         summary = _("Highest: {label}, {amount}.").format(
             label=label(highest.period.date_from, locale),
-            amount=format_amount(highest.total_minor_units, currency, locale),
+            amount=amounts.amount(highest.total_minor_units),
         )
     last = len(views) - 1
     tick_indexes = sorted({0, last // 4, last // 2, 3 * last // 4, last}) if views else []
@@ -244,18 +292,37 @@ def _time_chart(detail: DashboardDetail, currency: CurrencyCode, locale: BabelLo
         title=_("Spending by month") if monthly else _("Spending by day"),
         summary=summary,
         columns=views,
+        # Zero is exact, so only the two upper labels carry the "≈" mark.
         axis=(
-            format_axis_amount(top, currency, locale),
-            format_axis_amount(top // 2, currency, locale),
-            format_axis_amount(0, currency, locale),
+            amounts.axis(top),
+            amounts.axis(top // 2),
+            format_axis_amount(0, amounts.currency, locale),
         ),
         ticks=tuple(views[index].label for index in tick_indexes),
     )
 
 
+def _largest_expense_amount(detail: DashboardDetail, amounts: _Amounts) -> str | None:
+    """The expense's own amount, followed by the converted one when it is in another currency."""
+    largest = detail.insights.largest_expense
+    if largest is None:
+        return None
+    own = format_money(largest.money, amounts.locale)
+    if largest.converted_minor_units is None or largest.money.currency == amounts.currency:
+        return own
+    converted = approximately(
+        format_amount(largest.converted_minor_units, amounts.currency, amounts.locale)
+    )
+    return f"{own} ({converted})"
+
+
 def _detail(
-    dashboard: Dashboard, detail: DashboardDetail, currency: CurrencyCode, locale: BabelLocale
+    dashboard: Dashboard,
+    detail: DashboardDetail,
+    amounts: _Amounts,
+    link_currency: CurrencyCode | None,
 ) -> Detail:
+    locale = amounts.locale
     period = dashboard.period
     categories = detail.categories
     category_lengths = bar_lengths([category.total_minor_units for category in categories])
@@ -272,15 +339,13 @@ def _detail(
             "Your largest category was {category} at {amount}, representing {share} of spending."
         ).format(
             category=category_label(largest_category.category_key, largest_category.category_name),
-            amount=format_amount(largest_category.total_minor_units, currency, locale),
+            amount=amounts.amount(largest_category.total_minor_units),
             share=format_share(largest_category.share_basis_points, locale),
         )
     expense_sentence = None
     if largest_expense is not None:
         values = {
-            "amount": format_amount(
-                largest_expense.money.minor_units, largest_expense.money.currency, locale
-            ),
+            "amount": _largest_expense_amount(detail, amounts),
             "date": format_date(largest_expense.transaction_date, locale),
         }
         expense_sentence = sentence(
@@ -295,9 +360,9 @@ def _detail(
     donut_view = tuple(
         DonutSlice(
             label=category_label(category.category_key, category.category_name),
-            amount=format_amount(category.total_minor_units, currency, locale),
+            amount=amounts.amount(category.total_minor_units),
             share=format_share(category.share_basis_points, locale),
-            href=_expenses_href(period, currency, category=category.category_key),
+            href=_expenses_href(period, link_currency, category=category.category_key),
             color=index % DONUT_COLORS,
             slice=slice_,
         )
@@ -306,29 +371,29 @@ def _detail(
     return Detail(
         empty=detail.summary.count == 0,
         donut=donut_view,
-        total=format_amount(detail.summary.total_minor_units, currency, locale),
+        total=amounts.amount(detail.summary.total_minor_units),
         count=_expense_count(detail.summary.count, locale),
         comparison=(
-            _comparison(detail.summary.comparison, currency, locale)
+            _comparison(detail.summary.comparison, amounts)
             if detail.summary.comparison is not None
             else None
         ),
-        time_chart=_time_chart(detail, currency, locale),
+        time_chart=_time_chart(detail, amounts, link_currency),
         categories=tuple(
             BarRow(
                 label=category_label(category.category_key, category.category_name),
-                amount=format_amount(category.total_minor_units, currency, locale),
+                amount=amounts.amount(category.total_minor_units),
                 share=format_share(category.share_basis_points, locale),
                 count=_expense_count(category.count, locale),
                 length=length,
-                href=_expenses_href(period, currency, category=category.category_key),
+                href=_expenses_href(period, link_currency, category=category.category_key),
             )
             for category, length in zip(categories, category_lengths, strict=True)
         ),
         merchants=tuple(
             BarRow(
                 label=merchant.merchant if merchant.merchant is not None else _("Other"),
-                amount=format_amount(merchant.total_minor_units, currency, locale),
+                amount=amounts.amount(merchant.total_minor_units),
                 share=format_share(merchant.share_basis_points, locale),
                 count=_expense_count(merchant.count, locale),
                 length=length,
@@ -374,16 +439,25 @@ def build_dashboard_view(
     *,
     chart: str = COLUMNS,
     today: date | None = None,
+    default_currency: CurrencyCode | None = None,
+    rates_available: bool = False,
 ) -> DashboardView:
+    """``default_currency`` and ``rates_available`` describe the user's conversion setup, which
+    also applies when ``dashboard`` is one currency's own view."""
     period = dashboard.period
     period_params = {
         "date_from": period.date_from.isoformat(),
         "date_to": period.date_to.isoformat(),
     }
     currency = dashboard.currency
+    conversion = dashboard.conversion
+    main_currency = default_currency if rates_available else None
+    unconverted = (
+        {total.currency for total in conversion.unconverted} if conversion is not None else set()
+    )
     options = sorted(
         {total.currency.value for total in dashboard.currencies}
-        | ({currency.value} if currency is not None else set())
+        | ({currency.value} if currency is not None and conversion is None else set())
     )
     lines = tuple(
         CurrencyLine(
@@ -392,16 +466,25 @@ def build_dashboard_view(
             count=_expense_count(total.count, locale),
             href=f"{DASHBOARD_PATH}?"
             + _query(**period_params, currency=total.currency.value, chart=chart),
-            selected=total.currency == currency,
+            selected=conversion is None and total.currency == currency,
+            no_rate=total.currency in unconverted,
         )
         for total in dashboard.currencies
     )
+    approximate = conversion is not None and bool(conversion.rates)
     detail = (
-        _detail(dashboard, dashboard.detail, currency, locale)
+        _detail(
+            dashboard,
+            dashboard.detail,
+            _Amounts(currency=currency, locale=locale, approximate=approximate),
+            link_currency=None if conversion is not None else currency,
+        )
         if dashboard.detail is not None and currency is not None
         else None
     )
-    currency_param = {"currency": currency.value} if currency is not None else {}
+    currency_param = (
+        {"currency": currency.value} if currency is not None and conversion is None else {}
+    )
     chart_links = tuple(
         ChartLink(
             label=label,
@@ -410,6 +493,7 @@ def build_dashboard_view(
         )
         for kind, label in ((COLUMNS, _("Columns")), (PIE, _("Pie")))
     )
+    several = len(dashboard.currencies) > 1
     return DashboardView(
         chart=chart,
         chart_links=chart_links,
@@ -424,6 +508,44 @@ def build_dashboard_view(
         currencies=lines,
         selection_required=dashboard.currency_selection_required,
         detail=detail,
+        main_currency=main_currency.value if main_currency is not None else None,
+        all_label=(
+            _("All in {currency}").format(currency=main_currency.value)
+            if main_currency is not None
+            else _("Automatic")
+        ),
+        converted=conversion is not None,
+        converted_href=(
+            f"{DASHBOARD_PATH}?" + _query(**period_params, chart=chart)
+            if main_currency is not None
+            else None
+        ),
+        show_currency_choice=several
+        or (
+            main_currency is not None
+            and any(t.currency != main_currency for t in dashboard.currencies)
+        ),
+        rates_note=(
+            rates_note(conversion.rates, currency, locale)
+            + " "
+            + _("Past spending is converted at today's rates, so these totals can change slightly.")
+            if conversion is not None and conversion.rates and currency is not None
+            else None
+        ),
+        unconverted_note=(
+            sentence(
+                _("Not included, no exchange rate: {amounts}.").format(
+                    amounts=", ".join(
+                        format_amount(total.total_minor_units, total.currency, locale)
+                        for total in conversion.unconverted
+                    )
+                )
+            )
+            if conversion is not None and conversion.unconverted
+            else None
+        ),
+        needs_default_currency=several and default_currency is None,
+        rates_missing=several and default_currency is not None and not rates_available,
     )
 
 
@@ -439,6 +561,16 @@ class Onboarding:
 
 
 # --- route ------------------------------------------------------------------------------------
+
+
+def main_currency(session: Session, default_currency: CurrencyCode | None) -> ConvertTo | None:
+    """The conversion into the default currency, when there is one and it has a rate."""
+    if default_currency is None:
+        return None
+    rates = SqlAlchemyExchangeRateRepository(session).latest()
+    if not rates.rates or not rates.has_rate(default_currency):
+        return None
+    return ConvertTo(default_currency, rates)
 
 
 @router.get(DASHBOARD_PATH)
@@ -457,17 +589,21 @@ async def dashboard_page(
         QueryParams([(key, value) for key, value in params.multi_items() if key != "chart"])
     )
     invalid = query is None
+    user = SqlAlchemyUserRepository(session).get(principal.user_id)
+    if user is None:
+        raise SignInRequired
+    requested = query.currency if query is not None else None
+    main = main_currency(session, user.default_currency)
     try:
         dashboard = build_dashboard.execute(
             caller_id=principal.user_id,
             period=query.period if query is not None else None,
-            currency=query.currency if query is not None else None,
+            currency=requested,
+            # A chosen currency shows its own dashboard; otherwise everything converts.
+            convert_to=main if requested is None else None,
         )
     except DashboardUserNotFound:
         raise SignInRequired from None
-    user = SqlAlchemyUserRepository(session).get(principal.user_id)
-    if user is None:
-        raise SignInRequired
     locale = display_locale(user.locale)
     onboarding = None
     has_expenses = (
@@ -493,6 +629,8 @@ async def dashboard_page(
                 locale,
                 chart=chart,
                 today=local_today(now=runtime.clock(), timezone=user.timezone),
+                default_currency=user.default_currency,
+                rates_available=main is not None,
             ),
             "invalid_filters": invalid,
             "onboarding": onboarding,

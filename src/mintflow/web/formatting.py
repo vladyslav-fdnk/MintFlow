@@ -2,10 +2,11 @@
 
 Amounts are shown with exactly their currency's minor-unit digits and always with the ISO code,
 never a symbol that could be ambiguous. Separators follow the user's locale; an unset or unknown
-locale falls back to English.
+locale falls back to English. A converted amount is always marked "≈", and a page that shows one
+says which rates it used (docs/exchange_rates_design.md, section 2).
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -24,12 +25,14 @@ from babel.dates import format_interval, format_skeleton
 from babel.messages.pofile import read_po
 from babel.numbers import format_decimal, format_percent
 
+from mintflow.application.rates import ExchangeRate
 from mintflow.domain.capture import CurrencyCode, Money
 from mintflow.domain.user import Locale, Timezone
 
 DEFAULT_LOCALE: Final = "en"
 # Keeps an amount and its currency code on one line.
 _NO_BREAK_SPACE: Final = "\u00a0"
+APPROXIMATELY: Final = "\u2248"
 
 
 DEFAULT_LANGUAGE: Final = "en"
@@ -145,6 +148,11 @@ def format_axis_amount(minor_units: int, currency: CurrencyCode, locale: BabelLo
     )
 
 
+def approximately(text: str) -> str:
+    """Mark a converted amount (or any text made of one) as approximate."""
+    return f"{APPROXIMATELY}{_NO_BREAK_SPACE}{text}"
+
+
 def format_date(value: date, locale: BabelLocale) -> str:
     return babel_format_date(value, format="medium", locale=locale)
 
@@ -213,3 +221,27 @@ def category_label(key: str, stored_name: str) -> str:
     """A category's name in the current language."""
     label = _CATEGORY_LABELS.get(key)
     return _(label) if label is not None else stored_name
+
+
+_RATE_SOURCES: Final = {
+    "ECB": N_("European Central Bank"),
+    "NBU": N_("National Bank of Ukraine"),
+}
+
+
+def rates_note(rates: Iterable[ExchangeRate], currency: CurrencyCode, locale: BabelLocale) -> str:
+    """Which rates converted the amounts marked "≈": the oldest rate date and every source."""
+    rates = tuple(rates)
+    if not rates:
+        raise ValueError("a note needs at least one rate")
+    sources = sorted({rate.source for rate in rates})
+    return sentence(
+        _("≈ Converted into {currency} at the exchange rates of {date} ({sources}).").format(
+            currency=currency.value,
+            date=format_date(min(rate.rate_date for rate in rates), locale),
+            sources=", ".join(
+                _(_RATE_SOURCES[source]) if source in _RATE_SOURCES else source
+                for source in sources
+            ),
+        )
+    )

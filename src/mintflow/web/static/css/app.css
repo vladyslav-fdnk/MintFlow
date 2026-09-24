@@ -813,6 +813,13 @@ main:focus {
   color: var(--muted);
 }
 
+.rates-note {
+  margin: 8px 0 0;
+  max-width: 60ch;
+  font-size: 0.9375rem;
+  color: var(--muted);
+}
+
 .answer-comparison {
   font-weight: 600;
   color: var(--text);
@@ -1165,6 +1172,13 @@ td {
   text-align: right;
   white-space: nowrap;
   font-weight: 700;
+}
+
+.history .converted {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--muted);
 }
 
 .history td a {

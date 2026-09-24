@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID
 
 import pytest
@@ -9,6 +10,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import hash_token
+from mintflow.application.rates import ExchangeRate
 from mintflow.config import Settings
 from mintflow.domain.capture import (
     CaptureDraft,
@@ -24,6 +26,7 @@ from mintflow.http.authentication import AUTHENTICATED_SESSION_COOKIE_NAME, Auth
 from mintflow.http.capture import CaptureRuntime
 from mintflow.infrastructure.persistence import (
     SqlAlchemyCaptureDraftRepository,
+    SqlAlchemyExchangeRateRepository,
     SqlAlchemyExpenseRepository,
 )
 from mintflow.infrastructure.persistence.models import (
@@ -43,6 +46,7 @@ NOW = datetime(2026, 8, 31, 23, 30, tzinfo=UTC)
 ORIGIN = "https://app.mintflow.test"
 SECRET = "W" * 43
 NBSP = "\u00a0"
+APPROX = f"\u2248{NBSP}"
 
 
 def _application(database_url: str) -> FastAPI:
@@ -299,3 +303,146 @@ async def test_presets_follow_the_users_calendar(
         ("Last 3 months", None),
     ]
     assert "date_from=2026-08-01&date_to=2026-08-31" in str(presets[1].attrs["href"])
+
+
+def _add_rates(session: Session) -> None:
+    SqlAlchemyExchangeRateRepository(session).save(
+        [
+            ExchangeRate(CurrencyCode("USD"), Decimal("1.25"), date(2026, 8, 28), "ECB"),
+            ExchangeRate(CurrencyCode("UAH"), Decimal("48"), date(2026, 8, 31), "NBU"),
+        ],
+        fetched_at=NOW,
+    )
+
+
+def _converted_month(session: Session, **preferences: str) -> None:
+    owner = _add_user(session, secret=SECRET, **preferences)
+    _add(session, owner, 1_000, date(2026, 8, 10), merchant="Market")
+    _add(session, owner, 3_000, date(2026, 8, 12), currency="USD", merchant="Market")  # 24 EUR
+    _add(session, owner, 10_000, date(2026, 8, 14), currency="BHD", merchant="Souq")
+
+
+@pytest.mark.anyio
+async def test_with_a_default_currency_and_rates_everything_is_converted_and_marked(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_rates(db_session)
+    _converted_month(db_session, default_currency="EUR")
+
+    response = await _page(_application(migrated_database_url))
+
+    assert response.status_code == 200
+    region = _region(response)
+    assert region.find("p", class_="answer").text == f"You spent {APPROX}34.00{NBSP}EUR"
+    notes = [note.text for note in region.find_all("p", class_="rates-note")]
+    assert notes == [
+        "\u2248 Converted into EUR at the exchange rates of Aug 28, 2026 (European Central Bank)."
+        " Past spending is converted at today's rates, so these totals can change slightly.",
+        f"Not included, no exchange rate: 10.000{NBSP}BHD.",
+    ]
+    # Every amount of the converted details carries the mark; Souq (BHD only) is not there.
+    bars = region.find_all("ol", class_="bars")
+    amounts = [
+        row.find("p").find_all("span")[-1].text for bars_ in bars for row in bars_.find_all("li")
+    ]
+    assert amounts and all(amount.startswith(APPROX) for amount in amounts)
+    assert "Souq" not in region.find("section", aria_labelledby="merchants-title").text
+    assert all(cell.text.startswith(APPROX) for cell in region.find("table").find_all("td"))
+    insight = region.find("ul", class_="insights").find_all("a")[0].text
+    assert insight.startswith(f"Your largest expense was 30.00{NBSP}USD ({APPROX}24.00{NBSP}EUR)")
+    # Links from converted figures open every currency's expenses.
+    category_link = region.find("section", aria_labelledby="categories-title").find("a")
+    assert "currency=" not in str(category_link.attrs["href"])
+
+    totals = region.find("ul", class_="currency-totals")
+    assert totals.find("a", aria_current="true").text == "All in EUR"
+    bhd = next(item for item in totals.find_all("li") if "BHD" in item.text)
+    assert "no exchange rate" in bhd.text
+    assert region.find("select", id="currency").find_all("option")[0].text == "All in EUR"
+
+
+@pytest.mark.anyio
+async def test_a_chosen_currency_shows_its_own_amounts_without_conversion(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_rates(db_session)
+    _converted_month(db_session, default_currency="EUR")
+
+    response = await _page(_application(migrated_database_url), "?currency=USD")
+
+    region = _region(response)
+    assert region.find("p", class_="answer").text == f"You spent 30.00{NBSP}USD"
+    assert region.find_all("p", class_="rates-note") == []
+    assert "\u2248" not in region.text
+    totals = region.find("ul", class_="currency-totals")
+    assert totals.find("a", aria_current="true").text == f"30.00{NBSP}USD"
+    back = totals.find_all("a")[0]
+    assert back.text == "All in EUR"
+    assert "currency=" not in str(back.attrs["href"])
+    assert "This view shows one currency without conversion." in region.text
+
+
+@pytest.mark.anyio
+async def test_without_rates_currencies_stay_separate_and_say_why(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _converted_month(db_session, default_currency="EUR")
+
+    response = await _page(_application(migrated_database_url))
+
+    region = _region(response)
+    assert region.find("p", class_="answer").text == f"You spent 10.00{NBSP}EUR"
+    assert "\u2248" not in region.text
+    assert region.find_all("p", class_="rates-note") == []
+    assert "Exchange rates are not available yet" in region.find("p", class_="hint").text
+    assert region.find("select", id="currency").find_all("option")[0].text == "Automatic"
+
+
+@pytest.mark.anyio
+async def test_without_a_default_currency_the_page_points_to_settings(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_rates(db_session)
+    _converted_month(db_session)
+
+    response = await _page(_application(migrated_database_url))
+
+    region = _region(response)
+    assert "Choose a currency to see its details." in region.text
+    assert "\u2248" not in region.text
+    hint = region.find("div", class_="currency-choice").find("p", class_="hint")
+    assert hint.text.startswith("To see all spending in one currency, choose a default currency")
+    assert hint.find("a").attrs["href"] == "/settings"
+
+
+@pytest.mark.anyio
+async def test_only_the_default_currency_needs_no_mark(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_rates(db_session)
+    owner = _add_user(db_session, secret=SECRET, default_currency="EUR")
+    _add(db_session, owner, 1_200, date(2026, 8, 20))
+
+    response = await _page(_application(migrated_database_url))
+
+    region = _region(response)
+    assert region.find("p", class_="answer").text == f"You spent 12.00{NBSP}EUR"
+    assert "\u2248" not in region.text
+    assert region.find_all("div", class_="currency-choice") == []
+
+
+@pytest.mark.anyio
+async def test_a_period_with_only_unconvertible_currencies_says_so(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_rates(db_session)
+    owner = _add_user(db_session, secret=SECRET, default_currency="EUR")
+    _add(db_session, owner, 10_000, date(2026, 8, 14), currency="BHD")
+
+    response = await _page(_application(migrated_database_url))
+
+    region = _region(response)
+    assert "No expenses in this period." not in region.text
+    assert region.find("p", class_="rates-note").text == (
+        f"Not included, no exchange rate: 10.000{NBSP}BHD."
+    )

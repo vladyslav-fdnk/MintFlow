@@ -1,10 +1,20 @@
+from collections.abc import Iterator
 from datetime import date
+from decimal import Decimal
 
 import pytest
 
+from mintflow.application.rates import ExchangeRate
 from mintflow.domain.capture import CurrencyCode, Money
 from mintflow.domain.user import Locale
-from mintflow.web.formatting import display_locale, format_date, format_money
+from mintflow.web.formatting import (
+    approximately,
+    display_locale,
+    format_date,
+    format_money,
+    rates_note,
+    use_language,
+)
 
 NBSP = "\u00a0"
 NARROW_NBSP = "\u202f"
@@ -44,3 +54,41 @@ def test_an_unset_or_unknown_locale_falls_back_to_english(locale: Locale | None)
 )
 def test_dates_follow_the_locale(locale: str, expected: str) -> None:
     assert format_date(date(2026, 9, 20), display_locale(Locale(locale))) == expected
+
+
+RATES = (
+    ExchangeRate(CurrencyCode("USD"), Decimal("1.25"), date(2026, 9, 23), "ECB"),
+    ExchangeRate(CurrencyCode("UAH"), Decimal("48"), date(2026, 9, 24), "NBU"),
+)
+
+
+@pytest.fixture
+def _english_afterwards() -> Iterator[None]:
+    yield
+    use_language("en")
+
+
+def test_a_converted_amount_is_marked_approximately() -> None:
+    assert approximately("24.00\u00a0EUR") == "\u2248\u00a024.00\u00a0EUR"
+
+
+def test_the_rates_note_gives_the_oldest_date_and_every_source() -> None:
+    assert rates_note(RATES, CurrencyCode("EUR"), display_locale(None)) == (
+        "\u2248 Converted into EUR at the exchange rates of Sep 23, 2026"
+        " (European Central Bank, National Bank of Ukraine)."
+    )
+
+
+@pytest.mark.usefixtures("_english_afterwards")
+def test_the_rates_note_in_russian() -> None:
+    use_language("ru")
+
+    note = rates_note(RATES, CurrencyCode("EUR"), display_locale(None))
+
+    assert note.startswith("\u2248 Пересчитано в EUR по курсам на 23 сент. 2026")
+    assert note.endswith("(Европейский центральный банк, Национальный банк Украины).")
+
+
+def test_the_rates_note_needs_a_rate() -> None:
+    with pytest.raises(ValueError):
+        rates_note((), CurrencyCode("EUR"), display_locale(None))

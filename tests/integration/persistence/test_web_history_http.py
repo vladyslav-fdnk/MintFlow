@@ -1,4 +1,5 @@
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID
 
 import pytest
@@ -9,6 +10,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from mintflow.application.authentication import hash_token
+from mintflow.application.rates import ExchangeRate
 from mintflow.config import Settings
 from mintflow.domain.capture import (
     CaptureDraft,
@@ -24,6 +26,7 @@ from mintflow.http.authentication import AUTHENTICATED_SESSION_COOKIE_NAME, Auth
 from mintflow.http.capture import CaptureRuntime
 from mintflow.infrastructure.persistence import (
     SqlAlchemyCaptureDraftRepository,
+    SqlAlchemyExchangeRateRepository,
     SqlAlchemyExpenseRepository,
 )
 from mintflow.infrastructure.persistence.models import UserRecord, WebSessionRecord
@@ -273,3 +276,52 @@ async def test_a_new_user_is_told_how_to_add_an_expense(
 
     assert response.status_code == 200
     assert "No expenses yet." in response.text
+
+
+def _seed_currencies(session: Session, **preferences: str) -> None:
+    SqlAlchemyExchangeRateRepository(session).save(
+        [ExchangeRate(CurrencyCode("USD"), Decimal("1.25"), date(2026, 8, 28), "ECB")],
+        fetched_at=NOW,
+    )
+    owner = _add_user(session, secret=SECRET, **preferences)
+    _add(session, owner, 1_000, date(2026, 8, 3), merchant="Euro Cafe")
+    _add(session, owner, 3_000, date(2026, 8, 2), currency="USD", merchant="Dollar Diner")
+    _add(session, owner, 10_000, date(2026, 8, 1), currency="BHD", merchant="Souq")
+
+
+def _amount_cells(response: Response) -> dict[str, Element]:
+    return {row.find_all("td")[1].text: row.find("td", class_="amount") for row in _rows(response)}
+
+
+@pytest.mark.anyio
+async def test_rows_in_another_currency_show_the_converted_amount_and_its_rates(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _seed_currencies(db_session, default_currency="EUR")
+
+    response = await _page(_application(migrated_database_url))
+
+    cells = _amount_cells(response)
+    converted = cells["Dollar Diner"].find("span", class_="converted")
+    assert converted.text == "\u2248\u00a024.00\u00a0EUR"
+    assert cells["Dollar Diner"].text.startswith("30.00\u00a0USD")
+    # Its own currency, and a currency without a rate, show only their own amount.
+    assert cells["Euro Cafe"].find_all("span", class_="converted") == []
+    assert cells["Souq"].find_all("span", class_="converted") == []
+    note = parse_html(response.text).find("p", class_="rates-note")
+    assert note.text == (
+        "\u2248 Converted into EUR at the exchange rates of Aug 28, 2026 (European Central Bank)."
+    )
+
+
+@pytest.mark.anyio
+async def test_without_a_default_currency_history_rows_are_not_converted(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _seed_currencies(db_session)
+
+    response = await _page(_application(migrated_database_url))
+
+    assert len(_rows(response)) == 3
+    assert "\u2248" not in response.text
+    assert parse_html(response.text).find_all("p", class_="rates-note") == []

@@ -40,6 +40,9 @@ class ExchangeRates:
         rate = self.rates.get(currency.value)
         return rate.units_per_eur if rate is not None else None
 
+    def has_rate(self, currency: CurrencyCode) -> bool:
+        return self._units_per_eur(currency) is not None
+
     def can_convert(self, source: CurrencyCode, target: CurrencyCode) -> bool:
         return source == target or (
             self._units_per_eur(source) is not None and self._units_per_eur(target) is not None

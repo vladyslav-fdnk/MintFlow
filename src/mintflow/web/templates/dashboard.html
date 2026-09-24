@@ -13,9 +13,11 @@
     <p class="answer-meta">{{ detail.count }}{% if detail.comparison %}<span class="answer-comparison">{{ detail.comparison }}</span>{% endif %}</p>
     {% elif view.selection_required %}
     <p class="answer-meta">{{ _("Choose a currency to see its details.") }}</p>
-    {% elif not onboarding %}
+    {% elif not onboarding and not view.unconverted_note %}
     <p class="answer-meta">{{ _("No expenses in this period.") }}</p>
     {% endif %}
+    {% if detail and view.rates_note %}<p class="rates-note">{{ view.rates_note }}</p>{% endif %}
+    {% if view.unconverted_note %}<p class="rates-note">{{ view.unconverted_note }}</p>{% endif %}
   </div>
 
   {% if invalid_filters %}
@@ -119,23 +121,32 @@
       <div class="field">
         <label for="currency">{{ _("Currency") }}</label>
         <select id="currency" name="currency">
-          <option value="">{{ _("Automatic") }}</option>
+          <option value="">{{ view.all_label }}</option>
           {% for code in view.currency_options %}
-          <option value="{{ code }}"{% if code == view.currency %} selected{% endif %}>{{ code }}</option>
+          <option value="{{ code }}"{% if code == view.currency and not view.converted %} selected{% endif %}>{{ code }}</option>
           {% endfor %}
         </select>
       </div>
       <button type="submit" class="button">{{ _("Show") }}</button>
     </form>
-    {% if view.currencies|length > 1 %}
+    {% if view.show_currency_choice %}
     <div class="currency-choice">
       <h3 id="currencies-title">{{ _("Totals by currency") }}</h3>
       <ul class="currency-totals" aria-labelledby="currencies-title">
+        {% if view.converted_href %}
+        <li><a class="chip" href="{{ view.converted_href }}"{% if view.converted %} aria-current="true"{% endif %}>{{ view.all_label }}</a></li>
+        {% endif %}
         {% for line in view.currencies %}
-        <li><a class="chip" href="{{ line.href }}"{% if line.selected %} aria-current="true"{% endif %}>{{ line.total }}</a> <span class="muted">{{ line.count }}</span></li>
+        <li><a class="chip" href="{{ line.href }}"{% if line.selected %} aria-current="true"{% endif %}>{{ line.total }}</a> <span class="muted">{{ line.count }}{% if line.no_rate %} · {{ _("no exchange rate") }}{% endif %}</span></li>
         {% endfor %}
       </ul>
-      <p class="hint">{{ _("Amounts in different currencies are never added together or converted.") }}</p>
+      {% if view.needs_default_currency %}
+      <p class="hint">{{ _("To see all spending in one currency, choose a default currency in") }} <a href="/settings">{{ _("Settings") }}</a>.</p>
+      {% elif view.rates_missing %}
+      <p class="hint">{{ _("Exchange rates are not available yet, so each currency is shown on its own.") }}</p>
+      {% elif not view.converted %}
+      <p class="hint">{{ _("This view shows one currency without conversion.") }}</p>
+      {% endif %}
     </div>
     {% endif %}
   </section>

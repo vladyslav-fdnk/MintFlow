@@ -45,6 +45,7 @@
 {% endif %}
 
 {% if view.rows %}
+{% if view.rates_note %}<p class="rates-note">{{ view.rates_note }}</p>{% endif %}
 <table class="history">
   <caption class="visually-hidden">{{ _("Expenses, newest first") }}</caption>
   <thead>
@@ -61,7 +62,7 @@
       <td><a href="{{ row.href }}">{{ row.date }}</a></td>
       <td>{% if row.merchant %}{{ row.merchant }}{% else %}<span class="muted">{{ _("No merchant") }}</span>{% endif %}</td>
       <td>{{ row.category }}</td>
-      <td class="amount">{{ row.amount }}</td>
+      <td class="amount">{{ row.amount }}{% if row.converted %}<span class="converted">{{ row.converted }}</span>{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>
