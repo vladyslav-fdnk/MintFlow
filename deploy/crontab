@@ -1,0 +1,13 @@
+# MintFlow's scheduled jobs (docs/operations_design.md, O5). Install for the deploy user with
+#   crontab /srv/mintflow/crontab
+# Times are UTC: the server's clock runs in UTC. Output goes to the journal (journalctl -t mintflow).
+# Each job pings its Healthchecks.io check only on success; see healthchecks.env.example.
+PATH=/usr/local/bin:/usr/bin:/bin
+M=/srv/mintflow
+
+30 2 * * * $M/run-job.sh BACKUP $M/backup.sh 2>&1 | logger -t mintflow
+10 3 * * * $M/run-job.sh AUTH_CLEANUP $M/mintflow-command.sh authentication_retention_cleanup 2>&1 | logger -t mintflow
+20 3 * * * $M/run-job.sh TELEGRAM_CLEANUP $M/mintflow-command.sh telegram_retention_cleanup 2>&1 | logger -t mintflow
+0 6 * * * $M/run-job.sh EXCHANGE_RATES $M/mintflow-command.sh refresh_exchange_rates 2>&1 | logger -t mintflow
+30 15 * * * $M/run-job.sh EXCHANGE_RATES $M/mintflow-command.sh refresh_exchange_rates 2>&1 | logger -t mintflow
+0 8 * * * $M/run-job.sh DISK $M/check-disk.sh 2>&1 | logger -t mintflow

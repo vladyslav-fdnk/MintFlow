@@ -531,7 +531,7 @@ tasks:
   - id: OPS-03
     title: "Scheduled Jobs, Telegram Webhook, Dead Man's Switches"
     file: docs/tasks/OPS-03-scheduled-jobs-and-webhook.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - OPS-02

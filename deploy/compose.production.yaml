@@ -4,6 +4,7 @@
 #   docker compose -f compose.production.yaml pull
 #   docker compose -f compose.production.yaml run --rm migrate
 #   docker compose -f compose.production.yaml up -d
+#   ./mintflow-command.sh register_telegram_webhook
 # Roll back by setting MINTFLOW_IMAGE_TAG to the previous commit SHA and running `up -d` again;
 # migrations stay backward compatible with the previous release (AGENTS.md).
 
