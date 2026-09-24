@@ -1,9 +1,8 @@
-# exchange-rates is complete: dashboard totals and history rows in the user's default currency
-# at today's ECB and NBU rates (docs/exchange_rates_design.md). The daily refresh still needs a
-# scheduler entry, which belongs to the operations sprint.
-# All earlier sprints are complete except RCPT-07, which waits for consented sample receipts
-# to run the Azure evaluation.
-sprint: exchange-rates
+# operations is the active sprint: the first production deployment on one VPS with Docker
+# Compose, Resend email, scheduled jobs, encrypted backups, and basic monitoring
+# (docs/operations_design.md, approved). exchange-rates and every earlier sprint are complete
+# except RCPT-07, which waits for consented sample receipts to run the Azure evaluation.
+sprint: operations
 
 tasks:
   - id: AUTH-03
@@ -516,3 +515,38 @@ tasks:
     human_approval: approved
     depends_on:
       - FX-02
+  - id: OPS-01
+    title: "Production Settings, SMTP Email, Trusted Proxy"
+    file: docs/tasks/OPS-01-production-settings-email-proxy.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+  - id: OPS-02
+    title: "Production Image, Compose, Caddy, Image Registry"
+    file: docs/tasks/OPS-02-production-image-and-compose.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - OPS-01
+  - id: OPS-03
+    title: "Scheduled Jobs, Telegram Webhook, Dead Man's Switches"
+    file: docs/tasks/OPS-03-scheduled-jobs-and-webhook.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - OPS-02
+  - id: OPS-04
+    title: "Encrypted Backups and Rehearsed Restore"
+    file: docs/tasks/OPS-04-backups-and-restore.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - OPS-02
+  - id: OPS-05
+    title: "Runbook and First Production Deploy"
+    file: docs/tasks/OPS-05-runbook-and-first-deploy.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - OPS-03
+      - OPS-04
