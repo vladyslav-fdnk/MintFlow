@@ -30,11 +30,31 @@ def _scaled(value: int, maximum: int) -> float:
     return max(round(value / maximum * VIEW_SIZE, 2), MIN_VISIBLE)
 
 
-def columns(values: Sequence[int]) -> tuple[Column, ...]:
-    """One column per value, left to right, bottom-aligned, scaled to the largest value."""
+def nice_ceiling(value: int) -> int:
+    """The smallest 1, 2, 2.5, or 5 times a power of ten that is at least ``value``.
+
+    Used as the top of a value axis, so its labels are round numbers.
+    """
+    if value <= 0:
+        return 0
+    magnitude = 1
+    while magnitude * 10 <= value:
+        magnitude *= 10
+    for step in (1, 2, 2.5, 5, 10):
+        candidate = int(step * magnitude)
+        if candidate >= value:
+            return candidate
+    return 10 * magnitude
+
+
+def columns(values: Sequence[int], *, maximum: int | None = None) -> tuple[Column, ...]:
+    """One column per value, left to right, bottom-aligned, scaled to ``maximum``.
+
+    ``maximum`` defaults to the largest value; a rounded axis top can be passed instead.
+    """
     if not values:
         return ()
-    maximum = max(values)
+    maximum = max(values) if maximum is None else maximum
     slot = VIEW_SIZE / len(values)
     width = round(slot * (1 - COLUMN_GAP_RATIO), 2)
     result = []
@@ -55,3 +75,36 @@ def bar_lengths(values: Sequence[int]) -> tuple[float, ...]:
     """Horizontal bar lengths, the largest value spanning the full width."""
     maximum = max(values, default=0)
     return tuple(_scaled(value, maximum) for value in values)
+
+
+# A circle of this radius has a circumference of 100, so dash lengths are percentages.
+DONUT_RADIUS: Final = 15.9155
+# Space left between neighbouring slices, in percent of the circle.
+DONUT_GAP: Final = 0.6
+
+
+@dataclass(frozen=True, slots=True)
+class Slice:
+    dasharray: str
+    dashoffset: float
+
+
+def donut(basis_points: Sequence[int]) -> tuple[Slice, ...]:
+    """Slices for shares in basis points, clockwise from the top, drawn as circle strokes."""
+    total = sum(basis_points)
+    if total <= 0:
+        return ()
+    slices = []
+    start = 0.0
+    for share in basis_points:
+        length = share / total * 100
+        drawn = max(length - DONUT_GAP, 0.0) if len(basis_points) > 1 else length
+        slices.append(
+            Slice(
+                dasharray=f"{drawn:.3f} {100 - drawn:.3f}",
+                # A stroke starts at three o'clock; offset 25 moves it to twelve.
+                dashoffset=round(25 - start, 3),
+            )
+        )
+        start += length
+    return tuple(slices)

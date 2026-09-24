@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from mintflow.web import dashboard, expense_detail, expenses, pages, settings, sign_in
-from mintflow.web.rendering import STATIC_PATH, static_files
+from mintflow.web.rendering import STATIC_PATH, RequestPreferencesMiddleware, static_files
 
 
 def install_web(application: FastAPI) -> None:
@@ -18,3 +18,4 @@ def install_web(application: FastAPI) -> None:
     application.add_exception_handler(pages.SignInRequired, pages.sign_in_required)
     application.add_exception_handler(StarletteHTTPException, pages.http_error)
     application.add_exception_handler(Exception, pages.server_error)
+    application.add_middleware(RequestPreferencesMiddleware)

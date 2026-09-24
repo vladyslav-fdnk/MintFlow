@@ -1,0 +1,752 @@
+# Russian translations for MintFlow.
+# Copyright (C) 2026 ORGANIZATION
+# This file is distributed under the same license as the MintFlow project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2026.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: MintFlow VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2026-09-24 02:54+0200\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: ru\n"
+"Language-Team: ru <LL@li.org>\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || "
+"n%100>=20) ? 1 : 2);\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.18.0\n"
+
+#: templates/expense_detail.html:12
+msgid "Added from"
+msgstr "Добавлено через"
+
+#: templates/expenses.html:20
+msgid "All categories"
+msgstr "Все категории"
+
+#: templates/expenses.html:29
+msgid "All currencies"
+msgstr "Все валюты"
+
+#: templates/dashboard.html:85 templates/expense_detail.html:7 templates/expense_edit.html:20
+#: templates/expenses.html:55
+msgid "Amount"
+msgstr "Сумма"
+
+#: templates/dashboard.html:137
+msgid "Amounts in different currencies are never added together or converted."
+msgstr "Суммы в разных валютах никогда не складываются и не конвертируются."
+
+#: templates/dashboard.html:121
+msgid "Automatic"
+msgstr "Автоматически"
+
+#: templates/expense_deleted.html:8 templates/expense_detail.html:4
+msgid "Back to expenses"
+msgstr "К расходам"
+
+#: templates/settings_link_status.html:14
+msgid "Back to settings"
+msgstr "К настройкам"
+
+#: templates/expense_edit.html:8
+msgid "Back to the expense"
+msgstr "К расходу"
+
+#: templates/expenses.html:44
+msgid "Back to the newest expenses"
+msgstr "К последним расходам"
+
+#: templates/expense_edit.html:61 templates/settings_link_status.html:11
+msgid "Cancel"
+msgstr "Отмена"
+
+#: templates/dashboard.html:27
+msgid "Capture expenses in Telegram, understand them here."
+msgstr "Записывайте расходы в Telegram, а разбирайтесь в них здесь."
+
+#: templates/expense_detail.html:10 templates/expense_edit.html:46 templates/expenses.html:18
+#: templates/expenses.html:54
+msgid "Category"
+msgstr "Категория"
+
+#: expense_detail.py:70
+msgid "Changes saved."
+msgstr "Изменения сохранены."
+
+#: templates/dashboard.html:43
+msgid "Chart view"
+msgstr "Вид графика"
+
+#: templates/sign_in_sent.html:3 templates/sign_in_sent.html:6
+msgid "Check your email"
+msgstr "Проверьте почту"
+
+#: templates/dashboard.html:34
+msgid "Check your timezone and default currency in"
+msgstr "Проверьте часовой пояс и валюту по умолчанию в разделе"
+
+#: expense_form.py:146
+msgid "Choose a category."
+msgstr "Выберите категорию."
+
+#: settings.py:221
+msgid "Choose a currency from the list."
+msgstr "Выберите валюту из списка."
+
+#: templates/dashboard.html:14
+msgid "Choose a currency to see its details."
+msgstr "Выберите валюту, чтобы увидеть подробности."
+
+#: expense_form.py:81
+msgid "Choose a currency."
+msgstr "Выберите валюту."
+
+#: settings.py:226
+msgid "Choose a format from the list."
+msgstr "Выберите формат из списка."
+
+#: settings.py:228
+msgid "Choose a language from the list."
+msgstr "Выберите язык из списка."
+
+#: settings.py:216
+msgid "Choose a timezone from the list."
+msgstr "Выберите часовой пояс из списка."
+
+#: templates/expenses.html:37
+msgid "Clear filters"
+msgstr "Сбросить фильтры"
+
+#: dashboard.py:411
+msgid "Columns"
+msgstr "Столбцы"
+
+#: templates/settings_link.html:7
+msgid "Come back here and confirm the account."
+msgstr "Вернитесь сюда и подтвердите аккаунт."
+
+#: templates/settings_link_status.html:10
+msgid "Confirm"
+msgstr "Подтвердить"
+
+#: templates/expense_detail.html:13
+msgid "Confirmed"
+msgstr "Подтверждено"
+
+#: templates/dashboard.html:32 templates/settings.html:73
+msgid "Connect Telegram"
+msgstr "Подключить Telegram"
+
+#: templates/settings.html:71
+msgid "Connect Telegram to add expenses by sending the bot an amount or a receipt photo."
+msgstr "Подключите Telegram, чтобы добавлять расходы: отправьте боту сумму или фото чека."
+
+#: templates/settings_link_status.html:8
+#, python-brace-format
+msgid "Connect the Telegram account {name}?"
+msgstr "Подключить аккаунт Telegram {name}?"
+
+#: templates/settings.html:65
+#, python-brace-format
+msgid "Connected as {name} since {date}."
+msgstr "Подключён как {name} с {date}."
+
+#: templates/dashboard.html:119 templates/expense_edit.html:25 templates/expenses.html:27
+msgid "Currency"
+msgstr "Валюта"
+
+#: templates/base.html:33 templates/base.html:47
+msgid "Dark theme"
+msgstr "Тёмная тема"
+
+#: templates/base.html:25 templates/dashboard.html:3
+msgid "Dashboard"
+msgstr "Обзор"
+
+#: templates/dashboard.html:85 templates/expense_detail.html:8 templates/expense_edit.html:35
+#: templates/expenses.html:52
+msgid "Date"
+msgstr "Дата"
+
+#: templates/settings.html:32
+msgid "Decides what \"today\" and \"this month\" mean on your dashboard."
+msgstr "Определяет, что считать «сегодня» и «этим месяцем» в обзоре."
+
+#: templates/settings.html:36
+msgid "Default currency"
+msgstr "Валюта по умолчанию"
+
+#: templates/expense_detail.html:18
+msgid "Delete"
+msgstr "Удалить"
+
+#: templates/expense_delete.html:2 templates/expense_delete.html:8
+msgid "Delete expense"
+msgstr "Удалить расход"
+
+#: templates/expense_delete.html:4
+msgid "Delete this expense?"
+msgstr "Удалить этот расход?"
+
+#: templates/settings_disconnect.html:8
+msgid "Disconnect"
+msgstr "Отключить"
+
+#: templates/settings.html:68 templates/settings_disconnect.html:2
+msgid "Disconnect Telegram"
+msgstr "Отключить Telegram"
+
+#: templates/settings_disconnect.html:4
+msgid "Disconnect Telegram?"
+msgstr "Отключить Telegram?"
+
+#: templates/expense_detail.html:17
+msgid "Edit"
+msgstr "Изменить"
+
+#: templates/expense_edit.html:2 templates/expense_edit.html:9
+msgid "Edit expense"
+msgstr "Изменение расхода"
+
+#: formatting.py:205
+msgid "Education"
+msgstr "Образование"
+
+#: templates/sign_in.html:14
+msgid "Email address"
+msgstr "Адрес электронной почты"
+
+#: templates/sign_in.html:22
+msgid "Email me a sign-in link"
+msgstr "Прислать ссылку для входа"
+
+#: expense_form.py:124
+msgid "Enter a date."
+msgstr "Укажите дату."
+
+#: expense_form.py:97
+msgid "Enter an amount greater than zero and within the supported range."
+msgstr "Укажите сумму больше нуля и в допустимых пределах."
+
+#: expense_form.py:86
+#, python-brace-format
+msgid "Enter an amount like {example}."
+msgstr "Укажите сумму, например {example}."
+
+#: sign_in.py:102
+msgid "Enter an email address like name@example.com."
+msgstr "Укажите адрес вида name@example.com."
+
+#: sign_in.py:90
+msgid "Enter your email address."
+msgstr "Укажите адрес электронной почты."
+
+#: formatting.py:203
+msgid "Entertainment"
+msgstr "Развлечения"
+
+#: templates/expense_detail.html:2 templates/expense_detail.html:5
+msgid "Expense"
+msgstr "Расход"
+
+#: templates/expense_deleted.html:2 templates/expense_deleted.html:4
+msgid "Expense deleted"
+msgstr "Расход удалён"
+
+#: expense_detail.py:71
+msgid "Expense restored."
+msgstr "Расход восстановлен."
+
+#: templates/base.html:26 templates/expenses.html:2 templates/expenses.html:4
+msgid "Expenses"
+msgstr "Расходы"
+
+#: templates/expenses.html:49
+msgid "Expenses, newest first"
+msgstr "Расходы, сначала новые"
+
+#: templates/expenses.html:8
+msgid "Filter expenses"
+msgstr "Фильтр расходов"
+
+#: formatting.py:197
+msgid "Food & Dining"
+msgstr "Кафе и рестораны"
+
+#: templates/dashboard.html:111 templates/expenses.html:10
+msgid "From"
+msgstr "С"
+
+#: formatting.py:206
+msgid "Gifts"
+msgstr "Подарки"
+
+#: templates/error.html:16
+msgid "Go to the dashboard"
+msgstr "Перейти к обзору"
+
+#: formatting.py:196
+msgid "Groceries"
+msgstr "Продукты"
+
+#: formatting.py:202
+msgid "Health"
+msgstr "Здоровье"
+
+#: dashboard.py:237
+#, python-brace-format
+msgid "Highest: {label}, {amount}."
+msgstr "Больше всего: {label}, {amount}."
+
+#: formatting.py:200
+msgid "Housing"
+msgstr "Жильё"
+
+#: templates/sign_in_sent.html:7
+msgid ""
+"If the address can receive email, a sign-in link will arrive shortly. The link works once and "
+"expires soon."
+msgstr ""
+"Если на этот адрес приходят письма, ссылка для входа скоро придёт. Она сработает один раз и "
+"вскоре перестанет действовать."
+
+#: templates/dashboard.html:145
+msgid "Insights"
+msgstr "Выводы"
+
+#: templates/expense_deleted.html:5
+msgid "It no longer counts in your history or dashboard."
+msgstr "Он больше не учитывается в истории и обзоре."
+
+#: templates/expense_delete.html:6
+msgid "It will disappear from your history and dashboard. You can undo this right after."
+msgstr "Он пропадёт из истории и обзора. Сразу после этого удаление можно отменить."
+
+#: templates/expense_delete.html:9
+msgid "Keep it"
+msgstr "Оставить"
+
+#: templates/settings_disconnect.html:9
+msgid "Keep it connected"
+msgstr "Оставить подключённым"
+
+#: templates/settings.html:17
+msgid "Language"
+msgstr "Язык"
+
+#: dashboard.py:358
+msgid "Last 3 months"
+msgstr "Последние 3 месяца"
+
+#: templates/expense_detail.html:14
+msgid "Last changed"
+msgstr "Последнее изменение"
+
+#: dashboard.py:357
+msgid "Last month"
+msgstr "Прошлый месяц"
+
+#: templates/expenses.html:80
+msgid "Load more"
+msgstr "Показать ещё"
+
+#: templates/expenses.html:81
+msgid "Loading…"
+msgstr "Загрузка…"
+
+#: templates/base.html:23
+msgid "Main"
+msgstr "Главное меню"
+
+#: templates/expense_detail.html:9 templates/expenses.html:53
+msgid "Merchant"
+msgstr "Продавец"
+
+#: templates/expense_edit.html:40
+msgid "Merchant or description"
+msgstr "Продавец или описание"
+
+#: templates/base.html:22
+msgid "MintFlow, dashboard"
+msgstr "MintFlow, обзор"
+
+#: templates/dashboard.html:16
+msgid "No expenses in this period."
+msgstr "За этот период расходов нет."
+
+#: templates/expenses.html:70
+msgid "No expenses match these filters."
+msgstr "Под эти фильтры расходы не подходят."
+
+#: templates/expenses.html:72
+msgid "No expenses yet. Send the bot an amount or a receipt photo to add one."
+msgstr "Расходов пока нет. Отправьте боту сумму или фото чека, чтобы добавить первый."
+
+#: templates/expenses.html:62
+msgid "No merchant"
+msgstr "Без продавца"
+
+#: templates/sign_in.html:23
+msgid "No password needed. We will email you a link that signs you in on this device."
+msgstr "Пароль не нужен. Мы пришлём ссылку, по которой вы войдёте на этом устройстве."
+
+#: dashboard.py:235
+msgid "No spending in this period."
+msgstr "За этот период трат нет."
+
+#: templates/expense_detail.html:9
+msgid "None"
+msgstr "Нет"
+
+#: templates/settings.html:38
+msgid "None: always ask"
+msgstr "Нет, всегда спрашивать"
+
+#: templates/expense_detail.html:11 templates/expense_edit.html:55
+msgid "Note"
+msgstr "Заметка"
+
+#: templates/error.html:11
+msgid "Nothing was lost. Please try again in a moment."
+msgstr "Ничего не потеряно. Попробуйте ещё раз чуть позже."
+
+#: templates/settings.html:47
+msgid "Number and date format"
+msgstr "Формат чисел и дат"
+
+#: templates/settings_link.html:5
+msgid "Open Telegram"
+msgstr "Открыть Telegram"
+
+#: templates/dashboard.html:30 templates/settings.html:67
+msgid "Open the bot"
+msgstr "Открыть бота"
+
+#: templates/settings_link.html:4
+msgid "Open the bot in Telegram and press Start. The link works once, for five minutes."
+msgstr "Откройте бота в Telegram и нажмите «Старт». Ссылка сработает один раз в течение пяти минут."
+
+#: templates/expense_edit.html:42
+msgid "Optional. Leave empty to remove it."
+msgstr "Необязательно. Оставьте пустым, чтобы убрать."
+
+#: dashboard.py:330 formatting.py:207
+msgid "Other"
+msgstr "Другое"
+
+#: templates/error.html:3 templates/error.html:7
+msgid "Page not found"
+msgstr "Страница не найдена"
+
+#: templates/dashboard.html:98
+msgid "Period and currency"
+msgstr "Период и валюта"
+
+#: dashboard.py:411
+msgid "Pie"
+msgstr "Круговая"
+
+#: templates/expense_edit.html:14
+msgid "Please correct the highlighted fields."
+msgstr "Исправьте отмеченные поля."
+
+#: templates/dashboard.html:100
+msgid "Quick periods"
+msgstr "Быстрый выбор периода"
+
+#: templates/settings.html:49
+msgid "Same as the language"
+msgstr "Как у языка"
+
+#: templates/expense_edit.html:60
+msgid "Save changes"
+msgstr "Сохранить изменения"
+
+#: templates/settings.html:56
+msgid "Save settings"
+msgstr "Сохранить настройки"
+
+#: templates/dashboard.html:29
+msgid "Send the bot an amount like 12.50, or a photo of a receipt."
+msgstr "Отправьте боту сумму, например 12.50, или фото чека."
+
+#: templates/base.html:27 templates/dashboard.html:34 templates/settings.html:2
+#: templates/settings.html:8
+msgid "Settings"
+msgstr "Настройки"
+
+#: settings.py:74
+msgid "Settings saved."
+msgstr "Настройки сохранены."
+
+#: formatting.py:199
+msgid "Shopping"
+msgstr "Покупки"
+
+#: templates/dashboard.html:127 templates/expenses.html:35
+msgid "Show"
+msgstr "Показать"
+
+#: templates/dashboard.html:82
+msgid "Show as a table"
+msgstr "Показать таблицей"
+
+#: templates/sign_in.html:3
+msgid "Sign in"
+msgstr "Вход"
+
+#: templates/base.html:36 templates/base.html:48
+msgid "Sign out"
+msgstr "Выйти"
+
+#: templates/base.html:18
+msgid "Skip to content"
+msgstr "Перейти к содержимому"
+
+#: templates/error.html:3 templates/error.html:10 templates/error.html:13
+msgid "Something went wrong"
+msgstr "Что-то пошло не так"
+
+#: templates/dashboard.html:42 templates/dashboard.html:154
+msgid "Spending by category"
+msgstr "Траты по категориям"
+
+#: dashboard.py:244
+msgid "Spending by day"
+msgstr "Траты по дням"
+
+#: dashboard.py:244
+msgid "Spending by month"
+msgstr "Траты по месяцам"
+
+#: templates/settings_link_status.html:16
+msgid "Start again"
+msgstr "Начать заново"
+
+#: expense_detail.py:65 templates/settings.html:61 templates/settings_link.html:2
+msgid "Telegram"
+msgstr "Telegram"
+
+#: settings.py:75
+msgid "Telegram connected."
+msgstr "Telegram подключён."
+
+#: settings.py:391
+msgid "Telegram could not be connected. Please start again."
+msgstr "Не удалось подключить Telegram. Начните заново."
+
+#: settings.py:76
+msgid "Telegram disconnected."
+msgstr "Telegram отключён."
+
+#: templates/settings_link_status.html:14
+msgid "Telegram is connected."
+msgstr "Telegram подключён."
+
+#: templates/settings.html:63
+msgid "Telegram is not set up on this server."
+msgstr "Telegram на этом сервере не настроен."
+
+#: expense_detail.py:66
+msgid "Telegram receipt"
+msgstr "Чек в Telegram"
+
+#: templates/settings_disconnect.html:5
+#, python-brace-format
+msgid "The bot will stop accepting expenses from {name} and will no longer show your account."
+msgstr "Бот перестанет принимать расходы от {name} и больше не будет показывать ваш аккаунт."
+
+#: expense_form.py:129
+msgid "The date can be at most one day in the future."
+msgstr "Дата может быть не дальше чем на день вперёд."
+
+#: expense_detail.py:224 settings.py:260
+msgid "The form could not be read. Please try again."
+msgstr "Не удалось прочитать форму. Попробуйте ещё раз."
+
+#: expense_detail.py:258
+msgid "These values could not be saved. Please check them and try again."
+msgstr "Не удалось сохранить эти значения. Проверьте их и попробуйте ещё раз."
+
+#: templates/settings_link_status.html:16
+msgid "This link has expired."
+msgstr "Срок действия ссылки истёк."
+
+#: dashboard.py:356
+msgid "This month"
+msgstr "Этот месяц"
+
+#: templates/error.html:8
+msgid "This page does not exist, or it is not yours to see."
+msgstr "Такой страницы нет, или она вам недоступна."
+
+#: templates/error.html:14
+msgid "This request could not be completed."
+msgstr "Не удалось выполнить запрос."
+
+#: templates/expenses.html:41
+msgid ""
+"Those filters are not valid, so all expenses are shown. The start date must not be after the end "
+"date."
+msgstr ""
+"Фильтры заданы неверно, поэтому показаны все расходы. Дата начала не может быть позже даты "
+"окончания."
+
+#: templates/dashboard.html:21
+msgid "Those filters are not valid, so this month is shown. Choose both dates, at most 366 days apart."
+msgstr ""
+"Фильтры заданы неверно, поэтому показан текущий месяц. Укажите обе даты, не дальше 366 дней друг "
+"от друга."
+
+#: templates/settings.html:26
+msgid "Timezone"
+msgstr "Часовой пояс"
+
+#: templates/dashboard.html:115 templates/expenses.html:14
+msgid "To"
+msgstr "По"
+
+#: templates/dashboard.html:154
+msgid "Top merchants"
+msgstr "Главные продавцы"
+
+#: templates/dashboard.html:131
+msgid "Totals by currency"
+msgstr "Итоги по валютам"
+
+#: templates/base.html:40
+msgid "Track less."
+msgstr "Меньше учёта."
+
+#: templates/sign_in.html:10
+msgid "Track less. Understand more."
+msgstr "Меньше учёта. Больше понимания."
+
+#: formatting.py:198
+msgid "Transport"
+msgstr "Транспорт"
+
+#: formatting.py:204
+msgid "Travel"
+msgstr "Путешествия"
+
+#: formatting.py:208
+msgid "Uncategorized"
+msgstr "Без категории"
+
+#: templates/base.html:40
+msgid "Understand more."
+msgstr "Больше понимания."
+
+#: templates/expense_deleted.html:7
+msgid "Undo"
+msgstr "Отменить удаление"
+
+#: templates/sign_in_sent.html:8
+msgid "Use a different address"
+msgstr "Указать другой адрес"
+
+#: expense_form.py:138 expense_form.py:151
+#, python-brace-format
+msgid "Use at most {limit} characters."
+msgstr "Не больше {limit} символов."
+
+#: templates/settings.html:43
+msgid ""
+"Used when you type an amount without a currency. Amounts in different currencies are never "
+"converted or added together."
+msgstr ""
+"Используется, если сумма введена без валюты. Суммы в разных валютах никогда не конвертируются и "
+"не складываются."
+
+#: formatting.py:201
+msgid "Utilities"
+msgstr "Коммунальные услуги"
+
+#: templates/settings_link_status.html:6
+msgid "Waiting for Telegram…"
+msgstr "Ждём Telegram…"
+
+#: expense_detail.py:67
+msgid "Web"
+msgstr "Веб"
+
+#: templates/dashboard.html:26
+msgid "Welcome to MintFlow"
+msgstr "Добро пожаловать в MintFlow"
+
+#: templates/dashboard.html:11
+msgid "You spent"
+msgstr "Вы потратили"
+
+#: templates/settings.html:11
+msgid "Your conventions"
+msgstr "Ваши настройки"
+
+#: templates/settings_disconnect.html:6
+msgid "Your expenses stay. You can connect again at any time."
+msgstr "Расходы останутся. Подключиться снова можно в любой момент."
+
+#: dashboard.py:272
+#, python-brace-format
+msgid "Your largest category was {category} at {amount}, representing {share} of spending."
+msgstr "Больше всего ушло на «{category}»: {amount}, это {share} всех трат."
+
+#: dashboard.py:287
+#, python-brace-format
+msgid "Your largest expense was {amount} at {merchant} on {date}."
+msgstr "Самый крупный расход — {amount} в {merchant}, {date}."
+
+#: dashboard.py:291
+#, python-brace-format
+msgid "Your largest expense was {amount} on {date}."
+msgstr "Самый крупный расход — {amount}, {date}."
+
+#: templates/dashboard.html:59
+msgid "in total"
+msgstr "всего"
+
+#: templates/sign_in.html:9
+msgid "sign in"
+msgstr "вход"
+
+#: templates/settings_link_status.html:8
+msgid "that you just used"
+msgstr "который вы только что использовали"
+
+#: templates/settings.html:65 templates/settings_disconnect.html:5
+msgid "your Telegram account"
+msgstr "вашего аккаунта Telegram"
+
+#: dashboard.py:183
+#, python-brace-format
+msgid "{count} expense"
+msgid_plural "{count} expenses"
+msgstr[0] "{count} расход"
+msgstr[1] "{count} расхода"
+msgstr[2] "{count} расходов"
+
+#: expense_form.py:89
+#, python-brace-format
+msgid "{currency} amounts have at most {digits} decimal places."
+msgstr "У сумм в {currency} не больше {digits} знаков после запятой."
+
+#: dashboard.py:212
+#, python-brace-format
+msgid "{current}: down {change} compared with {previous}."
+msgstr "{current}: на {change} меньше, чем за {previous}."
+
+#: dashboard.py:198
+#, python-brace-format
+msgid "{current}: no change compared with {previous}."
+msgstr "{current}: столько же, сколько за {previous}."
+
+#: dashboard.py:210
+#, python-brace-format
+msgid "{current}: up {change} compared with {previous}."
+msgstr "{current}: на {change} больше, чем за {previous}."
+

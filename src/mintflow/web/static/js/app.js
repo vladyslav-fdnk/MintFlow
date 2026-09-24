@@ -67,6 +67,38 @@
     }
   });
 
+  // The theme switch (design W13): the choice is kept in a cookie the server reads, so the next
+  // page renders in it at once; without a choice the system setting applies.
+  const themeCookie = "mintflow_theme";
+  const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+
+  function effectiveTheme() {
+    const chosen = document.documentElement.dataset.theme;
+    return chosen || (darkQuery.matches ? "dark" : "light");
+  }
+
+  function syncThemeSwitches() {
+    const dark = effectiveTheme() === "dark";
+    for (const control of document.querySelectorAll("[data-theme-switch]")) {
+      control.setAttribute("aria-checked", dark ? "true" : "false");
+    }
+  }
+
+  document.addEventListener("click", function (event) {
+    const control = event.target.closest && event.target.closest("[data-theme-switch]");
+    if (!control) {
+      return;
+    }
+    const next = effectiveTheme() === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = themeCookie + "=" + next + "; Path=/; Max-Age=31536000; SameSite=Lax" + secure;
+    syncThemeSwitches();
+  });
+
+  darkQuery.addEventListener("change", syncThemeSwitches);
+  document.addEventListener("DOMContentLoaded", syncThemeSwitches);
+
   // Elements with data-redirect-after navigate there once their request succeeded.
   document.addEventListener("htmx:afterRequest", function (event) {
     const target = event.detail.elt.dataset.redirectAfter;

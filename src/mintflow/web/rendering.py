@@ -7,7 +7,9 @@ up a new version at once. HTML is never cached: pages show one user's financial 
 import hashlib
 import os
 from collections.abc import Mapping
+from contextvars import ContextVar
 from functools import cache
+from http.cookies import CookieError, SimpleCookie
 from os import PathLike
 from pathlib import Path
 from typing import Final
@@ -15,10 +17,18 @@ from typing import Final
 from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
 from starlette.responses import HTMLResponse, RedirectResponse, Response
 from starlette.staticfiles import StaticFiles
-from starlette.types import Scope
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from mintflow.http.authentication import CSRF_COOKIE_NAME, CSRF_HEADER_NAME
-from mintflow.web.formatting import _, format_date, format_money
+from mintflow.web.formatting import (
+    _,
+    current_language,
+    format_date,
+    format_money,
+    negotiate_language,
+    ngettext,
+    use_language,
+)
 
 STATIC_DIRECTORY: Final = Path(__file__).parent / "static"
 STATIC_PATH: Final = "/static"
@@ -51,6 +61,44 @@ def static_url(name: str) -> str:
     return f"{STATIC_PATH}/{name}?v={_static_version(name)}"
 
 
+THEME_COOKIE_NAME: Final = "mintflow_theme"
+THEMES: Final = frozenset({"light", "dark"})
+# The theme chosen in this browser for the current request; None follows the system setting.
+_request_theme: ContextVar[str | None] = ContextVar("request_theme", default=None)
+
+
+def theme_from_cookie_header(header: str) -> str | None:
+    cookie = SimpleCookie()
+    try:
+        cookie.load(header)
+    except CookieError:
+        return None
+    morsel = cookie.get(THEME_COOKIE_NAME)
+    return morsel.value if morsel is not None and morsel.value in THEMES else None
+
+
+class RequestPreferencesMiddleware:
+    """Per request: the theme cookie (design W13) and the browser's language (design W14).
+
+    Signed-in pages then switch to the account's language (``web.pages``).
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+        headers = {name: value.decode("latin-1") for name, value in scope["headers"]}
+        token = _request_theme.set(theme_from_cookie_header(headers.get(b"cookie", "")))
+        use_language(negotiate_language(headers.get(b"accept-language", "")))
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            _request_theme.reset(token)
+
+
 def _environment() -> Environment:
     environment = Environment(
         loader=PackageLoader("mintflow.web", "templates"),
@@ -61,6 +109,7 @@ def _environment() -> Environment:
     )
     environment.globals.update(
         _=_,
+        ngettext=ngettext,
         static_url=static_url,
         csrf_cookie_name=CSRF_COOKIE_NAME,
         csrf_header_name=CSRF_HEADER_NAME,
@@ -75,7 +124,8 @@ TEMPLATES: Final = _environment()
 def render(
     template: str, context: Mapping[str, object] | None = None, *, status_code: int = 200
 ) -> HTMLResponse:
-    html = TEMPLATES.get_template(template).render(**(context or {}))
+    values = {"theme": _request_theme.get(), "language": current_language(), **(context or {})}
+    html = TEMPLATES.get_template(template).render(**values)
     return HTMLResponse(html, status_code=status_code, headers=PAGE_HEADERS)
 
 

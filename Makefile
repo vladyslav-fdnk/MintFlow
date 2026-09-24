@@ -1,4 +1,4 @@
-.PHONY: setup format lint typecheck test check run hooks docker-up docker-down docker-logs
+.PHONY: setup format lint typecheck test check run hooks translations docker-up docker-down docker-logs
 
 setup:
 	uv sync --all-groups
@@ -26,6 +26,10 @@ run:
 
 hooks:
 	uv run pre-commit run --all-files
+
+# Refresh the Web catalogues after changing user-facing strings; lists what still needs translating.
+translations:
+	uv run python -m mintflow.web.catalog
 
 docker-up:
 	docker compose up --build -d

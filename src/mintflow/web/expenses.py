@@ -26,7 +26,7 @@ from mintflow.infrastructure.persistence import (
     SqlAlchemyExpenseRepository,
     SqlAlchemyUserRepository,
 )
-from mintflow.web.formatting import display_locale, format_date, format_money
+from mintflow.web.formatting import category_label, display_locale, format_date, format_money
 from mintflow.web.pages import PagePrincipalDependency, SignInRequired, non_empty_params
 from mintflow.web.rendering import render
 
@@ -83,7 +83,7 @@ def build_history_view(
     locale: BabelLocale,
     continued: bool,
 ) -> HistoryView:
-    names = {category.key: category.name for category in categories}
+    names = {category.key: category_label(category.key, category.name) for category in categories}
     filter_params: list[tuple[str, str]] = []
     if history_filter.date_from is not None:
         filter_params.append(("date_from", history_filter.date_from.isoformat()))
@@ -106,7 +106,9 @@ def build_history_view(
         date_to=history_filter.date_to.isoformat() if history_filter.date_to is not None else "",
         category=_single(history_filter.category_keys),
         currency=_single(frozenset(currency.value for currency in history_filter.currencies)),
-        category_options=tuple((category.key, category.name) for category in categories),
+        category_options=tuple(
+            (category.key, category_label(category.key, category.name)) for category in categories
+        ),
         currency_options=supported_currency_codes(),
         filtered=bool(filter_params),
         continued=continued,

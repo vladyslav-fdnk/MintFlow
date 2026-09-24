@@ -6,6 +6,11 @@ from html.parser import HTMLParser
 
 _MARKUP_WHITESPACE = re.compile(r"[ \t\n\r\f]+")
 
+# Phrasing elements: adjacent ones join without a space, as a browser renders them.
+_INLINE: frozenset[str] = frozenset(
+    {"a", "abbr", "b", "code", "em", "i", "label", "small", "span", "strong", "sub", "sup", "time"}
+)
+
 # Elements that never have a closing tag.
 _VOID: frozenset[str] = frozenset(
     {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "wbr"}
@@ -30,8 +35,20 @@ class Element:
 
         Only ASCII whitespace collapses: no-break and thin spaces are part of formatted values.
         """
-        parts = [item if isinstance(item, str) else item.text for item in self.content]
-        return _MARKUP_WHITESPACE.sub(" ", " ".join(parts)).strip(" ")
+        return _MARKUP_WHITESPACE.sub(" ", self._raw_text()).strip(" ")
+
+    def _raw_text(self) -> str:
+        parts = []
+        for item in self.content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif item.tag in _INLINE:
+                # Spaces at the edges of inline elements are real, as in "2026<span> · EUR</span>".
+                parts.append(item._raw_text())
+            else:
+                # Block-level neighbours (cells, paragraphs) read as separate words.
+                parts.append(f" {item._raw_text()} ")
+        return "".join(parts)
 
     def iter(self) -> list["Element"]:
         found = [self]

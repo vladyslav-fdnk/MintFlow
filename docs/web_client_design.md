@@ -128,6 +128,51 @@ These are already decided and are not reopened here:
 - Browser-driven tests (for example Playwright) and automated accessibility audits are deferred
   to the deployment sprint; this sprint documents a manual keyboard and 320-pixel check per page.
 
+### W11. Brand (added 2026-09-24, WEB-08)
+
+- The look follows the brand sheet supplied by the product owner: the leaf-and-chart mark, the
+  "MintFlow" wordmark (Mint in dark, Flow in green), the tagline "Track less. Understand more.",
+  and the palette Primary #22C55E, Dark Green #16A34A, Light Green #E8F5EE, Dark #111827,
+  Light #F3F4F6. The mark is redrawn as SVG (approved on the design canvas).
+- Contrast: #22C55E and #16A34A are too light for body text on white (2.3:1 and 3.3:1), so
+  links and button fills use #15803D (5.0:1); the brand greens stay on the logo, charts, fills,
+  and large text. The dark theme (#111827 ground) uses #22C55E and #4ADE80.
+- Typeface: Manrope (SIL Open Font License), vendored as woff2 with Latin and Cyrillic subsets,
+  so the CSP stays `font-src 'self'` (default-src).
+- Layout: a dark sidebar collapsed to icons that expands over the content on hover and on
+  keyboard focus inside it (`:hover`, `:focus-within`, no script); the hovered or focused item
+  grows slightly. Labels stay in the accessibility tree while collapsed. Motion is removed under
+  `prefers-reduced-motion`. Below 900 px the same navigation becomes a bottom tab bar.
+- A dark theme follows the system setting (`prefers-color-scheme`).
+
+### W12. The dashboard leads with the answer, then the chart (added 2026-09-24, WEB-09)
+
+- Order: the period and a one-line answer ("You spent 672.23 EUR", with the comparison and the
+  count), then the main chart, then the period and currency controls, then insights,
+  categories, and merchants. Period presets (this month, last month, last three months) sit next
+  to custom dates; currencies present in the period are choices with their totals.
+- The main chart switches between columns (spending over time) and a donut (share by
+  category), chosen by the product owner. This extends MVP section 8 ("exactly three charts",
+  bars preferred over a pie): the donut is an alternative view of the category data, not a new
+  metric, and has the same table equivalent and legend with values and percentages, so colour is
+  never the only signal. The choice lives in the URL (`chart=`), so it is bookmarkable.
+- Columns get a value axis (zero, half, and a rounded maximum), date labels, and a tooltip per
+  column; text sizes grow and secondary text uses the stronger muted colour.
+
+### W13. Theme switch in the sidebar (added 2026-09-24, WEB-10)
+
+- A switch in the sidebar toggles light and dark. Until the user chooses, the system setting
+  applies. The choice is kept per browser in a `mintflow_theme` cookie (not sensitive, readable by
+  the script), and the server sets `data-theme` on `<html>` from it, so pages never flash the
+  wrong theme. It is a real `button` with `role="switch"` and `aria-checked`.
+
+### W14. Web interface language: English and Russian (added 2026-09-24, WEB-11)
+
+- The Web Client is translated with gettext catalogues (Babel extraction from templates and
+  Python). The language is the account's existing `ui_language`, changed in Settings and from a
+  quick switch in the sidebar. Amounts and dates follow `locale`; when it is unset, they follow
+  the interface language. The bot stays English for now; it reads the same `ui_language` later.
+
 ## 4. Out of scope
 
 - Account deletion and its policy, privacy notice, and legal pages.
@@ -148,3 +193,7 @@ These are already decided and are not reopened here:
 | WEB-05 | Expense detail, edit, delete, and restore | WEB-04 |
 | WEB-06 | Settings: preferences use case and page, Telegram link and disconnect | WEB-01 |
 | WEB-07 | End-to-end Telegram-to-Web loop test and the manual accessibility checklist | WEB-02..06 |
+| WEB-08 | Brand visual refresh: logo, palette, Manrope, collapsible sidebar, dark theme (W11) | WEB-07 |
+| WEB-09 | Dashboard clarity: answer first, chart with axes and a donut view, controls below (W12) | WEB-08 |
+| WEB-10 | Theme switch in the sidebar (W13) | WEB-08 |
+| WEB-11 | Web interface in English and Russian (W14) | WEB-09, WEB-10 |

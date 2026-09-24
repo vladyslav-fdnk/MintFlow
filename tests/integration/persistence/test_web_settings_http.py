@@ -189,8 +189,8 @@ async def test_saving_changes_the_conventions_and_the_dashboards_month(
         "en-GB",
     )
     # 23:30 UTC on 31 Aug is already September in Tokyo.
-    assert "Aug" in parse_html(before.text).find("h2", id="period-title").text
-    assert "Sept" in parse_html(after.text).find("h2", id="period-title").text
+    assert "Aug" in parse_html(before.text).find("p", id="period-title").text
+    assert "Sept" in parse_html(after.text).find("p", id="period-title").text
     assert parse_html(saved.text).find(id="status").text == "Settings saved."
 
 
@@ -344,3 +344,83 @@ async def test_without_telegram_the_page_says_so_and_linking_is_404(
 
     assert "not set up on this server" in _telegram_section(page).text
     assert link.status_code == 404
+
+
+# --- WEB-11: interface language -------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_pages_speak_the_accounts_language(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_user(db_session, secret=SECRET, ui_language="ru")
+
+    async with _client(_application(migrated_database_url)) as client:
+        # The browser prefers English, but the account's choice wins.
+        response = await client.get("/settings", headers={"Accept-Language": "en-GB,en"})
+
+    page = parse_html(response.text)
+    assert page.find("html").attrs["lang"] == "ru"
+    assert page.find("h1").text == "Настройки"
+    assert _selected(page, "language") == "ru"
+    switch = page.find("nav").find("button", hx_post="/settings/language")
+    assert switch.text == "English"
+
+
+@pytest.mark.anyio
+async def test_the_quick_switch_saves_the_language_and_reloads(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user_id = _add_user(db_session, secret=SECRET)
+
+    async with _client(_application(migrated_database_url)) as client:
+        switched = await client.post(
+            "/settings/language", content="language=ru", headers=_htmx(client)
+        )
+        refused = await client.post(
+            "/settings/language", content="language=de", headers=_htmx(client)
+        )
+        forged = await client.post(
+            "/settings/language", content="language=en", headers=_htmx(client, csrf=False)
+        )
+        dashboard = await client.get("/dashboard")
+
+    assert (switched.status_code, switched.headers["hx-refresh"]) == (200, "true")
+    assert refused.status_code == 422
+    assert forged.status_code == 403
+    assert _stored_user(db_session, user_id).ui_language == "ru"
+    assert parse_html(dashboard.text).find("html").attrs["lang"] == "ru"
+
+
+@pytest.mark.anyio
+async def test_the_language_is_saved_with_the_other_preferences(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    user_id = _add_user(db_session, secret=SECRET)
+
+    async with _client(_application(migrated_database_url)) as client:
+        response = await client.post(
+            "/settings/preferences",
+            content=urlencode(
+                {"timezone": "UTC", "default_currency": "", "locale": "", "language": "ru"}
+            ),
+            headers=_htmx(client),
+        )
+        saved = await client.get(response.headers["hx-redirect"])
+
+    assert _stored_user(db_session, user_id).ui_language == "ru"
+    assert parse_html(saved.text).find(id="status").text == "Настройки сохранены."
+
+
+@pytest.mark.anyio
+async def test_a_visitor_gets_the_browsers_language(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    transport = ASGITransport(app=_application(migrated_database_url))
+    async with AsyncClient(transport=transport, base_url=ORIGIN) as client:
+        russian = await client.get("/sign-in", headers={"Accept-Language": "ru-RU,ru;q=0.9"})
+        german = await client.get("/sign-in", headers={"Accept-Language": "de-DE"})
+
+    assert parse_html(russian.text).find("html").attrs["lang"] == "ru"
+    assert "Прислать ссылку для входа" in russian.text
+    assert parse_html(german.text).find("html").attrs["lang"] == "en"

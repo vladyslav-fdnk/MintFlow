@@ -20,7 +20,7 @@ from mintflow.application.capture import (
 )
 from mintflow.domain.capture import CaptureSource, Category, Expense, supported_currency_codes
 from mintflow.domain.user import User
-from mintflow.http.authentication import CsrfProtectedPrincipalDependency, DatabaseSession
+from mintflow.http.authentication import DatabaseSession
 from mintflow.http.capture import (
     CaptureRuntimeDependency,
     DeleteExpenseDependency,
@@ -38,9 +38,21 @@ from mintflow.web.expense_form import (
     form_from_expense,
     validate_edit,
 )
-from mintflow.web.formatting import _, display_locale, format_date, format_datetime, format_money
+from mintflow.web.formatting import (
+    N_,
+    _,
+    category_label,
+    display_locale,
+    format_date,
+    format_datetime,
+    format_money,
+)
 from mintflow.web.forms import read_form
-from mintflow.web.pages import PagePrincipalDependency, SignInRequired
+from mintflow.web.pages import (
+    PagePrincipalDependency,
+    SignInRequired,
+    WebMutationPrincipalDependency,
+)
 from mintflow.web.rendering import htmx_redirect, render
 
 EXPENSES_PATH: Final = "/expenses"
@@ -50,13 +62,13 @@ MAX_EDIT_BODY_BYTES: Final = 64 * 1024
 router = APIRouter(include_in_schema=False)
 
 _SOURCES: Final = {
-    CaptureSource.TELEGRAM_MANUAL: "Telegram",
-    CaptureSource.TELEGRAM_RECEIPT: "Telegram receipt",
-    CaptureSource.WEB_MANUAL: "Web",
+    CaptureSource.TELEGRAM_MANUAL: N_("Telegram"),
+    CaptureSource.TELEGRAM_RECEIPT: N_("Telegram receipt"),
+    CaptureSource.WEB_MANUAL: N_("Web"),
 }
 _STATUS_MESSAGES: Final = {
-    "saved": "Changes saved.",
-    "restored": "Expense restored.",
+    "saved": N_("Changes saved."),
+    "restored": N_("Expense restored."),
 }
 
 
@@ -107,7 +119,7 @@ def _categories(session: DatabaseSession) -> list[Category]:
 def build_detail(
     expense: Expense, *, user: User, categories: list[Category], locale: BabelLocale
 ) -> ExpenseDetail:
-    names = {category.key: category.name for category in categories}
+    names = {category.key: category_label(category.key, category.name) for category in categories}
     changed = expense.modified_at != expense.created_at
     return ExpenseDetail(
         id=str(expense.id),
@@ -142,7 +154,10 @@ def _edit_page(
             "original_prefix": ORIGINAL_PREFIX,
             "errors": errors,
             "form_error": form_error,
-            "categories": [(category.key, category.name) for category in categories],
+            "categories": [
+                (category.key, category_label(category.key, category.name))
+                for category in categories
+            ],
             "currencies": supported_currency_codes(),
         },
         status_code=status_code,
@@ -179,7 +194,7 @@ async def edit_page(
 async def edit_expense(
     raw_id: str,
     request: Request,
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     session: DatabaseSession,
     edit_use_case: EditExpenseDependency,
     runtime: CaptureRuntimeDependency,
@@ -261,7 +276,7 @@ async def delete_page(
 @router.post(EXPENSES_PATH + "/{raw_id}/delete")
 async def delete_expense(
     raw_id: str,
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     delete_use_case: DeleteExpenseDependency,
 ) -> Response:
     expense_id = _expense_id(raw_id)
@@ -287,7 +302,7 @@ async def deleted_page(
 @router.post(EXPENSES_PATH + "/{raw_id}/restore")
 async def restore_expense(
     raw_id: str,
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     restore_use_case: RestoreExpenseDependency,
 ) -> Response:
     expense_id = _expense_id(raw_id)

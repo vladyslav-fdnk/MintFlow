@@ -458,7 +458,7 @@ tasks:
   - id: WEB-07
     title: Telegram-to-Web Loop and Accessibility Checklist
     file: docs/tasks/WEB-07-telegram-to-web-loop.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - WEB-02
@@ -466,3 +466,32 @@ tasks:
       - WEB-04
       - WEB-05
       - WEB-06
+  - id: WEB-08
+    title: Brand Visual Refresh
+    file: docs/tasks/WEB-08-brand-visual-refresh.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - WEB-07
+  - id: WEB-09
+    title: Dashboard Clarity
+    file: docs/tasks/WEB-09-dashboard-clarity.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - WEB-08
+  - id: WEB-10
+    title: Theme Switch
+    file: docs/tasks/WEB-10-theme-switch.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - WEB-08
+  - id: WEB-11
+    title: Web Interface in English and Russian
+    file: docs/tasks/WEB-11-web-language.md
+    status: done
+    human_approval: approved
+    depends_on:
+      - WEB-09
+      - WEB-10

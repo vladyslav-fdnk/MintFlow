@@ -396,4 +396,4 @@ async def test_an_edit_shows_up_in_history_and_on_the_dashboard(
         dashboard = await client.get("/dashboard?date_from=2026-08-01&date_to=2026-08-31")
 
     assert f"77.00{NBSP}EUR" in history.text
-    assert f"Total spent 77.00{NBSP}EUR" in parse_html(dashboard.text).find("dl").text
+    assert parse_html(dashboard.text).find("p", class_="answer").text == f"You spent 77.00{NBSP}EUR"

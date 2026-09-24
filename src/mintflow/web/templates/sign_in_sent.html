@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% import "_brand.html" as brand %}
 {% block title %}{{ _("Check your email") }}{% endblock %}
-{% block navigation %}{% endblock %}
+{% block navigation %}{{ brand.bare_header() }}{% endblock %}
 {% block content %}
 <h1>{{ _("Check your email") }}</h1>
 <p>{{ _("If the address can receive email, a sign-in link will arrive shortly. The link works once and expires soon.") }}</p>

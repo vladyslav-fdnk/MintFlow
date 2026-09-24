@@ -147,8 +147,9 @@ async def test_the_default_is_this_month_in_the_users_timezone_and_only_their_da
 
     assert response.status_code == 200
     region = _region(response)
-    assert region.find("h2", id="period-title").text == "Sep 1\u2009–\u200930, 2026"
-    assert region.find("dl").text == f"Total spent 12.00{NBSP}EUR Expenses 1 expense"
+    assert region.find("p", id="period-title").text == "Sep 1\u2009–\u200930, 2026 · EUR"
+    assert region.find("p", class_="answer").text == f"You spent 12.00{NBSP}EUR"
+    assert region.find("p", class_="answer-meta").text.startswith("1 expense")
     assert "Bakery" in region.text
     assert "Kiosk" not in region.text and "Stranger Shop" not in region.text
     assert "999.99" not in response.text
@@ -169,8 +170,8 @@ async def test_filters_choose_the_period_and_currency(
     )
 
     region = _region(response)
-    assert region.find("dl").text.startswith(f"Total spent 30.00{NBSP}EUR")
-    assert region.find("h3", id="time-title").text == "Spending by month"
+    assert region.find("p", class_="answer").text == f"You spent 30.00{NBSP}EUR"
+    assert region.find("h2", id="chart-title").text == "Spending by month"
     totals = region.find("ul", class_="currency-totals")
     assert [link.text for link in totals.find_all("a")] == [
         f"50.00{NBSP}PLN",
@@ -193,7 +194,8 @@ async def test_several_currencies_without_a_choice_are_never_added(
 
     region = _region(response)
     assert "Choose a currency to see its details." in region.text
-    assert region.find_all("dl") == []
+    assert region.find_all("p", class_="answer") == []
+    assert region.find_all("section", class_="card chart-card") == []
     assert "60.00" not in region.text
 
 
@@ -212,7 +214,7 @@ async def test_invalid_filters_show_this_month_with_an_explanation(
     assert response.status_code == 400
     region = _region(response)
     assert region.find("p", role="alert").text.startswith("Those filters are not valid")
-    assert region.find("h2", id="period-title").text == "Aug 1\u2009–\u200931, 2026"
+    assert region.find("p", id="period-title").text.startswith("Aug 1\u2009–\u200931, 2026")
 
 
 @pytest.mark.anyio
@@ -258,3 +260,42 @@ async def test_a_user_with_expenses_elsewhere_sees_an_empty_period_not_the_welco
     region = _region(response)
     assert region.find_all("section", aria_labelledby="welcome-title") == []
     assert "No expenses in this period." in region.text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("query", "view"), [("", "columns"), ("?chart=pie", "pie"), ("?chart=radar", "columns")]
+)
+async def test_the_chart_view_is_chosen_in_the_url(
+    db_session: Session, migrated_database_url: str, query: str, view: str
+) -> None:
+    owner = _add_user(db_session, secret=SECRET)
+    _add(db_session, owner, 1_200, date(2026, 8, 20))
+
+    response = await _page(_application(migrated_database_url), query)
+
+    assert response.status_code == 200
+    region = _region(response)
+    assert (region.find_all("svg", class_="donut") != []) is (view == "pie")
+    assert (region.find_all("svg", class_="columns") != []) is (view == "columns")
+    current = region.find("div", class_="segmented").find("a", aria_current="true")
+    assert current.text == ("Pie" if view == "pie" else "Columns")
+    assert region.find("input", name="chart").attrs["value"] == view
+
+
+@pytest.mark.anyio
+async def test_presets_follow_the_users_calendar(
+    db_session: Session, migrated_database_url: str
+) -> None:
+    _add_user(db_session, secret=SECRET, timezone="Asia/Tokyo")
+
+    response = await _page(_application(migrated_database_url))
+
+    presets = _region(response).find("div", class_="presets").find_all("a")
+    # 23:30 UTC on 31 Aug is 1 Sep in Tokyo: this month is September.
+    assert [(link.text, link.attrs.get("aria-current")) for link in presets] == [
+        ("This month", "true"),
+        ("Last month", None),
+        ("Last 3 months", None),
+    ]
+    assert "date_from=2026-08-01&date_to=2026-08-31" in str(presets[1].attrs["href"])

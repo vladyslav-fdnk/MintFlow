@@ -1,10 +1,15 @@
 {% extends "base.html" %}
+{% import "_brand.html" as brand %}
 {% block title %}{{ _("Sign in") }}{% endblock %}
 {% block navigation %}{% endblock %}
 {% block content %}
-<h1>{{ _("Sign in to MintFlow") }}</h1>
-<p>{{ _("We will email you a link. Open it on this device to sign in; no password needed.") }}</p>
-<form class="form" method="post" action="/sign-in">
+<div class="sign-in">
+<div class="lockup">
+  {{ brand.mark(88, "mark-sign-in") }}
+  <h1 class="lockup-wordmark">{{ brand.wordmark() }}<span class="visually-hidden"> {{ _("sign in") }}</span></h1>
+  <p class="lockup-tagline">{{ _("Track less. Understand more.") }}</p>
+</div>
+<form class="form card" method="post" action="/sign-in">
   <div class="field">
     <label for="email">{{ _("Email address") }}</label>
     <input id="email" name="email" type="email" autocomplete="email" required maxlength="320"
@@ -14,6 +19,8 @@
     <p id="email-error" class="field-error">{{ error }}</p>
     {% endif %}
   </div>
-  <button type="submit" class="button">{{ _("Email me a sign-in link") }}</button>
+  <button type="submit" class="button button-wide">{{ _("Email me a sign-in link") }}</button>
+  <p class="hint">{{ _("No password needed. We will email you a link that signs you in on this device.") }}</p>
 </form>
+</div>
 {% endblock %}

@@ -5,7 +5,8 @@ answering ``401``. An error renders a generic HTML page only for a browser (``Ac
 ``text/html``) outside the API paths; every other client keeps FastAPI's JSON errors.
 """
 
-from typing import Annotated, Final
+from typing import Annotated, Final, Protocol
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.exception_handlers import http_exception_handler
@@ -13,11 +14,16 @@ from starlette.datastructures import QueryParams
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import PlainTextResponse, Response
 
+from mintflow.domain.user import User
 from mintflow.http.authentication import (
     AuthenticatedPrincipal,
     AuthenticateWebSessionDependency,
+    CsrfProtectedPrincipalDependency,
+    DatabaseSession,
     get_authenticated_principal,
 )
+from mintflow.infrastructure.persistence import SqlAlchemyUserRepository
+from mintflow.web.formatting import use_language
 from mintflow.web.rendering import redirect, render
 
 SIGN_IN_PATH: Final = "/sign-in"
@@ -31,18 +37,49 @@ class SignInRequired(Exception):
     """The page needs a signed-in user; answered with a redirect to sign-in."""
 
 
+class UserLookup(Protocol):
+    def get(self, user_id: UUID) -> User | None: ...
+
+
+async def get_user_lookup(session: DatabaseSession) -> UserLookup:
+    return SqlAlchemyUserRepository(session)
+
+
+UserLookupDependency = Annotated[UserLookup, Depends(get_user_lookup)]
+
+
+def _use_account_language(users: UserLookup, principal: AuthenticatedPrincipal) -> None:
+    """Signed-in pages speak the account's language, not the browser's (design W14)."""
+    user = users.get(principal.user_id)
+    if user is not None:
+        use_language(user.ui_language.value)
+
+
 async def get_page_principal(
-    request: Request, authenticate: AuthenticateWebSessionDependency
+    request: Request, authenticate: AuthenticateWebSessionDependency, users: UserLookupDependency
 ) -> AuthenticatedPrincipal:
     try:
-        return await get_authenticated_principal(request, authenticate)
+        principal = await get_authenticated_principal(request, authenticate)
     except HTTPException as error:
         if error.status_code == 401:
             raise SignInRequired from None
         raise
+    _use_account_language(users, principal)
+    return principal
+
+
+async def get_web_mutation_principal(
+    principal: CsrfProtectedPrincipalDependency, users: UserLookupDependency
+) -> AuthenticatedPrincipal:
+    """The CSRF-protected principal of a Web mutation, with the account's language."""
+    _use_account_language(users, principal)
+    return principal
 
 
 PagePrincipalDependency = Annotated[AuthenticatedPrincipal, Depends(get_page_principal)]
+WebMutationPrincipalDependency = Annotated[
+    AuthenticatedPrincipal, Depends(get_web_mutation_principal)
+]
 
 
 def non_empty_params(request: Request) -> QueryParams:

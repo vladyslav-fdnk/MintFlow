@@ -162,7 +162,7 @@ def test_several_currencies_are_listed_separately_and_never_added() -> None:
         (f"500.00{NBSP}PLN", "4 expenses"),
     ]
     assert view.currencies[1].href == (
-        "/dashboard?date_from=2026-09-01&date_to=2026-09-30&currency=PLN"
+        "/dashboard?date_from=2026-09-01&date_to=2026-09-30&currency=PLN&chart=columns"
     )
     assert view.currency_options == ("EUR", "PLN")
 
@@ -225,8 +225,10 @@ def test_filters_are_labelled_and_keep_the_selection() -> None:
 def test_an_empty_period_says_so_instead_of_drawing_empty_charts() -> None:
     page = _render(_dashboard(_detail(count=0)))
 
-    assert "No expenses in this period." in page.find(id="dashboard").text
-    assert page.find_all("svg") == []
+    region = page.find(id="dashboard")
+    assert "No expenses in this period." in region.text
+    assert region.find_all("svg", class_="columns") == []
+    assert region.find_all("svg", class_="bar") == []
 
 
 @pytest.mark.parametrize(
@@ -279,3 +281,110 @@ def test_a_month_range_is_labelled_by_month() -> None:
     assert [column.label for column in chart.columns] == ["Jul 2026", "Aug 2026"]
     assert chart.summary == f"Highest: Jul 2026, 10.00{NBSP}EUR."
     assert chart.columns[0].href.startswith("/expenses?date_from=2026-07-15&date_to=2026-07-31")
+
+
+# --- WEB-09: answer first, axis, donut, presets ------------------------------------------
+
+
+def test_the_value_axis_is_rounded_and_columns_use_it() -> None:
+    view = build_dashboard_view(_dashboard(), EN)
+
+    assert view.detail is not None
+    chart = view.detail.time_chart
+    # The largest day is 40.00 EUR, so the axis tops out at a round 50 EUR.
+    assert chart.axis == (f"50{NBSP}EUR", f"25{NBSP}EUR", f"0{NBSP}EUR")
+    assert max(column.column.height for column in chart.columns) == 80.0
+    assert chart.ticks == ("Sep 1", "Sep 8", "Sep 15", "Sep 22", "Sep 30")
+    assert chart.columns[0].tooltip == f"Sep 1: 40.00{NBSP}EUR"
+
+
+def test_the_donut_has_a_slice_and_a_legend_entry_per_category() -> None:
+    view = build_dashboard_view(_dashboard(), EN, chart="pie")
+
+    assert view.detail is not None
+    slices = view.detail.donut
+    assert [(part.label, part.share, part.color) for part in slices] == [
+        ("Groceries", "75%", 0),
+        ("Transport", "25%", 1),
+    ]
+    assert slices[0].href.endswith("category=groceries&currency=EUR")
+
+
+def test_chart_links_keep_the_period_and_currency() -> None:
+    view = build_dashboard_view(_dashboard(), EN, chart="pie")
+
+    assert [(link.label, link.selected) for link in view.chart_links] == [
+        ("Columns", False),
+        ("Pie", True),
+    ]
+    assert view.chart_links[0].href == (
+        "/dashboard?date_from=2026-09-01&date_to=2026-09-30&currency=EUR&chart=columns"
+    )
+
+
+def test_presets_cover_this_month_last_month_and_three_months() -> None:
+    view = build_dashboard_view(_dashboard(), EN, chart="pie", today=date(2026, 9, 23))
+
+    assert [(preset.label, preset.selected) for preset in view.presets] == [
+        ("This month", True),
+        ("Last month", False),
+        ("Last 3 months", False),
+    ]
+    assert view.presets[1].href == (
+        "/dashboard?date_from=2026-08-01&date_to=2026-08-31&currency=EUR&chart=pie"
+    )
+    assert view.presets[2].href.startswith("/dashboard?date_from=2026-07-01&date_to=2026-09-30")
+
+
+def test_presets_across_the_new_year() -> None:
+    view = build_dashboard_view(_dashboard(), EN, today=date(2027, 1, 5))
+
+    assert [preset.href.split("&currency")[0] for preset in view.presets] == [
+        "/dashboard?date_from=2027-01-01&date_to=2027-01-31",
+        "/dashboard?date_from=2026-12-01&date_to=2026-12-31",
+        "/dashboard?date_from=2026-11-01&date_to=2027-01-31",
+    ]
+
+
+def _render_view(chart: str) -> Element:
+    html = TEMPLATES.get_template("dashboard.html").render(
+        active="dashboard",
+        view=build_dashboard_view(_dashboard(), EN, chart=chart, today=date(2026, 9, 23)),
+        invalid_filters=False,
+        onboarding=None,
+    )
+    return parse_html(html)
+
+
+def test_the_answer_comes_before_the_chart_and_the_controls_after() -> None:
+    region = _render_view("columns").find(id="dashboard")
+
+    order = [child.attrs.get("class") or child.tag for child in region.children]
+    assert order[0] == "hero"
+    assert order.index("card chart-card") < order.index("card controls")
+    assert region.find("p", class_="answer").text == f"You spent 120.00{NBSP}EUR"
+    hero = region.find("div", class_="hero")
+    assert [child.tag for child in hero.children][:2] == ["h1", "p"]
+    assert hero.find("h1").text == "Dashboard"
+
+
+def test_the_pie_view_has_a_legend_with_values() -> None:
+    region = _render_view("pie").find(id="dashboard")
+
+    legend = region.find("ul", class_="legend")
+    assert [item.text for item in legend.find_all("li")] == [
+        f"Groceries 90.00{NBSP}EUR · 75%",
+        f"Transport 30.00{NBSP}EUR · 25%",
+    ]
+    assert len(region.find_all("circle", class_="slice slice-0")) == 1
+    assert region.find_all("svg", class_="columns") == []
+
+
+def test_the_chart_switch_marks_the_current_view() -> None:
+    switch = _render_view("pie").find("div", class_="segmented")
+
+    assert switch.attrs["role"] == "group"
+    assert [(link.text, link.attrs.get("aria-current")) for link in switch.find_all("a")] == [
+        ("Columns", None),
+        ("Pie", "true"),
+    ]

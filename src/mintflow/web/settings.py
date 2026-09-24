@@ -24,12 +24,11 @@ from mintflow.application.telegram import (
     TelegramLinkState,
     UnlinkTelegram,
 )
-from mintflow.application.users import UpdatePreferences
+from mintflow.application.users import ChangeLanguage, UpdatePreferences
 from mintflow.domain.capture import CurrencyCode, supported_currency_codes
 from mintflow.domain.user import Locale, Timezone, User, available_timezone_names
 from mintflow.http.authentication import (
     AuthenticatedPrincipal,
-    CsrfProtectedPrincipalDependency,
     DatabaseSession,
 )
 from mintflow.http.telegram import confirm_telegram_link
@@ -38,9 +37,20 @@ from mintflow.infrastructure.persistence import (
     SqlAlchemyUserRepository,
 )
 from mintflow.telegram.runtime import TelegramRuntime
-from mintflow.web.formatting import _, display_locale, format_datetime
+from mintflow.web.formatting import (
+    N_,
+    SUPPORTED_LANGUAGES,
+    _,
+    current_language,
+    display_locale,
+    format_datetime,
+)
 from mintflow.web.forms import read_form
-from mintflow.web.pages import PagePrincipalDependency, SignInRequired
+from mintflow.web.pages import (
+    PagePrincipalDependency,
+    SignInRequired,
+    WebMutationPrincipalDependency,
+)
 from mintflow.web.rendering import PAGE_HEADERS, htmx_redirect, render
 
 SETTINGS_PATH: Final = "/settings"
@@ -61,10 +71,12 @@ OFFERED_LOCALES: Final = (
     "uk-UA",
 )
 _STATUS_MESSAGES: Final = {
-    "saved": "Settings saved.",
-    "connected": "Telegram connected.",
-    "disconnected": "Telegram disconnected.",
+    "saved": N_("Settings saved."),
+    "connected": N_("Telegram connected."),
+    "disconnected": N_("Telegram disconnected."),
 }
+# Each language is named in itself, so a reader can find their own.
+LANGUAGE_NAMES: Final = {"en": "English", "ru": "Русский"}
 
 router = APIRouter(include_in_schema=False)
 
@@ -90,6 +102,7 @@ class PreferencesForm:
     timezone: str
     default_currency: str
     locale: str
+    language: str = "en"
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +134,7 @@ def _form_from_user(user: User) -> PreferencesForm:
         timezone=user.timezone.value,
         default_currency=user.default_currency.value if user.default_currency else "",
         locale=user.locale.value if user.locale else "",
+        language=user.ui_language.value,
     )
 
 
@@ -170,6 +184,7 @@ def _settings_page(
             "timezones": available_timezone_names(),
             "currencies": supported_currency_codes(),
             "locales": [(tag, _locale_name(tag)) for tag in locales],
+            "languages": list(LANGUAGE_NAMES.items()),
             "telegram": _telegram_view(session, user, telegram),
             "status_message": status_message,
         },
@@ -209,20 +224,22 @@ def _validate(form: PreferencesForm) -> dict[str, str]:
             Locale(form.locale)
         except ValueError:
             errors["locale"] = _("Choose a format from the list.")
+    if form.language not in SUPPORTED_LANGUAGES:
+        errors["language"] = _("Choose a language from the list.")
     return errors
 
 
 @router.post(SETTINGS_PATH + "/preferences")
 async def save_preferences(
     request: Request,
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     session: DatabaseSession,
     telegram: OptionalTelegramDependency,
 ) -> Response:
     user = _user(session, principal)
     values = await read_form(
         request,
-        fields={"timezone", "default_currency", "locale"},
+        fields={"timezone", "default_currency", "locale", "language"},
         max_bytes=MAX_PREFERENCES_BODY_BYTES,
     )
     form = (
@@ -230,6 +247,7 @@ async def save_preferences(
             timezone=values.get("timezone", ""),
             default_currency=values.get("default_currency", ""),
             locale=values.get("locale", ""),
+            language=values.get("language", current_language()),
         )
         if values is not None
         else None
@@ -250,8 +268,24 @@ async def save_preferences(
         timezone=form.timezone,
         default_currency=form.default_currency or None,
         locale=form.locale or None,
+        ui_language=form.language,
     )
     return htmx_redirect(f"{SETTINGS_PATH}?done=saved")
+
+
+@router.post(SETTINGS_PATH + "/language")
+async def change_language(
+    request: Request, principal: WebMutationPrincipalDependency, session: DatabaseSession
+) -> Response:
+    """The sidebar's quick switch: save the language, then reload the page in it."""
+    values = await read_form(request, fields={"language"}, max_bytes=MAX_PREFERENCES_BODY_BYTES)
+    language = values.get("language") if values is not None else None
+    if language not in SUPPORTED_LANGUAGES:
+        raise HTTPException(status_code=422)
+    ChangeLanguage(repository=SqlAlchemyUserRepository(session)).execute(
+        user_id=principal.user_id, ui_language=language
+    )
+    return Response(status_code=200, headers={**PAGE_HEADERS, "HX-Refresh": "true"})
 
 
 # --- Telegram ---------------------------------------------------------------------------------
@@ -301,7 +335,7 @@ def _challenge_id(raw: str) -> UUID:
 
 @router.post(SETTINGS_PATH + "/telegram/link")
 async def start_link(
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     session: DatabaseSession,
     telegram: TelegramDependency,
 ) -> Response:
@@ -336,7 +370,7 @@ async def link_status(
 @router.post(SETTINGS_PATH + "/telegram/link/{raw_id}/confirm")
 async def confirm_link(
     raw_id: str,
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     session: DatabaseSession,
     telegram: TelegramDependency,
 ) -> Response:
@@ -374,7 +408,7 @@ async def disconnect_page(
 
 @router.post(SETTINGS_PATH + "/telegram/disconnect")
 async def disconnect(
-    principal: CsrfProtectedPrincipalDependency,
+    principal: WebMutationPrincipalDependency,
     session: DatabaseSession,
     telegram: TelegramDependency,
 ) -> Response:

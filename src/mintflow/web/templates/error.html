@@ -1,6 +1,7 @@
 {% extends "base.html" %}
+{% import "_brand.html" as brand %}
 {% block title %}{{ _("Page not found") if status_code == 404 else _("Something went wrong") }}{% endblock %}
-{% block navigation %}{% endblock %}
+{% block navigation %}{{ brand.bare_header() }}{% endblock %}
 {% block content %}
 {% if status_code == 404 %}
 <h1>{{ _("Page not found") }}</h1>

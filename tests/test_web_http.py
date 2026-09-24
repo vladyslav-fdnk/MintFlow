@@ -17,12 +17,20 @@ from mintflow.http.authentication import (
 )
 from mintflow.main import create_app
 from mintflow.web import PagePrincipalDependency
+from mintflow.web.pages import get_user_lookup
 from mintflow.web.rendering import CONTENT_SECURITY_POLICY, render, static_url
 from mintflow.web.testing import parse_html
 
 ORIGIN = "https://app.mintflow.test"
 SECRET = "S" * 43
 HTML = {"Accept": "text/html,application/xhtml+xml"}
+
+
+class NoUsers:
+    """No account to read a language from: pages keep the browser's language."""
+
+    def get(self, user_id: object) -> None:
+        return None
 
 
 class StubSessionAuthentication:
@@ -39,6 +47,7 @@ def _application(settings: Settings, *, signed_in: bool) -> FastAPI:
     application.dependency_overrides[get_authenticate_web_session] = lambda: (
         StubSessionAuthentication(session)
     )
+    application.dependency_overrides[get_user_lookup] = lambda: NoUsers()
 
     @application.post("/test/web-mutation")
     async def mutation(principal: CsrfProtectedPrincipalDependency) -> dict[str, str]:
@@ -47,6 +56,10 @@ def _application(settings: Settings, *, signed_in: bool) -> FastAPI:
     @application.get("/test/web-page")
     async def page(principal: PagePrincipalDependency) -> FastAPIResponse:
         return render("sign_in_sent.html")
+
+    @application.get("/test/web-layout")
+    async def layout(principal: PagePrincipalDependency) -> FastAPIResponse:
+        return render("expense_deleted.html", {"active": "expenses", "expense_id": "x"})
 
     @application.get("/test/web-failure")
     async def failure() -> None:
@@ -194,3 +207,55 @@ async def test_mutations_need_the_csrf_header_the_script_sends(settings: Setting
 
     assert without.status_code == 403
     assert with_header.status_code == 200
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("name", "content_type"),
+    [("favicon.svg", "image/svg+xml"), ("fonts/manrope-latin.woff2", "font/woff2")],
+)
+async def test_brand_assets_are_served_as_static_files(
+    settings: Settings, name: str, content_type: str
+) -> None:
+    response = await _request(_application(settings, signed_in=False), "GET", static_url(name))
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(content_type)
+    assert response.headers["cache-control"] == "public, max-age=31536000, immutable"
+    assert response.headers["x-content-type-options"] == "nosniff"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("cookie", "theme", "checked"),
+    [
+        ("dark", "dark", "true"),
+        ("light", "light", "false"),
+        ("purple", None, "false"),
+        (None, None, "false"),
+    ],
+)
+async def test_pages_render_in_the_theme_chosen_in_this_browser(
+    settings: Settings, cookie: str | None, theme: str | None, checked: str
+) -> None:
+    cookies = {AUTHENTICATED_SESSION_COOKIE_NAME: SECRET}
+    if cookie is not None:
+        cookies["mintflow_theme"] = cookie
+
+    response = await _request(
+        _application(settings, signed_in=True), "GET", "/test/web-page", cookies=cookies
+    )
+
+    page = parse_html(response.text)
+    assert page.find("html").attrs.get("data-theme") == theme
+    layout = parse_html(
+        (
+            await _request(
+                _application(settings, signed_in=True), "GET", "/test/web-layout", cookies=cookies
+            )
+        ).text
+    )
+    sidebar_switch = layout.find("nav").find("button", role="switch")
+    assert (sidebar_switch.attrs["aria-checked"], sidebar_switch.text) == (checked, "Dark theme")
+    phone_switch = layout.find("header", class_="topbar").find("button", role="switch")
+    assert phone_switch.attrs["aria-checked"] == checked

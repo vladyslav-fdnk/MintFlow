@@ -20,6 +20,7 @@ def _settings(**overrides: object) -> Element:
         "timezones": ("Asia/Tokyo", "UTC"),
         "currencies": ("EUR", "PLN"),
         "locales": [("de-DE", "Deutsch (Deutschland)")],
+        "languages": [("en", "English"), ("ru", "Русский")],
         "telegram": DISCONNECTED,
         "status_message": "",
     }
@@ -42,7 +43,7 @@ def _link_status(state: TelegramLinkState) -> Element:
 def test_every_preference_is_labelled_and_explained() -> None:
     form = _settings().find("form", id="preferences-form")
 
-    for field in ("timezone", "default_currency", "locale"):
+    for field in ("language", "timezone", "default_currency", "locale"):
         assert form.find("label", for_=field).text
     assert form.find("select", id="timezone").attrs["aria-describedby"] == "timezone-hint"
     assert "data-warn-unsaved" in form.attrs

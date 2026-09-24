@@ -1,34 +1,59 @@
+{% import "_brand.html" as brand %}
+{% set theme = theme | default(none) %}
 <!doctype html>
-<html lang="en">
+<html lang="{{ language | default('en') }}"{% if theme %} data-theme="{{ theme }}"{% endif %}>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="htmx-config" content='{"includeIndicatorStyles": false, "allowEval": false, "allowScriptTags": false, "selfRequestsOnly": true, "responseHandling": [{"code": "204", "swap": false}, {"code": "[23]..", "swap": true}, {"code": "422", "swap": true}, {"code": "[45]..", "swap": false, "error": true}]}'>
   <title>{% block title %}{% endblock %} · MintFlow</title>
+  <meta name="color-scheme" content="light dark">
+  <link rel="icon" type="image/svg+xml" href="{{ static_url('favicon.svg') }}">
+  <link rel="preload" href="{{ static_url('fonts/manrope-latin.woff2') }}" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="{{ static_url('css/app.css') }}">
   <script src="{{ static_url('vendor/htmx-2.0.11.min.js') }}" defer></script>
   <script src="{{ static_url('js/app.js') }}" defer></script>
 </head>
 <body data-csrf-cookie="{{ csrf_cookie_name }}" data-csrf-header="{{ csrf_header_name }}">
   <a class="skip-link" href="#main">{{ _("Skip to content") }}</a>
-  <header class="site-header">
-    <a class="brand" href="/dashboard">MintFlow</a>
-    {% block navigation %}
+  {% block navigation %}
+  {# One navigation landmark: a sidebar that expands on hover or focus, a tab bar on phones. #}
+  <aside class="sidebar">
+    <a class="brand" href="/dashboard" aria-label="{{ _('MintFlow, dashboard') }}">{{ brand.mark(36, "mark-sidebar") }}<span class="label">{{ brand.wordmark() }}</span></a>
     <nav aria-label="{{ _('Main') }}">
       <ul>
-        <li><a href="/dashboard"{% if active == "dashboard" %} aria-current="page"{% endif %}>{{ _("Dashboard") }}</a></li>
-        <li><a href="/expenses"{% if active == "expenses" %} aria-current="page"{% endif %}>{{ _("Expenses") }}</a></li>
-        <li><a href="/settings"{% if active == "settings" %} aria-current="page"{% endif %}>{{ _("Settings") }}</a></li>
-        <li>
-          <button type="button" class="link-button" hx-post="/auth/logout" hx-swap="none" data-redirect-after="/sign-in">{{ _("Sign out") }}</button>
+        <li><a class="nav-item" href="/dashboard"{% if active == "dashboard" %} aria-current="page"{% endif %}>{{ brand.icon("dashboard") }}<span class="label">{{ _("Dashboard") }}</span></a></li>
+        <li><a class="nav-item" href="/expenses"{% if active == "expenses" %} aria-current="page"{% endif %}>{{ brand.icon("expenses") }}<span class="label">{{ _("Expenses") }}</span></a></li>
+        <li><a class="nav-item" href="/settings"{% if active == "settings" %} aria-current="page"{% endif %}>{{ brand.icon("settings") }}<span class="label">{{ _("Settings") }}</span></a></li>
+        <li class="nav-end nav-extra">
+          {% set other_language = "ru" if language | default("en") == "en" else "en" %}
+          <button type="button" class="nav-item" hx-post="/settings/language" hx-vals='{"language": "{{ other_language }}"}' hx-swap="none" lang="{{ other_language }}">{{ brand.icon("language") }}<span class="label">{{ "Русский" if other_language == "ru" else "English" }}</span></button>
+        </li>
+        <li class="nav-extra">
+          <button type="button" class="nav-item theme-switch" role="switch" aria-checked="{{ 'true' if theme == 'dark' else 'false' }}" data-theme-switch>{{ brand.icon("moon") }}<span class="label">{{ _("Dark theme") }}</span><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></button>
+        </li>
+        <li class="nav-extra">
+          <button type="button" class="nav-item" hx-post="/auth/logout" hx-swap="none" data-redirect-after="/sign-in">{{ brand.icon("sign-out") }}<span class="label">{{ _("Sign out") }}</span></button>
         </li>
       </ul>
     </nav>
-    {% endblock %}
+    <p class="tagline label">{{ _("Track less.") }}<br>{{ _("Understand more.") }}</p>
+  </aside>
+  {# On phones the tab bar keeps the three sections; these controls live in the top bar. #}
+  <header class="topbar">
+    <a class="brand" href="/dashboard">{{ brand.mark(28, "mark-topbar") }}{{ brand.wordmark() }}</a>
+    <div class="topbar-actions">
+      <button type="button" class="icon-button" hx-post="/settings/language" hx-vals='{"language": "{{ other_language }}"}' hx-swap="none" lang="{{ other_language }}" aria-label="{{ 'Русский' if other_language == 'ru' else 'English' }}">{{ other_language | upper }}</button>
+      <button type="button" class="icon-button" role="switch" aria-checked="{{ 'true' if theme == 'dark' else 'false' }}" aria-label="{{ _('Dark theme') }}" data-theme-switch>{{ brand.icon("moon") }}</button>
+      <button type="button" class="icon-button" hx-post="/auth/logout" hx-swap="none" data-redirect-after="/sign-in" aria-label="{{ _('Sign out') }}">{{ brand.icon("sign-out") }}</button>
+    </div>
   </header>
-  <div id="status" class="status" role="status" aria-live="polite">{{ status_message | default("") }}</div>
-  <main id="main" tabindex="-1">
-    {% block content %}{% endblock %}
-  </main>
+  {% endblock %}
+  <div class="page">
+    <div id="status" class="status" role="status" aria-live="polite">{{ status_message | default("") }}</div>
+    <main id="main" tabindex="-1">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
 </body>
 </html>
