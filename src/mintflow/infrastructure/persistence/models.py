@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
@@ -12,6 +13,7 @@ from sqlalchemy import (
     Index,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -626,3 +628,19 @@ class RecognitionResultRecord(Base):
     total_minor_units: Mapped[int | None] = mapped_column(BigInteger)
     total_currency: Mapped[str | None] = mapped_column(String(3))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class ExchangeRateRecord(Base):
+    """The latest known rate per currency, in units per euro (exchange rates design X2)."""
+
+    __tablename__ = "exchange_rates"
+    __table_args__ = (
+        CheckConstraint("units_per_eur > 0", name="ck_exchange_rates_positive"),
+        CheckConstraint("source IN ('ECB', 'NBU')", name="ck_exchange_rates_source"),
+    )
+
+    currency: Mapped[str] = mapped_column(String(3), primary_key=True)
+    units_per_eur: Mapped[Decimal] = mapped_column(Numeric(24, 10), nullable=False)
+    rate_date: Mapped[date] = mapped_column(Date, nullable=False)
+    source: Mapped[str] = mapped_column(String(8), nullable=False)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -18,7 +18,7 @@ The MVP is successful when all of the following are true during first-user testi
 - Users can confidently correct every field before confirmation and can tell whether an expense was saved.
 - Confirmed expenses appear consistently in both the Telegram Client and the Web Client.
 - The dashboard answers three practical questions: “How much did I spend?”, “What did I spend it on?”, and “How is my spending changing over time?”
-- Multiple currencies are never silently combined or converted; totals remain understandable and trustworthy.
+- Multiple currencies are never silently combined or converted; totals remain understandable and trustworthy. (Amended 2026-09-24: the dashboard converts into the default currency, visibly marked as approximate; docs/exchange_rates_design.md.)
 - Users can correct or delete erroneous records without support intervention.
 - Core capture, confirmation, history, and dashboard workflows work reliably on supported mobile and desktop browsers.
 - In qualitative follow-up, target users report that the capture-to-understanding loop is useful enough to continue using weekly; observed repeat capture and dashboard return behavior supports that claim.
@@ -101,7 +101,7 @@ The user can open a confirmed expense on the Web, correct it, save the change, a
 - Web Client expense history with filtering and pagination or incremental loading.
 - Web Client expense detail, editing, and deletion.
 - A small, useful system category set.
-- Support for ISO 4217 fiat currencies without exchange-rate conversion.
+- Support for ISO 4217 fiat currencies without exchange-rate conversion (amended 2026-09-24: dashboard totals convert into the default currency; expenses keep their own).
 - User settings for locale, timezone, default currency, and Telegram connection.
 - Consistent financial data across the Telegram Client and Web Client.
 - Account deletion suitable for an initial commercial service.
@@ -335,6 +335,8 @@ These are product targets measured at realistic percentiles, not guarantees for 
 - Use ISO 4217 fiat currency codes and always display a code when a symbol could be ambiguous.
 - Analytics periods use the user's configured timezone.
 - Do not convert currencies or imply that totals in different currencies are comparable.
+  (Amended 2026-09-24: the dashboard converts into the default currency at today's rates,
+  marked as approximate; see docs/exchange_rates_design.md.)
 
 ## Responsiveness
 

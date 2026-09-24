@@ -49,7 +49,7 @@ def engine(migrated_database_url: str) -> Iterator[Engine]:
                 "telegram_processed_updates, telegram_conversations, "
                 "telegram_connections, expense_change_records, expenses, "
                 "recognition_results, receipt_images, receipts, "
-                "capture_drafts, users"
+                "capture_drafts, users, exchange_rates"
             )
         )
     database_engine.dispose()

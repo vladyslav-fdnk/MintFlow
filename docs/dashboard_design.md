@@ -20,7 +20,9 @@ These are already decided and are not reopened here:
   (expense_management_design.md, D6).
 - The user's current timezone defines "today" and the default period. Expenses are grouped by
   their stored `transaction_date`, which is never reinterpreted (product decision 18).
-- Currencies are never added together or converted (decision 14, MVP section 8).
+- Currencies are never added together or converted (decision 14, MVP section 8). Amended
+  2026-09-24: the Web dashboard may convert into the default currency
+  (docs/exchange_rates_design.md).
 - One date-range filter and one optional currency filter. The default range is the current
   calendar month in the user's timezone.
 - The contents are fixed: summary (total, count, change from the previous comparable period),

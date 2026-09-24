@@ -953,6 +953,12 @@ Adding more fiat currencies within the same model is easy. Adding crypto is expe
 
 ------------------------------------------------
 
+
+### Amendment (2026-09-24, product owner)
+
+Dashboard totals and charts are converted into the user's default currency at today's rates from
+the ECB and the NBU; expenses keep their own currency. See docs/exchange_rates_design.md.
+
 ## 15. Maximum allowed expense amount
 
 ### Why it matters

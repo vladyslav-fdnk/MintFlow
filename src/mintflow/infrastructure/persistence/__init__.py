@@ -16,6 +16,7 @@ from mintflow.infrastructure.persistence.database import (
     create_database_engine,
     create_session_factory,
 )
+from mintflow.infrastructure.persistence.exchange_rates import SqlAlchemyExchangeRateRepository
 from mintflow.infrastructure.persistence.expense_changes import (
     SqlAlchemyExpenseChangeRecordAppender,
 )
@@ -38,6 +39,7 @@ from mintflow.infrastructure.persistence.users import SqlAlchemyUserRepository
 from mintflow.infrastructure.persistence.web_sessions import SqlAlchemyWebSessionRepository
 
 __all__ = [
+    "SqlAlchemyExchangeRateRepository",
     "SqlAlchemyAnalyticsRepository",
     "SqlAlchemyAuthenticationAuditAppender",
     "PostgreSQLAuthenticationRateLimiter",
