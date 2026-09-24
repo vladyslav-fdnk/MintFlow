@@ -1,6 +1,8 @@
 from collections import defaultdict
 from collections.abc import Callable, Hashable
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from typing import TypeVar
 from uuid import UUID, uuid4
 
@@ -10,6 +12,7 @@ from mintflow.application.analytics import (
     BucketGranularity,
     BuildDashboard,
     CategoryTotal,
+    ConvertTo,
     CurrencyTotal,
     DailyTotal,
     Dashboard,
@@ -20,6 +23,7 @@ from mintflow.application.analytics import (
     resolve_currency,
     share_basis_points,
 )
+from mintflow.application.rates import ExchangeRate, ExchangeRates
 from mintflow.domain.capture import (
     CaptureSource,
     CurrencyCode,
@@ -33,10 +37,20 @@ from mintflow.domain.user import Timezone, User
 USD = CurrencyCode("USD")
 EUR = CurrencyCode("EUR")
 GBP = CurrencyCode("GBP")
+JPY = CurrencyCode("JPY")
+BHD = CurrencyCode("BHD")
 NOW = datetime(2026, 8, 20, 12, 0, tzinfo=UTC)
 AUGUST = DashboardPeriod(date_from=date(2026, 8, 1), date_to=date(2026, 8, 31))
 K = TypeVar("K", bound=Hashable)
 NAMES = {"groceries": "Groceries", "health": "Health", "uncategorized": "Uncategorized"}
+RATE_DAY = date(2026, 8, 19)
+# Units per euro. BHD has no rate, as with the real ECB and NBU sources.
+RATES = ExchangeRates(
+    {
+        code: ExchangeRate(CurrencyCode(code), Decimal(units), RATE_DAY, "ECB")
+        for code, units in (("USD", "2"), ("GBP", "0.5"), ("JPY", "160"))
+    }
+)
 
 
 class FakeAnalytics:
@@ -79,41 +93,59 @@ class FakeAnalytics:
         return tuple(sorted(totals, key=lambda t: (-t.total_minor_units, t.currency.value)))
 
     def daily_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[DailyTotal, ...]:
         groups = self._group(
-            self._select(owner_id, period, currency), lambda e: e.transaction_date.value
+            self._select(owner_id, period, currency),
+            lambda e: (e.transaction_date.value, e.money.currency.value),
         )
         return tuple(
-            DailyTotal(transaction_date=day, total_minor_units=self._sum(rows), count=len(rows))
-            for day, rows in sorted(groups.items(), key=lambda item: item[0])
+            DailyTotal(
+                currency=CurrencyCode(code),
+                transaction_date=day,
+                total_minor_units=self._sum(rows),
+                count=len(rows),
+            )
+            for (day, code), rows in sorted(groups.items(), key=lambda item: item[0])
         )
 
     def category_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[CategoryTotal, ...]:
-        groups = self._group(self._select(owner_id, period, currency), lambda e: e.category_key)
+        groups = self._group(
+            self._select(owner_id, period, currency),
+            lambda e: (e.category_key, e.money.currency.value),
+        )
         # Deliberately unordered: the use case must rank on its own.
         return tuple(
             CategoryTotal(
+                currency=CurrencyCode(code),
                 category_key=key,
                 category_name=NAMES[key],
                 total_minor_units=self._sum(rows),
                 count=len(rows),
             )
-            for key, rows in groups.items()
+            for (key, code), rows in groups.items()
         )
 
     def merchant_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[MerchantTotal, ...]:
         groups = self._group(
             self._select(owner_id, period, currency),
-            lambda e: e.merchant.value if e.merchant is not None else None,
+            lambda e: (
+                e.merchant.value if e.merchant is not None else None,
+                e.money.currency.value,
+            ),
         )
         return tuple(
-            MerchantTotal(merchant=name, total_minor_units=self._sum(rows), count=len(rows))
-            for name, rows in groups.items()
+            MerchantTotal(
+                currency=CurrencyCode(code),
+                merchant=name,
+                total_minor_units=self._sum(rows),
+                count=len(rows),
+            )
+            for (name, code), rows in groups.items()
         )
 
     def largest_expense(
@@ -185,6 +217,24 @@ class Harness:
         self, *, period: DashboardPeriod | None = AUGUST, currency: CurrencyCode | None = None
     ) -> DashboardDetail:
         detail = self.build(period=period, currency=currency).detail
+        assert detail is not None
+        return detail
+
+    def converted(
+        self,
+        target: CurrencyCode = EUR,
+        *,
+        period: DashboardPeriod | None = AUGUST,
+        rates: ExchangeRates = RATES,
+    ) -> Dashboard:
+        return self.use_case.execute(
+            caller_id=self.user.id, period=period, convert_to=ConvertTo(target, rates)
+        )
+
+    def converted_detail(
+        self, target: CurrencyCode = EUR, *, period: DashboardPeriod | None = AUGUST
+    ) -> DashboardDetail:
+        detail = self.converted(target, period=period).detail
         assert detail is not None
         return detail
 
@@ -519,3 +569,266 @@ def test_deleted_expenses_are_invisible_to_every_section() -> None:
     assert [m.merchant for m in detail.top_merchants.merchants] == ["Kept"]
     assert detail.insights.largest_expense is not None
     assert detail.insights.largest_expense.expense_id == kept.id
+
+
+# --- converted into one currency (docs/exchange_rates_design.md, X3 and X4) --------------------
+
+
+def test_converted_total_is_the_sum_of_currency_groups_each_rounded_once() -> None:
+    harness = Harness()
+    for _ in range(3):
+        harness.add(5, currency=USD)  # 0.05 USD is 0.025 EUR; the group 0.15 USD is 0.075 EUR
+    harness.add(1000, currency=EUR)
+
+    dashboard = harness.converted()
+
+    assert dashboard.currency == EUR
+    assert dashboard.currency_selection_required is False
+    assert dashboard.detail is not None
+    # 7.5 cents rounds half-even to 8 once; three rounded expenses would give 3 x 2 = 6.
+    assert dashboard.detail.summary.total_minor_units == 1008
+    assert dashboard.detail.summary.count == 4
+    assert dashboard.currencies == (
+        CurrencyTotal(currency=EUR, total_minor_units=1000, count=1),
+        CurrencyTotal(currency=USD, total_minor_units=15, count=3),
+    )
+
+
+def test_a_currency_without_a_rate_is_kept_out_of_every_converted_part() -> None:
+    harness = Harness()
+    harness.add(1000, currency=EUR, merchant="Cafe", category_key="groceries")
+    harness.add(90_000, currency=BHD, merchant="Cafe", category_key="health")
+    harness.add(500, currency=BHD, day=date(2026, 7, 10))
+
+    dashboard = harness.converted()
+
+    assert dashboard.conversion is not None
+    assert dashboard.conversion.unconverted == (
+        CurrencyTotal(currency=BHD, total_minor_units=90_000, count=1),
+    )
+    detail = dashboard.detail
+    assert detail is not None
+    assert (detail.summary.total_minor_units, detail.summary.count) == (1000, 1)
+    assert detail.summary.comparison is None  # July only has BHD
+    assert sum(bucket.total_minor_units for bucket in detail.spending_over_time.buckets) == 1000
+    assert [(c.category_key, c.total_minor_units) for c in detail.categories] == [
+        ("groceries", 1000)
+    ]
+    assert [(m.merchant, m.total_minor_units, m.count) for m in detail.top_merchants.merchants] == [
+        ("Cafe", 1000, 1)
+    ]
+    assert detail.insights.largest_expense is not None
+    assert detail.insights.largest_expense.money.currency == EUR
+
+
+def test_converted_buckets_add_each_currencys_converted_bucket() -> None:
+    harness = Harness()
+    harness.add(5, currency=USD, day=date(2026, 8, 3))
+    harness.add(5, currency=USD, day=date(2026, 8, 3))
+    harness.add(1, currency=USD, day=date(2026, 8, 3))  # 0.11 USD on 3 Aug is 5.5, so 6 cents
+    harness.add(700, currency=EUR, day=date(2026, 8, 3))
+    harness.add(300, currency=GBP, day=date(2026, 8, 31))  # 3.00 GBP is 6.00 EUR
+
+    over_time = harness.converted_detail().spending_over_time
+
+    assert over_time.granularity is BucketGranularity.DAY
+    assert len(over_time.buckets) == 31
+    by_day = {bucket.period.date_from: bucket for bucket in over_time.buckets}
+    assert (by_day[date(2026, 8, 3)].total_minor_units, by_day[date(2026, 8, 3)].count) == (706, 4)
+    assert (by_day[date(2026, 8, 31)].total_minor_units, by_day[date(2026, 8, 31)].count) == (
+        600,
+        1,
+    )
+    assert by_day[date(2026, 8, 4)].total_minor_units == 0
+
+
+def test_converted_monthly_buckets_convert_each_currencys_month_once() -> None:
+    harness = Harness()
+    harness.add(5, currency=USD, day=date(2026, 6, 15))
+    harness.add(5, currency=USD, day=date(2026, 6, 16))  # 0.10 USD in June is 5 cents
+    harness.add(400, currency=EUR, day=date(2026, 8, 1))
+    period = DashboardPeriod(date_from=date(2026, 6, 10), date_to=date(2026, 8, 20))
+
+    over_time = harness.converted_detail(period=period).spending_over_time
+
+    assert over_time.granularity is BucketGranularity.MONTH
+    assert [(bucket.total_minor_units, bucket.count) for bucket in over_time.buckets] == [
+        (5, 2),
+        (0, 0),
+        (400, 1),
+    ]
+
+
+def test_converted_categories_rank_and_share_by_converted_amounts() -> None:
+    harness = Harness()
+    harness.add(3000, currency=USD, category_key="groceries")  # 30.00 USD is 15.00 EUR
+    harness.add(500, currency=EUR, category_key="groceries")
+    harness.add(2500, currency=EUR, category_key="health")
+    harness.add(4000, currency=JPY, category_key="uncategorized")  # 4000 JPY is 25.00 EUR
+
+    detail = harness.converted_detail()
+
+    assert detail.summary.total_minor_units == 7000
+    # Raw minor units would put groceries (3500) first; converted, it is last.
+    assert [
+        (c.category_key, c.total_minor_units, c.count, c.share_basis_points)
+        for c in detail.categories
+    ] == [
+        ("health", 2500, 1, 3571),
+        ("uncategorized", 2500, 1, 3571),
+        ("groceries", 2000, 2, 2857),
+    ]
+    assert detail.insights.largest_category is not None
+    assert detail.insights.largest_category.category_key == "health"
+
+
+def test_converted_merchants_combine_the_same_name_across_currencies() -> None:
+    harness = Harness()
+    harness.add(1000, currency=USD, merchant="Market")  # 5.00 EUR
+    harness.add(300, currency=EUR, merchant="Market")
+    harness.add(700, currency=EUR, merchant="Bakery")
+    harness.add(200, currency=GBP)  # no merchant: 4.00 EUR in "Other"
+    for index in range(5):
+        harness.add(10 + index, currency=EUR, merchant=f"Kiosk {index}")
+
+    top = harness.converted_detail().top_merchants
+
+    assert [(m.merchant, m.total_minor_units, m.count) for m in top.merchants] == [
+        ("Market", 800, 2),
+        ("Bakery", 700, 1),
+        ("Kiosk 4", 14, 1),
+        ("Kiosk 3", 13, 1),
+        ("Kiosk 2", 12, 1),
+    ]
+    assert top.other is not None
+    assert (top.other.total_minor_units, top.other.count) == (400 + 10 + 11, 3)
+    assert top.merchants[0].share_basis_points == share_basis_points(800, 800 + 700 + 400 + 60)
+
+
+def test_converted_largest_expense_compares_converted_amounts() -> None:
+    harness = Harness()
+    harness.add(3000, currency=USD, merchant="Big number")  # 15.00 EUR
+    winner = harness.add(2000, currency=EUR, merchant="Real winner")
+    harness.add(5000, currency=BHD)  # no rate: never the largest
+
+    largest = harness.converted_detail().insights.largest_expense
+
+    assert largest is not None
+    assert largest.expense_id == winner.id
+    assert largest.money == Money(minor_units=2000, currency=EUR)
+    assert largest.converted_minor_units == 2000
+
+
+def test_converted_largest_expense_keeps_its_own_money_and_breaks_ties_by_date() -> None:
+    harness = Harness()
+    harness.add(1000, currency=EUR, day=date(2026, 8, 5))
+    winner = harness.add(2000, currency=USD, day=date(2026, 8, 6))  # also 10.00 EUR
+
+    largest = harness.converted_detail().insights.largest_expense
+
+    assert largest is not None
+    assert largest.expense_id == winner.id
+    assert largest.money == Money(minor_units=2000, currency=USD)
+    assert largest.converted_minor_units == 1000
+
+
+def test_converted_comparison_converts_both_windows() -> None:
+    harness = Harness()  # today is 20 Aug
+    harness.add(1000, currency=EUR, day=date(2026, 8, 5))
+    harness.add(1000, currency=USD, day=date(2026, 8, 6))  # 5.00 EUR
+    harness.add(400, currency=GBP, day=date(2026, 7, 10))  # 8.00 EUR
+    harness.add(9999, currency=BHD, day=date(2026, 7, 11))  # no rate
+
+    comparison = harness.converted_detail().summary.comparison
+
+    assert comparison is not None
+    assert comparison.current_total_minor_units == 1500
+    assert comparison.previous_total_minor_units == 800
+    assert comparison.change_minor_units == 700
+    assert comparison.change_basis_points == 8750
+
+
+def test_conversion_into_another_currency_goes_through_the_euro() -> None:
+    harness = Harness()
+    harness.add(100, currency=GBP)  # 1.00 GBP is 2.00 EUR is 4.00 USD
+    harness.add(160, currency=JPY)  # 160 JPY is 1.00 EUR is 2.00 USD
+    harness.add(50, currency=USD)
+
+    dashboard = harness.converted(USD)
+
+    assert dashboard.currency == USD
+    assert dashboard.detail is not None
+    assert dashboard.detail.summary.total_minor_units == 400 + 200 + 50
+    assert dashboard.conversion is not None
+    assert [rate.currency for rate in dashboard.conversion.rates] == [GBP, JPY, USD]
+    assert dashboard.conversion.unconverted == ()
+
+
+def test_conversion_lists_only_the_rates_it_used() -> None:
+    harness = Harness()
+    harness.add(1000, currency=EUR)
+    harness.add(200, currency=USD, day=date(2026, 7, 5))  # used by the comparison only
+
+    conversion = harness.converted().conversion
+
+    assert conversion is not None
+    assert conversion.rates == (RATES.rates["USD"],)
+
+
+def test_converting_a_single_currency_into_itself_changes_nothing() -> None:
+    harness = Harness(default_currency=EUR)
+    harness.add(1000, currency=EUR, merchant="Cafe", day=date(2026, 8, 3))
+    harness.add(250, currency=EUR, category_key="health", day=date(2026, 7, 3))
+
+    dashboard = harness.converted()
+
+    own = harness.detail()
+    assert own.insights.largest_expense is not None
+    assert dashboard.detail == replace(
+        own,
+        insights=replace(
+            own.insights,
+            largest_expense=replace(own.insights.largest_expense, converted_minor_units=1000),
+        ),
+    )
+    assert dashboard.conversion is not None
+    assert dashboard.conversion.rates == ()
+    assert dashboard.conversion.unconverted == ()
+
+
+def test_converted_dashboard_without_expenses_is_empty() -> None:
+    harness = Harness()
+
+    dashboard = harness.converted(GBP)
+
+    assert dashboard.currency == GBP
+    assert dashboard.detail is not None
+    assert dashboard.detail.summary.total_minor_units == 0
+    assert dashboard.detail.summary.comparison is None
+    assert len(dashboard.detail.spending_over_time.buckets) == 31
+    assert dashboard.conversion is not None
+    assert dashboard.conversion.rates == ()
+
+
+def test_without_any_rates_only_the_target_currency_counts() -> None:
+    harness = Harness()
+    harness.add(1000, currency=EUR)
+    harness.add(1000, currency=USD)
+
+    dashboard = harness.converted(rates=ExchangeRates())
+
+    assert dashboard.detail is not None
+    assert dashboard.detail.summary.total_minor_units == 1000
+    assert dashboard.conversion is not None
+    assert dashboard.conversion.unconverted == (
+        CurrencyTotal(currency=USD, total_minor_units=1000, count=1),
+    )
+
+
+def test_a_dashboard_cannot_be_both_in_one_currency_and_converted() -> None:
+    harness = Harness()
+
+    with pytest.raises(ValueError):
+        harness.use_case.execute(
+            caller_id=harness.user.id, currency=USD, convert_to=ConvertTo(EUR, RATES)
+        )

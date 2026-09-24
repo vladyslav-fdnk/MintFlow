@@ -1,11 +1,19 @@
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from uuid import UUID
 
 import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from mintflow.application.analytics import BucketGranularity, BuildDashboard, DashboardPeriod
+from mintflow.application.analytics import (
+    BucketGranularity,
+    BuildDashboard,
+    ConvertTo,
+    CurrencyTotal,
+    DashboardPeriod,
+)
+from mintflow.application.rates import ExchangeRate
 from mintflow.domain.capture import (
     CaptureDraft,
     CaptureSource,
@@ -19,6 +27,7 @@ from mintflow.domain.user import UserStatus
 from mintflow.infrastructure.persistence import (
     SqlAlchemyAnalyticsRepository,
     SqlAlchemyCaptureDraftRepository,
+    SqlAlchemyExchangeRateRepository,
     SqlAlchemyExpenseRepository,
     SqlAlchemyUserRepository,
 )
@@ -29,6 +38,8 @@ pytestmark = pytest.mark.integration
 NOW = datetime(2026, 8, 20, 9, 0, tzinfo=UTC)
 USD = CurrencyCode("USD")
 EUR = CurrencyCode("EUR")
+GBP = CurrencyCode("GBP")
+BHD = CurrencyCode("BHD")
 
 
 def _add_user(session: Session, *, default_currency: str | None = None) -> UUID:
@@ -174,3 +185,67 @@ def test_multi_currency_month_without_default_requires_a_choice(db_session: Sess
     assert unselected.detail is None
     assert selected.detail is not None
     assert selected.detail.summary.total_minor_units == 2_000
+
+
+def test_converted_month_with_several_currencies_and_one_without_a_rate(
+    db_session: Session,
+) -> None:
+    owner_id = _add_user(db_session, default_currency="EUR")
+    stranger_id = _add_user(db_session)
+    rates = SqlAlchemyExchangeRateRepository(db_session)
+    rates.save(
+        [
+            ExchangeRate(USD, Decimal("1.25"), date(2026, 8, 19), "ECB"),
+            ExchangeRate(GBP, Decimal("0.8"), date(2026, 8, 19), "ECB"),
+        ],
+        fetched_at=NOW,
+    )
+
+    _add(db_session, owner_id, 1_000, 2, merchant="Market")
+    _add(db_session, owner_id, 3_000, 3, currency=USD, merchant="Market")  # 24.00 EUR
+    _add(db_session, owner_id, 500, 3, currency=GBP, category_key="health")  # 6.25 EUR
+    _add(db_session, owner_id, 10_000, 4, currency=BHD, merchant="Market")  # no rate
+    _add(db_session, owner_id, 800, 10, currency=USD, month=7)  # 6.40 EUR, previous window
+    _add(db_session, stranger_id, 77_777, 3, currency=USD, merchant="Market")
+
+    dashboard = _use_case(db_session).execute(
+        caller_id=owner_id, convert_to=ConvertTo(EUR, rates.latest())
+    )
+
+    assert dashboard.currency == EUR
+    assert dashboard.conversion is not None
+    assert [rate.currency for rate in dashboard.conversion.rates] == [GBP, USD]
+    assert dashboard.conversion.unconverted == (
+        CurrencyTotal(currency=BHD, total_minor_units=10_000, count=1),
+    )
+    detail = dashboard.detail
+    assert detail is not None
+    assert (detail.summary.total_minor_units, detail.summary.count) == (4_025, 3)
+    comparison = detail.summary.comparison
+    assert comparison is not None
+    assert (comparison.previous_total_minor_units, comparison.current_total_minor_units) == (
+        640,
+        4_025,
+    )
+    assert comparison.change_basis_points == 52_891
+
+    by_day = {bucket.period.date_from: bucket for bucket in detail.spending_over_time.buckets}
+    assert by_day[date(2026, 8, 3)].total_minor_units == 3_025
+    assert by_day[date(2026, 8, 4)].total_minor_units == 0
+    assert sum(bucket.total_minor_units for bucket in by_day.values()) == 4_025
+
+    assert [(c.category_key, c.total_minor_units, c.count) for c in detail.categories] == [
+        ("groceries", 3_400, 2),
+        ("health", 625, 1),
+    ]
+    assert [(m.merchant, m.total_minor_units, m.count) for m in detail.top_merchants.merchants] == [
+        ("Market", 3_400, 2)
+    ]
+    assert detail.top_merchants.other is not None
+    assert detail.top_merchants.other.total_minor_units == 625
+    largest = detail.insights.largest_expense
+    assert largest is not None
+    assert (largest.money, largest.converted_minor_units) == (
+        Money(minor_units=3_000, currency=USD),
+        2_400,
+    )

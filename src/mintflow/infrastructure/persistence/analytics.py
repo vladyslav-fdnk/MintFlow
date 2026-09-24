@@ -36,7 +36,10 @@ def _active_in(
 
 
 class SqlAlchemyAnalyticsRepository:
-    """Read-only dashboard aggregates over one owner's active Expenses (design D9)."""
+    """Read-only dashboard aggregates over one owner's active Expenses (design D9).
+
+    A ``currency`` of None reads every currency, still grouped by currency.
+    """
 
     def __init__(self, session: Session) -> None:
         self._session = session
@@ -58,48 +61,78 @@ class SqlAlchemyAnalyticsRepository:
         )
 
     def daily_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[DailyTotal, ...]:
         statement = (
             _active_in(owner_id, period, currency)
-            .with_only_columns(ExpenseRecord.transaction_date, _TOTAL, _COUNT)
-            .group_by(ExpenseRecord.transaction_date)
-            .order_by(ExpenseRecord.transaction_date)
+            .with_only_columns(
+                ExpenseRecord.amount_currency, ExpenseRecord.transaction_date, _TOTAL, _COUNT
+            )
+            .group_by(ExpenseRecord.amount_currency, ExpenseRecord.transaction_date)
+            .order_by(ExpenseRecord.transaction_date, ExpenseRecord.amount_currency)
         )
         return tuple(
-            DailyTotal(transaction_date=day, total_minor_units=int(total), count=count)
-            for day, total, count in self._session.execute(statement)
+            DailyTotal(
+                currency=CurrencyCode(code),
+                transaction_date=day,
+                total_minor_units=int(total),
+                count=count,
+            )
+            for code, day, total, count in self._session.execute(statement)
         )
 
     def category_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[CategoryTotal, ...]:
         statement = (
             _active_in(owner_id, period, currency)
-            .with_only_columns(ExpenseRecord.category_key, CategoryRecord.name, _TOTAL, _COUNT)
+            .with_only_columns(
+                ExpenseRecord.amount_currency,
+                ExpenseRecord.category_key,
+                CategoryRecord.name,
+                _TOTAL,
+                _COUNT,
+            )
             .join(CategoryRecord, CategoryRecord.key == ExpenseRecord.category_key)
-            .group_by(ExpenseRecord.category_key, CategoryRecord.name)
-            .order_by(_TOTAL.desc(), ExpenseRecord.category_key)
+            .group_by(
+                ExpenseRecord.amount_currency, ExpenseRecord.category_key, CategoryRecord.name
+            )
+            .order_by(_TOTAL.desc(), ExpenseRecord.category_key, ExpenseRecord.amount_currency)
         )
         return tuple(
             CategoryTotal(
-                category_key=key, category_name=name, total_minor_units=int(total), count=count
+                currency=CurrencyCode(code),
+                category_key=key,
+                category_name=name,
+                total_minor_units=int(total),
+                count=count,
             )
-            for key, name, total, count in self._session.execute(statement)
+            for code, key, name, total, count in self._session.execute(statement)
         )
 
     def merchant_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[MerchantTotal, ...]:
         statement = (
             _active_in(owner_id, period, currency)
-            .with_only_columns(ExpenseRecord.merchant_name, _TOTAL, _COUNT)
-            .group_by(ExpenseRecord.merchant_name)
-            .order_by(_TOTAL.desc(), ExpenseRecord.merchant_name.asc().nulls_last())
+            .with_only_columns(
+                ExpenseRecord.amount_currency, ExpenseRecord.merchant_name, _TOTAL, _COUNT
+            )
+            .group_by(ExpenseRecord.amount_currency, ExpenseRecord.merchant_name)
+            .order_by(
+                _TOTAL.desc(),
+                ExpenseRecord.merchant_name.asc().nulls_last(),
+                ExpenseRecord.amount_currency,
+            )
         )
         return tuple(
-            MerchantTotal(merchant=merchant, total_minor_units=int(total), count=count)
-            for merchant, total, count in self._session.execute(statement)
+            MerchantTotal(
+                currency=CurrencyCode(code),
+                merchant=merchant,
+                total_minor_units=int(total),
+                count=count,
+            )
+            for code, merchant, total, count in self._session.execute(statement)
         )
 
     def largest_expense(

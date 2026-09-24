@@ -1,5 +1,12 @@
-"""Assemble the dashboard for one user, period, and currency (docs/dashboard_design.md)."""
+"""Assemble the dashboard for one user, period, and currency (docs/dashboard_design.md).
 
+A converted dashboard shows every currency with a rate in one target currency
+(docs/exchange_rates_design.md, X3 and X4): each currency group converts and rounds once, then
+the groups add up. Currencies without a rate stay out of every converted figure and are listed
+separately.
+"""
+
+from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -22,7 +29,8 @@ from mintflow.application.analytics.periods import (
     default_period,
     local_today,
 )
-from mintflow.domain.capture import UNCATEGORIZED_KEY, CurrencyCode, Money
+from mintflow.application.rates import ExchangeRate, ExchangeRates
+from mintflow.domain.capture import UNCATEGORIZED_KEY, CurrencyCode, Expense, Money
 from mintflow.domain.user import User
 
 TOP_MERCHANT_COUNT: Final = 5
@@ -92,10 +100,13 @@ class TopMerchants:
 
 @dataclass(frozen=True, slots=True)
 class LargestExpense:
+    """``converted_minor_units`` is the amount in the dashboard currency when converted."""
+
     expense_id: UUID
     money: Money
     merchant: str | None
     transaction_date: date
+    converted_minor_units: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,14 +125,35 @@ class DashboardDetail:
 
 
 @dataclass(frozen=True, slots=True)
+class ConvertTo:
+    """Ask for the dashboard in ``currency`` at the ``rates`` snapshot."""
+
+    currency: CurrencyCode
+    rates: ExchangeRates
+
+
+@dataclass(frozen=True, slots=True)
+class Conversion:
+    """The rates a converted dashboard used, and the currencies it could not convert."""
+
+    rates: tuple[ExchangeRate, ...]
+    unconverted: tuple[CurrencyTotal, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class Dashboard:
-    """``detail`` is None exactly when ``currency_selection_required`` is True (D3)."""
+    """``detail`` is None exactly when ``currency_selection_required`` is True (D3).
+
+    ``conversion`` is set exactly when the dashboard was converted; ``currencies`` always holds
+    the original per-currency totals.
+    """
 
     period: DashboardPeriod
     currencies: tuple[CurrencyTotal, ...]
     currency: CurrencyCode | None
     currency_selection_required: bool
     detail: DashboardDetail | None
+    conversion: Conversion | None = None
 
 
 class UserRepository(Protocol):
@@ -219,6 +251,122 @@ def _top_merchants(totals: tuple[MerchantTotal, ...], grand_total: int) -> TopMe
     )
 
 
+class _Converter:
+    """Converts into one target currency and remembers which rates it used."""
+
+    def __init__(self, convert_to: ConvertTo) -> None:
+        self.target = convert_to.currency
+        self._rates = convert_to.rates
+        self._used: set[str] = set()
+
+    def can_convert(self, currency: CurrencyCode) -> bool:
+        return self._rates.can_convert(currency, self.target)
+
+    def convert(self, minor_units: int, currency: CurrencyCode) -> int:
+        converted = self._rates.convert(minor_units, currency, self.target)
+        if converted is None:
+            raise ValueError(f"no rate for {currency.value}")
+        if currency != self.target:
+            self._used.update((currency.value, self.target.value))
+        return converted
+
+    def used_rates(self) -> tuple[ExchangeRate, ...]:
+        # The euro is the base and has no stored rate.
+        return tuple(
+            self._rates.rates[code] for code in sorted(self._used) if code in self._rates.rates
+        )
+
+
+def _converted_buckets(
+    period: DashboardPeriod, daily: tuple[DailyTotal, ...], converter: _Converter
+) -> SpendingOverTime:
+    """Each currency's bucket total converts once; the converted totals add up per bucket."""
+    by_currency: dict[CurrencyCode, list[DailyTotal]] = defaultdict(list)
+    for day in daily:
+        by_currency[day.currency].append(day)
+    combined = _bucket_totals(period, ())
+    buckets = list(combined.buckets)
+    for currency, days in by_currency.items():
+        for index, bucket in enumerate(_bucket_totals(period, tuple(days)).buckets):
+            if bucket.count:
+                buckets[index] = TimeBucket(
+                    period=bucket.period,
+                    total_minor_units=buckets[index].total_minor_units
+                    + converter.convert(bucket.total_minor_units, currency),
+                    count=buckets[index].count + bucket.count,
+                )
+    return SpendingOverTime(granularity=combined.granularity, buckets=tuple(buckets))
+
+
+def _converted_categories(
+    totals: tuple[CategoryTotal, ...], converter: _Converter
+) -> tuple[CategoryTotal, ...]:
+    combined: dict[str, CategoryTotal] = {}
+    for total in totals:
+        converted = converter.convert(total.total_minor_units, total.currency)
+        previous = combined.get(total.category_key)
+        combined[total.category_key] = CategoryTotal(
+            currency=converter.target,
+            category_key=total.category_key,
+            category_name=total.category_name,
+            total_minor_units=converted + (previous.total_minor_units if previous else 0),
+            count=total.count + (previous.count if previous else 0),
+        )
+    return tuple(combined.values())
+
+
+def _converted_merchants(
+    totals: tuple[MerchantTotal, ...], converter: _Converter
+) -> tuple[MerchantTotal, ...]:
+    combined: dict[str | None, MerchantTotal] = {}
+    for total in totals:
+        converted = converter.convert(total.total_minor_units, total.currency)
+        previous = combined.get(total.merchant)
+        combined[total.merchant] = MerchantTotal(
+            currency=converter.target,
+            merchant=total.merchant,
+            total_minor_units=converted + (previous.total_minor_units if previous else 0),
+            count=total.count + (previous.count if previous else 0),
+        )
+    return tuple(combined.values())
+
+
+def _largest_expense(expense: Expense, converted_minor_units: int | None = None) -> LargestExpense:
+    return LargestExpense(
+        expense_id=expense.id,
+        money=expense.money,
+        merchant=expense.merchant.value if expense.merchant is not None else None,
+        transaction_date=expense.transaction_date.value,
+        converted_minor_units=converted_minor_units,
+    )
+
+
+def _assemble_detail(
+    *,
+    total: int,
+    count: int,
+    comparison: Comparison | None,
+    spending_over_time: SpendingOverTime,
+    category_totals: tuple[CategoryTotal, ...],
+    merchant_totals: tuple[MerchantTotal, ...],
+    largest: LargestExpense | None,
+) -> DashboardDetail:
+    categories = _rank_categories(category_totals, total)
+    return DashboardDetail(
+        summary=Summary(total_minor_units=total, count=count, comparison=comparison),
+        spending_over_time=spending_over_time,
+        categories=categories,
+        top_merchants=_top_merchants(merchant_totals, total),
+        insights=Insights(
+            largest_category=next(
+                (category for category in categories if category.category_key != UNCATEGORIZED_KEY),
+                None,
+            ),
+            largest_expense=largest,
+        ),
+    )
+
+
 def _empty_detail(period: DashboardPeriod) -> DashboardDetail:
     return DashboardDetail(
         summary=Summary(total_minor_units=0, count=0, comparison=None),
@@ -247,7 +395,11 @@ class BuildDashboard:
         caller_id: UUID,
         period: DashboardPeriod | None = None,
         currency: CurrencyCode | None = None,
+        convert_to: ConvertTo | None = None,
     ) -> Dashboard:
+        """``currency`` picks one currency's own dashboard; ``convert_to`` converts them all."""
+        if currency is not None and convert_to is not None:
+            raise ValueError("a dashboard is either in one currency or converted, not both")
         user = self._user_repository.get(caller_id)
         if user is None:
             raise DashboardUserNotFound("user not found")
@@ -256,6 +408,26 @@ class BuildDashboard:
             period = default_period(now=now, timezone=user.timezone)
 
         currencies = self._analytics.currency_totals(owner_id=caller_id, period=period)
+        today = local_today(now=now, timezone=user.timezone)
+        if convert_to is not None:
+            converter = _Converter(convert_to)
+            converted_detail = self._converted_detail(
+                caller_id, period, converter, currencies, today=today
+            )
+            return Dashboard(
+                period=period,
+                currencies=currencies,
+                currency=converter.target,
+                currency_selection_required=False,
+                detail=converted_detail,
+                conversion=Conversion(
+                    rates=converter.used_rates(),
+                    unconverted=tuple(
+                        total for total in currencies if not converter.can_convert(total.currency)
+                    ),
+                ),
+            )
+
         selected, selection_required = resolve_currency(
             requested=currency,
             present=(total.currency for total in currencies),
@@ -266,7 +438,6 @@ class BuildDashboard:
         elif selected is None:
             detail = _empty_detail(period)
         else:
-            today = local_today(now=now, timezone=user.timezone)
             detail = self._detail(caller_id, period, selected, currencies, today=today)
         return Dashboard(
             period=period,
@@ -286,77 +457,137 @@ class BuildDashboard:
         today: date,
     ) -> DashboardDetail:
         selected_total = next((total for total in currencies if total.currency == currency), None)
-        total = selected_total.total_minor_units if selected_total is not None else 0
-        count = selected_total.count if selected_total is not None else 0
-
-        categories = _rank_categories(
-            self._analytics.category_totals(owner_id=owner_id, period=period, currency=currency),
-            total,
-        )
         largest = self._analytics.largest_expense(
             owner_id=owner_id, period=period, currency=currency
         )
-        return DashboardDetail(
-            summary=Summary(
-                total_minor_units=total,
-                count=count,
-                comparison=self._comparison(owner_id, period, currency, today=today),
-            ),
+
+        def window_total(window: DashboardPeriod) -> tuple[int, int]:
+            found = self._total_in(owner_id, window, currency)
+            return (found.total_minor_units, found.count) if found is not None else (0, 0)
+
+        return _assemble_detail(
+            total=selected_total.total_minor_units if selected_total is not None else 0,
+            count=selected_total.count if selected_total is not None else 0,
+            comparison=self._comparison(period, window_total, today=today),
             spending_over_time=_bucket_totals(
                 period,
                 self._analytics.daily_totals(owner_id=owner_id, period=period, currency=currency),
             ),
-            categories=categories,
-            top_merchants=_top_merchants(
-                self._analytics.merchant_totals(
-                    owner_id=owner_id, period=period, currency=currency
-                ),
-                total,
+            category_totals=self._analytics.category_totals(
+                owner_id=owner_id, period=period, currency=currency
             ),
-            insights=Insights(
-                largest_category=next(
-                    (
-                        category
-                        for category in categories
-                        if category.category_key != UNCATEGORIZED_KEY
-                    ),
-                    None,
-                ),
-                largest_expense=(
-                    LargestExpense(
-                        expense_id=largest.id,
-                        money=largest.money,
-                        merchant=largest.merchant.value if largest.merchant is not None else None,
-                        transaction_date=largest.transaction_date.value,
-                    )
-                    if largest is not None
-                    else None
-                ),
+            merchant_totals=self._analytics.merchant_totals(
+                owner_id=owner_id, period=period, currency=currency
             ),
+            largest=_largest_expense(largest) if largest is not None else None,
         )
 
+    def _converted_detail(
+        self,
+        owner_id: UUID,
+        period: DashboardPeriod,
+        converter: _Converter,
+        currencies: tuple[CurrencyTotal, ...],
+        *,
+        today: date,
+    ) -> DashboardDetail:
+        def convertible[T: (CurrencyTotal, DailyTotal, CategoryTotal, MerchantTotal)](
+            rows: tuple[T, ...],
+        ) -> tuple[T, ...]:
+            return tuple(row for row in rows if converter.can_convert(row.currency))
+
+        def converted_total(totals: tuple[CurrencyTotal, ...]) -> tuple[int, int]:
+            return (
+                sum(converter.convert(total.total_minor_units, total.currency) for total in totals),
+                sum(total.count for total in totals),
+            )
+
+        def window_total(window: DashboardPeriod) -> tuple[int, int]:
+            return converted_total(
+                convertible(self._analytics.currency_totals(owner_id=owner_id, period=window))
+            )
+
+        total, count = converted_total(convertible(currencies))
+        return _assemble_detail(
+            total=total,
+            count=count,
+            comparison=self._comparison(period, window_total, today=today),
+            spending_over_time=_converted_buckets(
+                period,
+                convertible(
+                    self._analytics.daily_totals(owner_id=owner_id, period=period, currency=None)
+                ),
+                converter,
+            ),
+            category_totals=_converted_categories(
+                convertible(
+                    self._analytics.category_totals(owner_id=owner_id, period=period, currency=None)
+                ),
+                converter,
+            ),
+            merchant_totals=_converted_merchants(
+                convertible(
+                    self._analytics.merchant_totals(owner_id=owner_id, period=period, currency=None)
+                ),
+                converter,
+            ),
+            largest=self._converted_largest(owner_id, period, convertible(currencies), converter),
+        )
+
+    def _converted_largest(
+        self,
+        owner_id: UUID,
+        period: DashboardPeriod,
+        currencies: tuple[CurrencyTotal, ...],
+        converter: _Converter,
+    ) -> LargestExpense | None:
+        """The largest converted amount; ties break as in the repository (later date, then later
+        creation, then id)."""
+        candidates = []
+        for total in currencies:
+            expense = self._analytics.largest_expense(
+                owner_id=owner_id, period=period, currency=total.currency
+            )
+            if expense is not None:
+                converted = converter.convert(expense.money.minor_units, expense.money.currency)
+                candidates.append((converted, expense))
+        if not candidates:
+            return None
+        converted, expense = max(
+            candidates,
+            key=lambda candidate: (
+                candidate[0],
+                candidate[1].transaction_date.value,
+                candidate[1].created_at,
+                candidate[1].id,
+            ),
+        )
+        return _largest_expense(expense, converted)
+
     def _comparison(
-        self, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode, *, today: date
+        self,
+        period: DashboardPeriod,
+        window_total: Callable[[DashboardPeriod], tuple[int, int]],
+        *,
+        today: date,
     ) -> Comparison | None:
+        """``window_total`` gives (total in minor units, count) for a window."""
         windows = comparison_windows(period, today=today)
         if windows is None:
             return None
-        previous = self._total_in(owner_id, windows.previous, currency)
-        if previous is None or previous.count == 0:
+        previous_total, previous_count = window_total(windows.previous)
+        if previous_count == 0:
             return None
-        current = self._total_in(owner_id, windows.current, currency)
-        current_total = current.total_minor_units if current is not None else 0
-        change = current_total - previous.total_minor_units
+        current_total, _ = window_total(windows.current)
+        change = current_total - previous_total
         return Comparison(
             current_period=windows.current,
             current_total_minor_units=current_total,
             previous_period=windows.previous,
-            previous_total_minor_units=previous.total_minor_units,
+            previous_total_minor_units=previous_total,
             change_minor_units=change,
             change_basis_points=(
-                share_basis_points(change, previous.total_minor_units)
-                if previous.total_minor_units > 0
-                else None
+                share_basis_points(change, previous_total) if previous_total > 0 else None
             ),
         )
 

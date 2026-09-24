@@ -2,7 +2,8 @@
 
 Every value is computed in the database over confirmed, non-deleted
 Expenses of one owner. Totals are exact integers in minor units and never
-mix currencies.
+mix currencies: every row carries its currency, and a ``currency`` of None
+groups by currency as well (docs/exchange_rates_design.md, X4).
 """
 
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ class CurrencyTotal:
 
 @dataclass(frozen=True, slots=True)
 class DailyTotal:
+    currency: CurrencyCode
     transaction_date: date
     total_minor_units: int
     count: int
@@ -30,6 +32,7 @@ class DailyTotal:
 
 @dataclass(frozen=True, slots=True)
 class CategoryTotal:
+    currency: CurrencyCode
     category_key: str
     category_name: str
     total_minor_units: int
@@ -38,8 +41,9 @@ class CategoryTotal:
 
 @dataclass(frozen=True, slots=True)
 class MerchantTotal:
-    """``merchant`` is None for the one group of Expenses without a merchant."""
+    """``merchant`` is None for the group of Expenses without a merchant in a currency."""
 
+    currency: CurrencyCode
     merchant: str | None
     total_minor_units: int
     count: int
@@ -51,15 +55,15 @@ class AnalyticsRepository(Protocol):
     ) -> tuple[CurrencyTotal, ...]: ...
 
     def daily_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[DailyTotal, ...]: ...
 
     def category_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[CategoryTotal, ...]: ...
 
     def merchant_totals(
-        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode
+        self, *, owner_id: UUID, period: DashboardPeriod, currency: CurrencyCode | None
     ) -> tuple[MerchantTotal, ...]: ...
 
     def largest_expense(

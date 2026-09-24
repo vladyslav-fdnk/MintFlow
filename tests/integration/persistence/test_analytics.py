@@ -142,8 +142,12 @@ def test_daily_totals_group_by_transaction_date_in_one_currency(
 
     # The noise adds a deleted row on 10 Aug; only sparse days with active rows appear.
     assert totals == (
-        DailyTotal(transaction_date=date(2026, 8, 1), total_minor_units=1250, count=2),
-        DailyTotal(transaction_date=date(2026, 8, 31), total_minor_units=4000, count=1),
+        DailyTotal(
+            currency=USD, transaction_date=date(2026, 8, 1), total_minor_units=1250, count=2
+        ),
+        DailyTotal(
+            currency=USD, transaction_date=date(2026, 8, 31), total_minor_units=4000, count=1
+        ),
     )
 
 
@@ -184,9 +188,9 @@ def test_merchant_totals_use_exact_names_and_group_missing_merchants(
     totals = analytics.merchant_totals(owner_id=owner_id, period=AUGUST, currency=USD)
 
     assert totals == (
-        MerchantTotal(merchant="Corner Shop", total_minor_units=2500, count=2),
-        MerchantTotal(merchant=None, total_minor_units=2200, count=2),
-        MerchantTotal(merchant="corner shop", total_minor_units=700, count=1),
+        MerchantTotal(currency=USD, merchant="Corner Shop", total_minor_units=2500, count=2),
+        MerchantTotal(currency=USD, merchant=None, total_minor_units=2200, count=2),
+        MerchantTotal(currency=USD, merchant="corner shop", total_minor_units=700, count=1),
     )
 
 
@@ -217,6 +221,47 @@ def test_largest_expense_is_deterministic_on_ties(
     ]
     assert analytics.largest_expense(owner_id=owner_id, period=AUGUST, currency=USD) == max(
         twins, key=lambda expense: expense.id
+    )
+
+
+def test_all_currency_reads_also_group_by_currency(
+    seeder: Seeder, analytics: SqlAlchemyAnalyticsRepository
+) -> None:
+    owner_id = _add_user(seeder.session)
+    stranger_id = _add_user(seeder.session)
+    _add_noise(seeder, owner_id, stranger_id)
+    seeder.add(owner_id, amount=1000, currency=USD, merchant="Corner Shop")
+    seeder.add(owner_id, amount=500, currency=USD, merchant="Corner Shop")
+    seeder.add(owner_id, amount=700, currency=EUR, merchant="Corner Shop")
+    seeder.add(owner_id, amount=300, currency=EUR, day=date(2026, 8, 11), category_key="health")
+
+    daily = analytics.daily_totals(owner_id=owner_id, period=AUGUST, currency=None)
+    categories = analytics.category_totals(owner_id=owner_id, period=AUGUST, currency=None)
+    merchants = analytics.merchant_totals(owner_id=owner_id, period=AUGUST, currency=None)
+
+    assert daily == (
+        DailyTotal(
+            currency=EUR, transaction_date=date(2026, 8, 10), total_minor_units=700, count=1
+        ),
+        DailyTotal(
+            currency=USD, transaction_date=date(2026, 8, 10), total_minor_units=1500, count=2
+        ),
+        DailyTotal(
+            currency=EUR, transaction_date=date(2026, 8, 11), total_minor_units=300, count=1
+        ),
+    )
+    assert [
+        (total.currency, total.category_key, total.total_minor_units, total.count)
+        for total in categories
+    ] == [
+        (USD, "groceries", 1500, 2),
+        (EUR, "groceries", 700, 1),
+        (EUR, "health", 300, 1),
+    ]
+    assert merchants == (
+        MerchantTotal(currency=USD, merchant="Corner Shop", total_minor_units=1500, count=2),
+        MerchantTotal(currency=EUR, merchant="Corner Shop", total_minor_units=700, count=1),
+        MerchantTotal(currency=EUR, merchant=None, total_minor_units=300, count=1),
     )
 
 

@@ -504,14 +504,14 @@ tasks:
   - id: FX-02
     title: Dashboard in the Main Currency
     file: docs/tasks/FX-02-dashboard-main-currency.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - FX-01
   - id: FX-03
     title: "Web: Converted Dashboard and History"
     file: docs/tasks/FX-03-web-converted-dashboard.md
-    status: blocked
+    status: ready
     human_approval: approved
     depends_on:
       - FX-02

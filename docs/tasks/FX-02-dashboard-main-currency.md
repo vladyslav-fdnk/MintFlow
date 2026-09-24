@@ -1,6 +1,6 @@
 # FX-02 — Dashboard in the Main Currency
 
-Status: ready
+Status: done
 
 ## Goal
 
