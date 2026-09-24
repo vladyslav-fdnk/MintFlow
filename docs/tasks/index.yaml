@@ -1,8 +1,9 @@
-# operations is the active sprint: the first production deployment on one VPS with Docker
-# Compose, Resend email, scheduled jobs, encrypted backups, and basic monitoring
-# (docs/operations_design.md, approved). exchange-rates and every earlier sprint are complete
-# except RCPT-07, which waits for consented sample receipts to run the Azure evaluation.
-sprint: operations
+# account-deletion is the active sprint: permanent, immediate account deletion from Settings,
+# confirmed by typing the account email (docs/account_deletion_design.md, approved). operations is
+# done except OPS-05 (runbook and first deploy), on hold until the product owner decides to run
+# MintFlow in production. Every earlier sprint is complete except RCPT-07, which waits for
+# consented sample receipts to run the Azure evaluation.
+sprint: account-deletion
 
 tasks:
   - id: AUTH-03
@@ -550,3 +551,23 @@ tasks:
     depends_on:
       - OPS-03
       - OPS-04
+  - id: DEL-01
+    title: "Delete Account: Use Case and Persistence"
+    file: docs/tasks/DEL-01-delete-account-use-case.md
+    status: ready
+    human_approval: approved
+    depends_on: []
+  - id: DEL-02
+    title: "Web: Delete Account Page and Flow"
+    file: docs/tasks/DEL-02-web-delete-account.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - DEL-01
+  - id: DEL-03
+    title: "Deleted Accounts Stay Deleted After a Restore"
+    file: docs/tasks/DEL-03-deletion-after-restore.md
+    status: blocked
+    human_approval: approved
+    depends_on:
+      - DEL-01
