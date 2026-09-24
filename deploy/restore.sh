@@ -22,3 +22,6 @@ set -a; source .env; set +a
 echo "If this restore replaces production data, run both retention cleanups before traffic returns:"
 echo "  ./mintflow-command.sh authentication_retention_cleanup"
 echo "  ./mintflow-command.sh telegram_retention_cleanup"
+echo "The first also deletes again every account the backup still held but that was deleted"
+echo "before it was taken. An account deleted after this backup was taken is not known to it:"
+echo "if one was deleted in that window, delete it again by hand (docs/account_deletion_design.md, A5)."

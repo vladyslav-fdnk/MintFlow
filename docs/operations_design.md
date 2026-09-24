@@ -120,7 +120,10 @@ A mistake stops the deploy before users see it.
   Hetzner Object Storage in the same region.
 - A lifecycle rule deletes backups after 30 days. That period matches the retention statement in
   `authentication_persistence_design.md`: deleted data may live on in backups until they expire.
-  After a full restore, both cleanup commands run before traffic returns.
+  After a full restore, both cleanup commands run before traffic returns. The authentication
+  cleanup also deletes again every account listed in the `deleted_accounts` tombstones that the
+  restore brought back (account deletion design, A5). An account deleted after the restored
+  backup was taken is not in its tombstones: the restore note says to check for one by hand.
 - **Targets:** at most 24 hours of lost data (RPO) and service back within 4 hours (RTO).
 - `deploy/restore.sh` restores a chosen backup into a new database (never an existing one). The
   private key is piped into the tools container for that run only. The rehearsal restores the

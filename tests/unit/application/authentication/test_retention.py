@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta, timezone
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -41,6 +42,18 @@ class RecordingRetentionRepository:
         self.calls.append(("authentication_audit_records", locals()))
         return 4
 
+    restored: tuple[UUID, ...] = ()
+
+    def restored_deleted_accounts(self, *, batch_size: int) -> list[UUID]:
+        self.calls.append(("restored_deleted_accounts", locals()))
+        return list(self.restored)
+
+    def delete_deleted_account_tombstones(
+        self, *, deleted_cutoff: datetime, batch_size: int
+    ) -> int:
+        self.calls.append(("deleted_account_tombstones", locals()))
+        return 5
+
 
 def test_calculates_every_approved_retention_cutoff() -> None:
     cutoffs = authentication_retention_cutoffs(now=NOW)
@@ -52,6 +65,7 @@ def test_calculates_every_approved_retention_cutoff() -> None:
     assert cutoffs.rate_limit_expired_at == NOW
     assert cutoffs.rate_limit_maximum_age_at == NOW - timedelta(hours=24)
     assert cutoffs.authentication_audit_occurred_at == NOW - timedelta(days=90)
+    assert cutoffs.deleted_account_at == NOW - timedelta(days=35)
 
 
 def test_cutoffs_normalize_timezone_aware_clock_to_utc() -> None:
@@ -132,6 +146,8 @@ def test_service_uses_one_clock_value_and_reports_aggregate_counts_only() -> Non
         "web_sessions_deleted": 2,
         "rate_limit_buckets_deleted": 3,
         "authentication_audit_records_deleted": 4,
+        "restored_accounts_deleted": 0,
+        "deleted_account_tombstones_deleted": 0,
         "total_deleted": 10,
     }
     assert all(call[1]["batch_size"] == 7 for call in repository.calls)
@@ -140,3 +156,26 @@ def test_service_uses_one_clock_value_and_reports_aggregate_counts_only() -> Non
         forbidden not in output
         for forbidden in ("email", "ip", "token", "hash", "secret", "cookie", "subject")
     )
+
+
+def test_accounts_a_restore_revived_are_deleted_again_before_old_tombstones_go() -> None:
+    repository = RecordingRetentionRepository()
+    revived, gone_meanwhile = uuid4(), uuid4()
+    repository.restored = (revived, gone_meanwhile)
+    deleted: list[UUID] = []
+
+    def delete_account(user_id: UUID) -> bool:
+        deleted.append(user_id)
+        repository.calls.append(("delete_account", {"batch_size": 7}))
+        return user_id == revived  # the other was deleted by a concurrent run
+
+    result = CleanUpAuthenticationRetention(
+        repository=repository, delete_account=delete_account, clock=lambda: NOW
+    ).execute(batch_size=7)
+
+    assert deleted == [revived, gone_meanwhile]
+    assert (result.restored_accounts_deleted, result.deleted_account_tombstones_deleted) == (1, 5)
+    names = [name for name, _ in repository.calls]
+    assert names.index("delete_account") < names.index("deleted_account_tombstones")
+    [(_, prune)] = [call for call in repository.calls if call[0] == "deleted_account_tombstones"]
+    assert prune["deleted_cutoff"] == NOW - timedelta(days=35)

@@ -1,8 +1,7 @@
-# account-deletion is the active sprint: permanent, immediate account deletion from Settings,
-# confirmed by typing the account email (docs/account_deletion_design.md, approved). operations is
-# done except OPS-05 (runbook and first deploy), on hold until the product owner decides to run
-# MintFlow in production. Every earlier sprint is complete except RCPT-07, which waits for
-# consented sample receipts to run the Azure evaluation.
+# account-deletion is complete: immediate, email-confirmed deletion from Settings, with
+# re-deletion after a restore (docs/account_deletion_design.md). No sprint is active. Open:
+# OPS-05 (runbook and first deploy), on hold until the product owner decides to run MintFlow in
+# production, and RCPT-07, which waits for consented sample receipts to run the Azure evaluation.
 sprint: account-deletion
 
 tasks:
@@ -567,7 +566,7 @@ tasks:
   - id: DEL-03
     title: "Deleted Accounts Stay Deleted After a Restore"
     file: docs/tasks/DEL-03-deletion-after-restore.md
-    status: ready
+    status: done
     human_approval: approved
     depends_on:
       - DEL-01

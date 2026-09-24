@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -109,6 +110,45 @@ class PostgreSQLAuthenticationRetentionRepository:
             RETURNING target.id
             """,
             {"occurred_cutoff": occurred_cutoff, "batch_size": batch_size},
+        )
+
+    def restored_deleted_accounts(self, *, batch_size: int) -> list[UUID]:
+        with self._session.begin():
+            return list(
+                self._session.scalars(
+                    text(
+                        """
+                        SELECT users.id
+                        FROM users JOIN deleted_accounts ON deleted_accounts.user_id = users.id
+                        ORDER BY deleted_accounts.deleted_at, users.id
+                        LIMIT :batch_size
+                        """
+                    ),
+                    {"batch_size": batch_size},
+                )
+            )
+
+    def delete_deleted_account_tombstones(
+        self, *, deleted_cutoff: datetime, batch_size: int
+    ) -> int:
+        """Old tombstones only, and never one whose user exists again (it is deleted first)."""
+        return self._delete(
+            """
+            WITH candidates AS (
+                SELECT user_id
+                FROM deleted_accounts
+                WHERE deleted_at <= :deleted_cutoff
+                  AND NOT EXISTS (SELECT 1 FROM users WHERE users.id = deleted_accounts.user_id)
+                ORDER BY deleted_at, user_id
+                FOR UPDATE SKIP LOCKED
+                LIMIT :batch_size
+            )
+            DELETE FROM deleted_accounts AS target
+            USING candidates
+            WHERE target.user_id = candidates.user_id
+            RETURNING target.user_id
+            """,
+            {"deleted_cutoff": deleted_cutoff, "batch_size": batch_size},
         )
 
     def _delete(self, statement: str, parameters: dict[str, Any]) -> int:

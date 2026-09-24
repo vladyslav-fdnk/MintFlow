@@ -61,9 +61,16 @@ DAY = timedelta(days=1)
 JPEG = b"\xff\xd8\xff\xe0" + b"0" * 64
 
 
-def _seed_everything(session: Session, *, email: str, telegram_user_id: int) -> UUID:
-    """A user with every kind of row MintFlow keeps: the ones deletion must remove."""
+def _seed_everything(
+    session: Session, *, email: str, telegram_user_id: int, user_id: UUID | None = None
+) -> UUID:
+    """A user with every kind of row MintFlow keeps: the ones deletion must remove.
+
+    ``user_id`` recreates a deleted user's rows under its old id, as a restored backup would.
+    """
     user = UserRecord(status=UserStatus.ACTIVE.value, created_at=NOW - 30 * DAY)
+    if user_id is not None:
+        user.id = user_id
     session.add(user)
     session.flush()
     session.add(

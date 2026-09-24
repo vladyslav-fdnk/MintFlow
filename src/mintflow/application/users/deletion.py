@@ -8,8 +8,8 @@ user's intent, such as matching the typed email, belongs to the caller.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from typing import Final, Protocol
+from datetime import UTC, datetime
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from mintflow.application.authentication.audit import (
@@ -18,9 +18,6 @@ from mintflow.application.authentication.audit import (
     AuthenticationAuditRecord,
 )
 from mintflow.application.authentication.email import InvalidEmailError, normalize_email
-
-# Longer than any backup lives (30 days, operations O7), so a restored account is deleted again.
-DELETED_ACCOUNT_RETENTION: Final = timedelta(days=35)
 
 
 @dataclass(frozen=True, slots=True)

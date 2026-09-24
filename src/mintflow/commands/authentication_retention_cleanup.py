@@ -6,8 +6,13 @@ from collections.abc import Sequence
 from sqlalchemy.exc import SQLAlchemyError
 
 from mintflow.application.authentication.retention import CleanUpAuthenticationRetention
+from mintflow.application.users import DeleteAccount
 from mintflow.config import get_settings
-from mintflow.infrastructure.persistence import create_database_engine, create_session_factory
+from mintflow.infrastructure.persistence import (
+    PostgreSQLAccountDeletionRepository,
+    create_database_engine,
+    create_session_factory,
+)
 from mintflow.infrastructure.persistence.authentication_retention import (
     PostgreSQLAuthenticationRetentionRepository,
 )
@@ -35,8 +40,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         settings = get_settings()
         engine = create_database_engine(settings.database_url.get_secret_value())
         with create_session_factory(engine)() as session:
+            # Also deletes again, as originally, any account a restored backup brought back.
+            deletions = DeleteAccount(repository=PostgreSQLAccountDeletionRepository(session))
             result = CleanUpAuthenticationRetention(
-                repository=PostgreSQLAuthenticationRetentionRepository(session)
+                repository=PostgreSQLAuthenticationRetentionRepository(session),
+                delete_account=lambda user_id: deletions.execute(user_id=user_id),
             ).execute(batch_size=arguments.batch_size)
         print(json.dumps(result.aggregate_counts(), sort_keys=True))
     except (SQLAlchemyError, TypeError, ValueError):

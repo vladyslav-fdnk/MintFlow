@@ -1,5 +1,5 @@
+from mintflow.application.authentication.retention import DELETED_ACCOUNT_RETENTION
 from mintflow.application.users.deletion import (
-    DELETED_ACCOUNT_RETENTION,
     AccountDeletion,
     AccountDeletionRepository,
     AccountEmailRepository,
