@@ -1,155 +1,194 @@
-# MintFlow
+<p align="center">
+  <img src="src/mintflow/web/static/favicon.svg" alt="" width="72" height="72">
+</p>
 
-MintFlow is a personal expense platform designed to make expense capture effortless and spending review trustworthy.
+<h1 align="center">MintFlow</h1>
 
-> Capture in Telegram. Understand on the Web.
+<p align="center"><strong>Capture in Telegram. Understand on the Web.</strong></p>
 
-The MintFlow Platform combines a fast Telegram Client capture flow with a focused Web Client for history, correction, and spending summaries. It is built for people who want more structure than notes and less friction than spreadsheets or traditional expense trackers.
+<p align="center">
+  <a href="https://github.com/vladyslav-fdnk/MintFlow/actions/workflows/ci.yml"><img src="https://github.com/vladyslav-fdnk/MintFlow/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <img src="https://img.shields.io/badge/python-3.13-3776AB" alt="Python 3.13">
+  <img src="https://img.shields.io/badge/FastAPI-PostgreSQL-009688" alt="FastAPI and PostgreSQL">
+</p>
 
-## Project vision
+MintFlow is a personal expense tracker with two clients over one platform. A Telegram bot
+records an expense in a few taps, or from a photo of the receipt. A web app shows where the money
+went: totals, trends, categories, merchants, and a full editable history, in several currencies at
+once.
 
-MintFlow turns everyday expense capture into reliable financial understanding. Users can enter an expense manually or submit a receipt, review a mutable draft, and explicitly confirm it before it enters their financial history.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/dashboard-dark.png">
+  <img src="docs/images/dashboard-light.png" alt="The MintFlow dashboard: this month's total converted into euros, totals per currency, insights, spending by day, by category, and top merchants">
+</picture>
 
-The initial goal is a commercially credible product for the first 100 users. Product success means repeated capture, dashboard returns, trust in stored data, and preference over manual notes or spreadsheets.
+<sub>The screenshots use generated demo data.</sub>
 
-## Product philosophy
+## What it does
 
-- The Telegram Client is optimized for capture.
-- The Web Client is optimized for understanding.
-- The MintFlow Platform, not either client alone, is the product.
-- Confirmation is mandatory because convenience must not compromise financial truth.
-- Multiple currencies remain explicit and are never silently combined or converted.
-- Scope stays intentionally narrow until the core product loop is validated.
+**Telegram bot: fast capture**
 
-## Architecture overview
+- `/add` walks through amount, merchant, category, and date, with buttons wherever a choice is
+  finite. Amounts can be typed as `12.50`, `12,50`, or `12.50 EUR`.
+- A photo of a receipt becomes a draft: the recognizer proposes the amount, date, and merchant,
+  and the bot asks only for what it could not read. If reading takes too long, manual entry takes
+  over.
+- Nothing is saved until you press **Confirm** on the review card. Pressing it twice never
+  creates a second expense.
+- `/recent` shows the last ten expenses; `/cancel` drops the draft in progress.
+- The bot is linked to a web account through a short-lived, single-use challenge confirmed from
+  the web session. It only ever talks in private chats.
 
-MintFlow follows a modular-monolith architecture. Business rules remain in the domain, while delivery channels and external services stay at the boundaries.
+**Web app: understanding**
 
-`CaptureDraft` represents mutable, unconfirmed input. `Expense` represents confirmed financial truth. The Recognition Pipeline is infrastructure that proposes values from receipt content without coupling the domain to OCR, vision models, parsers, heuristics, merchant normalization, or any other recognition technology.
+- Sign-in by magic link sent to your email. There are no passwords.
+- A dashboard for today, this week, this month, last month, the last three months, or any range:
+  the total and its change against the previous period, totals per currency, spending by day
+  (columns, pie, or an accessible table), by category, and top merchants.
+- Several currencies stay separate. On request they are converted into one main currency at the
+  day's reference rates of the European Central Bank and the National Bank of Ukraine, and every
+  converted value is marked `≈`.
+- The expense history can be filtered by date, category, and currency. Every expense can be
+  edited, deleted, and restored, and each change is recorded.
+- Settings: time zone, default currency, language (English or Russian), the Telegram link, and
+  account deletion.
+- Light and dark themes, a layout that works on a phone, and keyboard and screen-reader access
+  checked against [`docs/web_accessibility_checklist.md`](docs/web_accessibility_checklist.md).
 
-The Telegram Client and Web Client operate on the same domain model and confirmed financial records.
+<table>
+  <tr>
+    <td width="72%"><img src="docs/images/expenses-light.png" alt="The expense history with filters, and a UAH amount shown with its euro equivalent"></td>
+    <td width="28%"><img src="docs/images/dashboard-mobile.png" alt="The dashboard on a phone, with navigation at the bottom"></td>
+  </tr>
+</table>
+
+## Architecture
+
+MintFlow is a modular monolith. The domain holds the business rules and knows nothing about
+HTTP, Telegram, SQL, or OCR. Use cases in the application layer orchestrate it. Delivery channels
+and external services stay at the edges.
 
 ```mermaid
-flowchart TD
-    P[MintFlow Platform] --> T[Telegram Client]
-    P --> W[Web Client]
-    P --> R[Recognition Pipeline]
+flowchart LR
+    subgraph Clients
+        TG[Telegram bot]
+        WEB[Web browser]
+    end
+
+    subgraph App["MintFlow (one Python package)"]
+        direction TB
+        EDGE["Delivery<br/>FastAPI routes · Jinja + htmx pages<br/>Telegram webhook"]
+        APPL["Application<br/>use cases: capture, confirm, edit,<br/>dashboard, linking, deletion"]
+        DOM["Domain<br/>CaptureDraft → Expense<br/>Money · Category · User"]
+        INFRA["Infrastructure<br/>SQLAlchemy repositories · SMTP<br/>recognizer · rate sources"]
+        EDGE --> APPL --> DOM
+        APPL --> INFRA
+    end
+
+    WORKER[Receipt worker]
+    CRON[Scheduled jobs<br/>rates · retention]
+
+    TG -- webhook --> EDGE
+    WEB -- HTTPS --> EDGE
+    WORKER --> APPL
+    CRON --> APPL
+
+    INFRA --> PG[(PostgreSQL)]
+    INFRA --> AZ[Azure AI<br/>Document Intelligence]
+    INFRA --> FX[ECB and NBU<br/>reference rates]
+    INFRA --> MAIL[SMTP email]
 ```
 
-## Technology stack
+Two ideas carry the design:
 
-- **Python 3.13** with **uv** for reproducible dependency and virtual-environment management.
-- **FastAPI** as the typed application framework.
-- **PostgreSQL** as the local infrastructure dependency; Foundation Sprint creates no schema or persistence layer.
-- **pydantic-settings** for validated environment configuration.
-- **Ruff**, **mypy**, **pytest**, and **pre-commit** for automated quality checks.
-- **Docker Compose** for the local application and PostgreSQL environment.
-- **GitHub Actions** for pull-request validation.
+- **A draft is not an expense.** `CaptureDraft` is mutable, unconfirmed input from any channel.
+  Only an explicit confirmation turns it into an `Expense`, the record that counts.
+- **Recognition is replaceable.** The receipt recognizer is a boundary that only proposes values.
+  Azure AI Document Intelligence implements it today; a fake implementation serves development and
+  tests.
 
-The backend remains a modular monolith. The Recognition Pipeline, Telegram Client, and Web Client will be integrated later without moving business rules out of the domain.
+The design documents in [`docs/`](docs) record each decision with its alternatives and
+trade-offs.
 
-## Repository structure
+## Technology
 
-```text
-MintFlow/
-├── .github/    # Continuous-integration workflows
-├── docs/       # Approved product and domain specification
-├── src/        # Installable MintFlow application package
-├── tests/      # Automated tests and shared pytest fixtures
-├── AGENTS.md   # Permanent working rules for AI assistants
-├── compose.yaml
-├── Dockerfile
-├── Makefile    # Stable entry points for development tasks
-├── pyproject.toml
-└── README.md
-```
+| Area | Choice |
+|---|---|
+| Language and tooling | Python 3.13, uv, Ruff, mypy, pytest, pre-commit |
+| Web | FastAPI, Jinja templates, htmx, server-rendered SVG charts, Babel for translations |
+| Data | PostgreSQL 17, SQLAlchemy 2, Alembic migrations |
+| Telegram | A small typed Bot API client over httpx; a webhook in production, long polling locally |
+| Receipts | Azure AI Document Intelligence (prebuilt receipt model) behind a recognizer interface |
+| Operations | Docker Compose, Caddy with automatic HTTPS, images in GHCR, cron and Healthchecks.io, encrypted `pg_dump` backups to S3-compatible storage |
+| CI | GitHub Actions: formatting, lint, types, and tests on every push; an image is published for each commit to `main` |
 
-Only directories with a current responsibility are present. Future modular-monolith boundaries should be added when real application responsibilities require them, not as empty placeholders.
+## Running locally
 
-## Roadmap
-
-1. **Product Discovery — complete.** Product scope, MVP behavior, domain boundaries, and key decisions are documented.
-2. **Foundation Sprint v0.1 — next.** Establish engineering infrastructure and approved technical foundations without expanding product scope.
-3. **MVP implementation.** Deliver the confirmed capture, review, expense history, and dashboard loop for the first 100 users.
-4. **Post-MVP.** Evaluate postponed capabilities only after evidence from real product use. These include data export, merchant search, and user-defined categories.
-
-## Project Status
-
-- **Current milestone:** Foundation Sprint v0.1
-- **Current stage:** Foundation polish before the first commit
-- **Engineering status:** Application shell, local environment, health checks, and quality gates are ready
-- **Business feature status:** Not started; no business features are implemented
-
-## Local setup
-
-Prerequisites: Git, uv, Docker, and Docker Compose.
+Prerequisites: Git, [uv](https://docs.astral.sh/uv/), Docker, and Docker Compose.
 
 ```bash
-make setup
-make check
-make docker-up
+make setup                               # .venv, dependencies, .env from .env.example, Git hooks
+docker compose up -d postgres mailpit    # PostgreSQL on port 55432, Mailpit on 8025
+uv run alembic upgrade head              # create the schema
+make run                                 # http://localhost:8000
 ```
 
-`make setup` creates the project-local `.venv`, installs locked dependencies, copies `.env.example` to `.env` when needed, and installs Git hooks. Change the example PostgreSQL password in `.env`; the file is ignored by Git.
+Change the example secrets in `.env`; the file is ignored by Git.
 
-PostgreSQL is exposed on host port `55432` by default to avoid conflicting with a system installation. Set `POSTGRES_PORT` and update `MINTFLOW_DATABASE_URL` together if another port is required.
+- **Signing in.** Request a link at `http://localhost:8000`, then open Mailpit at
+  `http://localhost:8025` and follow the link in the message. Local email never leaves the
+  machine.
+- **The bot.** Create a bot with [@BotFather](https://t.me/BotFather), set the three
+  `MINTFLOW_TELEGRAM_*` variables in `.env`, and run
+  `uv run python -m mintflow.commands.telegram_polling` next to `make run`. Link it from Settings.
+- **Receipts.** The fake recognizer reads nothing, so every receipt falls back to manual entry.
+  To read real receipts, set `MINTFLOW_RECEIPT_RECOGNIZER=azure` with an Azure endpoint and key
+  (the free F0 tier allows 500 pages a month), and run
+  `uv run python -m mintflow.commands.receipt_worker`.
+- **Exchange rates.** `uv run python -m mintflow.commands.refresh_exchange_rates` fetches the
+  day's ECB and NBU rates.
 
-After `make docker-up`, liveness is available at `http://localhost:8000/health/live` and readiness at `http://localhost:8000/health/ready`. Readiness returns success only when PostgreSQL accepts a query. API documentation is available at `http://localhost:8000/docs` in the example development configuration. Set `MINTFLOW_ENABLE_API_DOCS=false` in production; documentation is disabled by default when the option is absent.
+Health checks are served at `/health/live` and `/health/ready`; the API documentation is at
+`/docs` when `MINTFLOW_ENABLE_API_DOCS=true`.
 
-Local authentication email is captured by Mailpit and is never sent to real recipients. Open
-`http://localhost:8025`, select the message for the submitted address, and follow the sign-in link in
-its text body. The Mailpit backend must be selected explicitly and is rejected in staging and
-production configuration.
-
-Use `make docker-down` to stop the environment. The PostgreSQL Docker volume is retained intentionally.
-
-## Available commands
+## Commands
 
 | Command | Purpose |
 |---|---|
-| `make setup` | Install dependencies, prepare local configuration, and install hooks. |
-| `make format` | Format Python and apply safe Ruff fixes. |
-| `make lint` | Check formatting and lint rules without modifying files. |
-| `make typecheck` | Run the practical mypy baseline. |
-| `make test` | Run pytest. |
-| `make check` | Run all local quality gates. |
-| `make run` | Run the application locally with reload. |
-| `make hooks` | Run every pre-commit hook against the repository. |
-| `make docker-up` | Build and start the application and PostgreSQL. |
-| `make docker-down` | Stop the Docker environment. |
-| `make docker-logs` | Follow application container logs. |
-| `make image-check` | Build the production image and check it runs as non-root and reports healthy. |
-| `make backup-check` | Back up a throwaway database encrypted to a local S3 server, restore it, and compare row counts. |
+| `make setup` | Install dependencies, prepare `.env`, and install Git hooks. |
+| `make run` | Run the app locally with reload. |
+| `make check` | Run every quality gate: formatting, lint, types, and tests. |
+| `make format` | Format the code and apply safe Ruff fixes. |
+| `make test` | Run pytest. Integration tests need `MINTFLOW_TEST_DATABASE_URL`. |
+| `make translations` | Refresh the web translation catalogues and list missing strings. |
+| `make docker-up` / `make docker-down` | Start or stop the app, PostgreSQL, and Mailpit in Docker. |
+| `make image-check` | Build the production image and check that it runs as non-root and becomes healthy. |
+| `make backup-check` | Back up a throwaway database to a local S3 server, restore it, and compare row counts. |
 
-Production runs from `deploy/` (Compose, Caddy, and an example server environment); see
-`docs/operations_design.md`. CI publishes `ghcr.io/vladyslav-fdnk/mintflow:<commit SHA>` from
-`main`.
+## Deployment
 
-## Development workflow
+Production runs on a single server from [`deploy/`](deploy): Caddy terminates HTTPS in front of
+the app, a worker processes receipts, and host cron runs the scheduled jobs and nightly
+age-encrypted backups. Each commit to `main` that passes CI is published as
+`ghcr.io/vladyslav-fdnk/mintflow:<commit SHA>`. In production the app refuses to start with
+development settings, such as API docs enabled, a non-HTTPS origin, or the fake recognizer.
+[`docs/operations_design.md`](docs/operations_design.md) explains the setup.
 
-1. Run `make setup` after cloning.
-2. Start from approved product and architecture documentation.
-3. Record material architectural decisions and explain their trade-offs.
-4. Implement the smallest coherent increment without silently changing product behavior.
-5. Add tests for business rules and critical workflows.
-6. Run `make check` before proposing a small, focused commit.
-7. Update existing documentation only when an approved decision or behavior changes.
+## Status
 
-Pull requests run formatting checks, linting, the practical mypy baseline, and tests. Strictness should increase incrementally as modules mature; full global mypy strict mode is intentionally deferred.
+The MVP loop works end to end: sign-in, Telegram linking, manual and receipt capture, the
+dashboard with currency conversion, the editable history, and account deletion. It is covered by
+about 1,700 tests. What remains before a public launch:
 
-## Contributing
+- evaluating receipt recognition on real receipts;
+- the first production deployment and its runbook;
+- a privacy notice.
 
-Contributions should preserve the approved product philosophy and MVP boundaries. Before making a change:
+## Documentation
 
-- Read `AGENTS.md` and the relevant documents in `docs/`.
-- Open a focused proposal for changes that affect scope, architecture, or domain language.
-- Explain trade-offs and avoid speculative features or unnecessary abstractions.
-- Keep changes small, readable, strongly typed, and covered by tests where business rules are involved.
-- Update documentation alongside an approved behavior change.
-
-## Documentation index
-
-- [`docs/mvp_definition.md`](docs/mvp_definition.md) — definitive MVP scope, journeys, requirements, metrics, success criteria, and release checklist.
-- [`docs/domain_design_proposal.md`](docs/domain_design_proposal.md) — ubiquitous language, domain boundaries, invariants, lifecycle, and initial use cases.
-- [`docs/product_decision_review.md`](docs/product_decision_review.md) — product decisions, alternatives, recommendations, and long-term implications.
-- [`AGENTS.md`](AGENTS.md) — permanent contribution rules for AI assistants.
+- [`docs/mvp_definition.md`](docs/mvp_definition.md): MVP scope, user journeys, requirements, and success criteria.
+- [`docs/domain_design_proposal.md`](docs/domain_design_proposal.md): the ubiquitous language, invariants, and lifecycle.
+- [`docs/product_decision_review.md`](docs/product_decision_review.md): product decisions and their alternatives.
+- Design documents for each area: authentication, Telegram, receipts, dashboard, exchange rates, web client, operations, and account deletion.
+- [`docs/tasks/`](docs/tasks): every implementation task, with its acceptance criteria; `index.yaml` tracks their status.
+- [`AGENTS.md`](AGENTS.md): working rules for AI coding assistants on this repository.
